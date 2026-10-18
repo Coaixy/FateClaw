@@ -4,7 +4,6 @@ export const zhCNMessages = {
     paid_unavailable: '付费模型服务暂时不可用',
     paid_unknown: '付费模型服务状态待确认',
     lastObserved: '最近确认',
-    paidUnavailable: '付费模型暂未配置；有效会员可使用已开放的免费服务。',
     benefitStatusNote:
       '免费供应独立于付费服务。共享额度用完与服务故障分别显示；个人次数请登录后查看。',
     benefitHistoryNote:
@@ -16,6 +15,7 @@ export const zhCNMessages = {
     freeReply: '免费额度 · 未扣积分',
     refunded: '免费次数已返还 · 未扣积分',
     benefitDescription: '有效会员专享，享有每日免费额度，不扣积分，受每日次数与并发限制。',
+    benefitSummary: '会员专享，每日免费额度，不扣积分。',
     membershipRequired: '免费模型仅限有效会员使用',
     unlock: '开通或续费会员',
     paidDescription: '按实际 Token 用量和当前账户单价计费。',
@@ -454,9 +454,6 @@ export const zhCNMessages = {
       loadFailed: '加载官方模型失败',
       refresh: '刷新',
       unconfigured: '尚未配置',
-      officialTitle: '官方模型',
-      officialDescription: '所有 AI 对话统一使用此模型。',
-      noOfficialModel: '官方模型暂未就绪，请稍后再试。',
       unavailable: '暂不可用',
       inputToken: '输入',
       outputToken: '输出',
@@ -656,6 +653,7 @@ export const zhCNMessages = {
     tierThreshold: '净充值满 {amount}',
     tierSlots: '累计 {count} 个名额',
     tierReached: '已达标',
+    rulesTitle: '邀请规则',
     automaticAllowance: '当前充值档位：累计 {count} 个名额',
     manualAdjustment: '管理员调整：{count} 个名额',
     rechargeProgress: '下一档邀请名额的充值进度',

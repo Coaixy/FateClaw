@@ -4,8 +4,6 @@ export const enMessages = {
     paid_unavailable: 'Paid model service is unavailable',
     paid_unknown: 'Paid model service status is unconfirmed',
     lastObserved: 'Last observation',
-    paidUnavailable:
-      'Paid models are not configured. Active members can use the free service when enabled.',
     benefitStatusNote:
       'Free and paid services have separate supply. Shared exhaustion and outages are shown separately; sign in for your personal allowance.',
     benefitHistoryNote:
@@ -18,6 +16,7 @@ export const enMessages = {
     refunded: 'Free turn refunded · No balance charge',
     benefitDescription:
       'Active members receive a daily free allowance, subject to turn and concurrency limits. No balance charge.',
+    benefitSummary: 'Daily free allowance for members. No balance charge.',
     membershipRequired: 'Free models require active membership',
     unlock: 'Subscribe or renew membership',
     paidDescription: 'Billed by actual token usage at your account rates.',
@@ -477,10 +476,6 @@ export const enMessages = {
       loadFailed: 'Failed to load the official model',
       refresh: 'Refresh',
       unconfigured: 'Not configured',
-      officialTitle: 'Official model',
-      officialDescription: 'Used for all AI conversations.',
-      noOfficialModel:
-        'The official model is not available yet. Please try again later.',
       unavailable: 'Temporarily unavailable',
       inputToken: 'Input',
       outputToken: 'Output',
@@ -682,6 +677,7 @@ export const enMessages = {
     tierThreshold: 'Net recharge of {amount}',
     tierSlots: '{count} total slots',
     tierReached: 'Reached',
+    rulesTitle: 'Invitation rules',
     automaticAllowance: 'Current recharge tier: {count} total slots',
     manualAdjustment: 'Administrator adjustment: {count} slots',
     rechargeProgress: 'Recharge progress toward the next invitation tier',

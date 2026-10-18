@@ -4,7 +4,6 @@ export const zhTWMessages = {
     paid_unavailable: '付費模型服務暫時無法使用',
     paid_unknown: '付費模型服務狀態待確認',
     lastObserved: '最近確認',
-    paidUnavailable: '付費模型尚未設定；有效會員可使用已開放的免費服務。',
     benefitStatusNote:
       '免費供應獨立於付費服務。共享額度用完與服務故障分別顯示；個人次數請登入後查看。',
     benefitHistoryNote:
@@ -16,6 +15,7 @@ export const zhTWMessages = {
     freeReply: '免費額度 · 未扣點數',
     refunded: '免費次數已返還 · 未扣點數',
     benefitDescription: '有效會員專享，享有每日免費額度，不扣點數，受每日次數與並行請求數限制。',
+    benefitSummary: '會員專享，每日免費額度，不扣點數。',
     membershipRequired: '免費模型僅限有效會員使用',
     unlock: '開通或續費會員',
     paidDescription: '按實際 Token 用量和目前帳戶單價計費。',
@@ -454,9 +454,6 @@ export const zhTWMessages = {
       loadFailed: '載入官方模型失敗',
       refresh: '重新整理',
       unconfigured: '尚未配置',
-      officialTitle: '官方模型',
-      officialDescription: '所有 AI 對話統一使用此模型。',
-      noOfficialModel: '官方模型尚未就緒，請稍後再試。',
       unavailable: '暫不可用',
       inputToken: '輸入',
       outputToken: '輸出',
@@ -656,6 +653,7 @@ export const zhTWMessages = {
     tierThreshold: '淨儲值滿 {amount}',
     tierSlots: '累計 {count} 個名額',
     tierReached: '已達標',
+    rulesTitle: '邀請規則',
     automaticAllowance: '目前儲值級別：累計 {count} 個名額',
     manualAdjustment: '管理員調整：{count} 個名額',
     rechargeProgress: '下一級邀請名額的儲值進度',

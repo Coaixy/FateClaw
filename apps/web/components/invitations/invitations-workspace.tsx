@@ -181,15 +181,34 @@ export function InvitationsContent({
     nextTier && summary
       ? Math.min(
           100,
-          Math.max(0, (summary.net_recharge_yuan / nextTier.threshold_yuan) * 100),
+          Math.max(
+            0,
+            (summary.net_recharge_yuan / nextTier.threshold_yuan) * 100,
+          ),
         )
+      : 100;
+  const nextTierIndex =
+    summary?.policy.tiers.findIndex((tier) => tier === nextTier) ?? -1;
+  const previousThreshold =
+    summary?.policy.tiers[nextTierIndex - 1]?.threshold_yuan ?? 0;
+  const tierCount = summary?.policy.tiers.length ?? 0;
+  const previousPosition =
+    nextTierIndex > 0 ? (nextTierIndex - 0.5) / tierCount : 0;
+  // Evenly spaced milestones need interpolation between thresholds with unequal amounts.
+  const ladderProgress =
+    nextTier && summary
+      ? (previousPosition +
+          ((summary.net_recharge_yuan - previousThreshold) /
+            (nextTier.threshold_yuan - previousThreshold)) *
+            ((nextTierIndex + 0.5) / tierCount - previousPosition)) *
+        100
       : 100;
   const canGenerate =
     !loadError &&
     (retrying || (summary?.eligible && summary.available_slots > 0));
 
   return (
-    <div className="space-y-5 pt-5 lg:pt-0">
+    <div className="space-y-4 pt-5 lg:pt-0">
       <header className="flex items-start justify-between gap-4">
         <div>
           <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-primary">
@@ -236,7 +255,7 @@ export function InvitationsContent({
         <>
           <section
             aria-labelledby="invitation-eligibility"
-            className="rounded-2xl border border-hairline bg-surface-raised p-5 sm:p-6"
+            className="rounded-xl border border-hairline bg-surface-raised p-4 sm:p-5"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2
@@ -258,47 +277,63 @@ export function InvitationsContent({
                 })}
               </span>
             </div>
-            <p className="mt-3 text-[12px] leading-6 text-muted">
-              {t('invitations.policy', {
-                days: summary.policy.expires_in_days,
-              })}
-            </p>
-            <ul
-              aria-label={t('invitations.tiers')}
-              className="mt-4 grid gap-2 sm:grid-cols-3"
-            >
-              {summary.policy.tiers.map((tier) => {
-                const reached = summary.net_recharge_yuan >= tier.threshold_yuan;
-                return (
-                  <li
-                    key={tier.threshold_yuan}
-                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-3 sm:flex-col sm:items-start sm:gap-1.5 ${reached ? 'border-primary/30 bg-primary/5' : 'border-hairline bg-canvas'}`}
-                  >
-                    <span className="flex items-center gap-1.5 text-[11px] text-muted">
-                      {t('invitations.tierThreshold', {
-                        amount: money(tier.threshold_yuan),
-                      })}
-                      {reached ? (
-                        <>
-                          <Check
-                            size={12}
-                            className="shrink-0 text-primary"
-                            aria-hidden="true"
-                          />
+            <div className="relative mt-4">
+              <div
+                aria-hidden="true"
+                className="absolute inset-x-0 top-[31px] h-0.5 overflow-hidden rounded-full bg-hairline"
+              >
+                <div
+                  className="h-full bg-primary"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, ladderProgress))}%`,
+                  }}
+                />
+              </div>
+              <ol
+                aria-label={t('invitations.tiers')}
+                className="relative grid auto-cols-fr grid-flow-col"
+              >
+                {summary.policy.tiers.map((tier) => {
+                  const reached =
+                    summary.net_recharge_yuan >= tier.threshold_yuan;
+                  return (
+                    <li
+                      key={tier.threshold_yuan}
+                      aria-label={`${t('invitations.tierThreshold', { amount: money(tier.threshold_yuan) })} · ${t('invitations.tierSlots', { count: tier.total_slots })}`}
+                      className="min-w-0 text-center"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`block text-[13px] font-medium tabular-nums leading-5 ${reached ? 'text-primary' : 'text-muted'}`}
+                      >
+                        {money(tier.threshold_yuan)}
+                      </span>
+                      <span
+                        className={`relative mx-auto mt-1 flex size-4 items-center justify-center rounded-full border-2 ${reached ? 'border-primary bg-primary text-on-primary' : 'border-hairline bg-surface-raised'}`}
+                      >
+                        {reached ? (
+                          <Check size={10} aria-hidden="true" />
+                        ) : null}
+                        {reached ? (
                           <span className="sr-only">
                             {t('invitations.tierReached')}
                           </span>
-                        </>
-                      ) : null}
-                    </span>
-                    <span className="shrink-0 text-[13px] font-medium tabular-nums text-ink">
-                      {t('invitations.tierSlots', { count: tier.total_slots })}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] leading-6">
+                        ) : null}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="mt-1 block text-[11px] tabular-nums leading-5 text-ink"
+                      >
+                        {t('invitations.tierSlots', {
+                          count: tier.total_slots,
+                        })}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] leading-5">
               <p className="font-medium text-ink">
                 {t('invitations.automaticAllowance', {
                   count: summary.automatic_slots,
@@ -318,7 +353,7 @@ export function InvitationsContent({
               aria-label={t('invitations.rechargeProgress')}
               value={progress}
               max={100}
-              className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-surface-card accent-primary [&::-webkit-progress-bar]:bg-surface-card [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
+              className="sr-only"
             />
             {nextTier ? (
               <p className="mt-2 text-[12px] text-muted">
@@ -334,32 +369,40 @@ export function InvitationsContent({
                 {t('invitations.highestTierReached')}
               </p>
             )}
-            <p className="mt-3 text-[11px] leading-5 text-muted">
-              {t('invitations.rechargeBasis')}
-            </p>
             {nextTier && !summary.suspended ? (
               <Link
                 href="/membership"
-                className="mt-4 inline-flex min-h-10 items-center rounded-lg border border-hairline bg-canvas px-3 text-[12px] font-medium text-ink"
+                className="mt-2 inline-flex min-h-10 items-center text-xs font-medium text-primary hover:underline"
               >
                 {t('invitations.goRecharge')}
               </Link>
             ) : null}
+            <details className="mt-3 border-t border-hairline pt-1 text-[11px] leading-5 text-muted">
+              <summary className="min-h-10 cursor-pointer py-2.5 text-xs text-ink">
+                {t('invitations.rulesTitle')}
+              </summary>
+              <div className="space-y-2 pb-2">
+                <p>
+                  {t('invitations.policy', {
+                    days: summary.policy.expires_in_days,
+                  })}
+                </p>
+                <p>{t('invitations.rechargeBasis')}</p>
+                <p>{t('invitations.slotRules')}</p>
+              </div>
+            </details>
           </section>
 
           <section
             aria-label={t('invitations.slots')}
-            className="grid grid-cols-3 gap-3"
+            className="grid grid-cols-3 divide-x divide-hairline overflow-hidden rounded-xl border border-hairline bg-surface-card"
           >
             {(['available', 'reserved', 'used'] as const).map((kind) => (
-              <div
-                key={kind}
-                className="rounded-xl border border-hairline bg-surface-card px-3 py-4 sm:px-5"
-              >
+              <div key={kind} className="px-3 py-3 sm:px-5">
                 <p className="text-[11px] text-muted">
                   {t(`invitations.${kind}Slots`)}
                 </p>
-                <p className="mt-1.5 text-[25px] font-medium tabular-nums text-ink">
+                <p className="mt-1 text-xl font-medium tabular-nums text-ink">
                   {formatNumber(summary[`${kind}_slots`])}
                 </p>
               </div>
@@ -455,7 +498,7 @@ export function InvitationsContent({
             aria-labelledby="invitation-list"
             className="overflow-hidden rounded-2xl border border-hairline bg-surface-raised"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline p-4 sm:p-5">
               <div>
                 <h2 id="invitation-list" className="text-sm font-semibold">
                   {t('invitations.listTitle')}
@@ -541,9 +584,6 @@ export function InvitationsContent({
               </ul>
             )}
           </section>
-          <p className="text-[11px] leading-6 text-muted">
-            {t('invitations.slotRules')}
-          </p>
         </>
       ) : null}
     </div>

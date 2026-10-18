@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
+  ChevronDown,
   MessageSquare,
   Plus,
   Search,
@@ -209,95 +210,119 @@ export function IssuesWorkspace() {
         )}
 
         <div className="rounded-xl border border-hairline bg-canvas">
-          <div className="flex flex-wrap items-center gap-3 border-b border-hairline p-4">
-            <div className="flex gap-1 rounded-lg bg-surface-card p-1">
-              {[
-                ['open', '未关闭'],
-                ['closed', '已关闭'],
-                ['', '全部'],
-              ].map(([key, text]) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={state === key}
-                  onClick={() => {
-                    setState(key);
-                    setPage(1);
-                  }}
-                  className={`rounded-md px-3 py-1.5 text-xs ${state === key ? 'bg-canvas text-ink shadow-sm' : 'text-muted'}`}
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
-            <select
-              aria-label="筛选类型"
-              className="rounded-lg border border-hairline bg-canvas p-2 text-xs"
-              value={kind}
-              onChange={(event) => {
-                setKind(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">全部类型</option>
-              {Object.entries(ISSUE_KIND_TEXT).map(([key, text]) => (
-                <option key={key} value={key}>
-                  {text}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="筛选标签"
-              className="rounded-lg border border-hairline bg-canvas p-2 text-xs"
-              value={label}
-              onChange={(event) => {
-                setLabel(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">全部标签</option>
-              {Object.entries(ISSUE_LABEL_TEXT).map(([key, text]) => (
-                <option key={key} value={key}>
-                  {text}
-                </option>
-              ))}
-            </select>
-            {user && (
-              <label className="flex items-center gap-2 text-xs text-muted">
-                <input
-                  type="checkbox"
-                  checked={mine}
-                  onChange={(event) => {
-                    setMine(event.target.checked);
-                    setPage(1);
-                  }}
-                />
-                我提交的
-              </label>
-            )}
-            <form
-              className="flex min-w-0 flex-1 gap-2 sm:min-w-52"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setQ(search.trim());
-                setPage(1);
-              }}
-            >
-              <input
-                aria-label="搜索问题标题"
-                className="min-w-0 flex-1 rounded-lg border border-hairline bg-canvas px-3 py-2 text-xs"
-                value={search}
-                maxLength={100}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="搜索标题…"
-              />
-              <button
-                aria-label="搜索"
-                className="rounded-lg border border-hairline px-2.5"
+          <div className="flex flex-wrap items-center gap-2 border-b border-hairline p-3 sm:p-4">
+            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:gap-3">
+              <div
+                role="group"
+                aria-label="按状态筛选"
+                className="flex shrink-0 gap-0.5 rounded-lg bg-surface-card p-0.5"
               >
-                <Search size={15} />
-              </button>
-            </form>
+                {[
+                  ['open', '未关闭'],
+                  ['closed', '已关闭'],
+                  ['', '全部'],
+                ].map(([key, text]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={state === key}
+                    onClick={() => {
+                      setState(key);
+                      setPage(1);
+                    }}
+                    className={`min-h-9 rounded-md px-2.5 text-xs ${state === key ? 'bg-canvas text-ink shadow-sm' : 'text-muted'}`}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+              {user && (
+                <label className="flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={mine}
+                    onChange={(event) => {
+                      setMine(event.target.checked);
+                      setPage(1);
+                    }}
+                  />
+                  我提交的
+                </label>
+              )}
+            </div>
+            <div className="grid w-full min-w-0 grid-cols-[5.25rem_5.25rem_minmax(0,1fr)] items-center gap-1.5 sm:flex sm:w-auto sm:flex-1 sm:gap-2">
+              <div className="relative sm:w-24">
+                <select
+                  aria-label="筛选类型"
+                  className="h-10 w-full min-w-0 appearance-none rounded-lg border border-hairline bg-canvas pl-2 pr-5 text-xs"
+                  value={kind}
+                  onChange={(event) => {
+                    setKind(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">全部类型</option>
+                  {Object.entries(ISSUE_KIND_TEXT).map(([key, text]) => (
+                    <option key={key} value={key}>
+                      {text}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={12}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2"
+                />
+              </div>
+              <div className="relative sm:w-24">
+                <select
+                  aria-label="筛选标签"
+                  className="h-10 w-full min-w-0 appearance-none rounded-lg border border-hairline bg-canvas pl-2 pr-5 text-xs"
+                  value={label}
+                  onChange={(event) => {
+                    setLabel(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">全部标签</option>
+                  {Object.entries(ISSUE_LABEL_TEXT).map(([key, text]) => (
+                    <option key={key} value={key}>
+                      {text}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={12}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2"
+                />
+              </div>
+              <form
+                role="search"
+                className="relative min-w-0 sm:flex-1"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setQ(search.trim());
+                  setPage(1);
+                }}
+              >
+                <input
+                  aria-label="搜索问题标题"
+                  className="h-10 w-full min-w-0 rounded-lg border border-hairline bg-canvas pl-2.5 pr-9 text-xs focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  value={search}
+                  maxLength={100}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="搜索…"
+                />
+                <button
+                  aria-label="搜索"
+                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-r-lg text-muted hover:text-ink"
+                >
+                  <Search size={15} />
+                </button>
+              </form>
+            </div>
           </div>
           {loading ? (
             <p role="status" className="p-12 text-center text-sm text-muted">
