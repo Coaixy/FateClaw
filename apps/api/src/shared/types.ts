@@ -288,18 +288,8 @@ export type ModelProviderType =
   | 'anthropic-messages'
   | 'google-generative-ai';
 
-/** Pi runtime 可选的思考等级，和底层 Pi SDK 的 ThinkingLevel 保持一致。 */
-export const PI_THINKING_LEVELS = [
-  'off',
-  'minimal',
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-] as const;
-
-/** Platform-configured Pi thinking level. */
-export type PiThinkingLevel = (typeof PI_THINKING_LEVELS)[number];
+export { PI_THINKING_LEVELS } from '@fateclaw/contracts/agent';
+export type { PiThinkingLevel } from '@fateclaw/contracts/agent';
 
 export interface OfficialModelConfig {
   id: string;

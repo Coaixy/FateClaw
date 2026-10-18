@@ -1,3 +1,4 @@
+import type { AiChatSubmission } from './request-types.js';
 import {
   claimAiChatResult,
   acknowledgeAiChatResult,
@@ -89,7 +90,7 @@ import {
 } from './local-runner.js';
 import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '../modules/account/account-service.js';
 import { getUserIdFromWebChatRuntimeId } from '../modules/chat/web-chat-runtime.js';
-import type { User, NewMessage } from '../shared/types.js';
+import type { User } from '../shared/types.js';
 import {
   admitAgentRequest,
   markAgentRequestDispatched,
@@ -100,19 +101,6 @@ import {
   tryAcquireBenefitExecutionSlot,
   ModelSelectionError,
 } from '../infrastructure/repositories/benefit-repository.js';
-import type {
-  HistoryMessage,
-  SessionBoardContext,
-} from '../shared/token-budget.js';
-
-type ChatInputKind = 'normal' | 'user_pasted_board';
-
-interface UserPastedBoardInput {
-  category: string;
-  content: string;
-  question: string;
-}
-
 export type { InboxRequestResult } from './ipc-payloads.js';
 
 async function resolveLlmRuntimeSnapshot(
@@ -1297,27 +1285,9 @@ export async function __peekNextGlobalAgentWaiterForTests(): Promise<
  * AI Chat 专属的入队函数。
  * 响应写入 `ipc:{accountId}:ai-chat:outbox`，永远不发微信。
  */
-export function submitAiChatInboxRequest(input: {
-  accountId: string;
-  userMessage: string;
-  inputKind?: ChatInputKind;
-  pastedBoard?: UserPastedBoardInput;
-  history: HistoryMessage[];
-  sessionBoardContexts?: SessionBoardContext[];
-  sessionId: string;
-  userMessageId?: string;
-  requestId?: string;
-  userName?: string;
-  assistantName?: string;
-  personaPrompt?: string;
-  authorizedSkillIds?: string[];
-  llmRuntime?: EffectiveLlmRuntimeConfig;
-  entitlementSnapshot?: RuntimeEntitlementSnapshot;
-  waitForResponse?: boolean;
-  messageToPersist?: NewMessage;
-  recoveryExecutionId?: string;
-  recoveryDeadlineAt?: string;
-}): Promise<InboxRequestResult> {
+export function submitAiChatInboxRequest(
+  input: AiChatSubmission,
+): Promise<InboxRequestResult> {
   const requestId =
     input.requestId ??
     `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1695,6 +1665,6 @@ export function submitAiChatInboxRequest(input: {
   });
 }
 
-export type AiChatSubmission = Parameters<typeof submitAiChatInboxRequest>[0];
+export type { AiChatSubmission } from './request-types.js';
 
 export const __getPendingAiChatRequestsForTests = getPendingAiChatRequests;

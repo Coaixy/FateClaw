@@ -8,7 +8,6 @@ import type { PublicReasonCode } from '@fateclaw/contracts';
 import { getSingleAccountIdIfOnlyOne } from '../infrastructure/db.js';
 import { getRedis } from '../infrastructure/redis.js';
 import type { BillingReservation } from '../modules/billing/plans.js';
-import type { PiThinkingLevel } from '../shared/types.js';
 import type { NormalizedRuntimeTokenUsage } from './token-usage.js';
 
 // ─── 公共类型 ──────────────────────────────────────────
@@ -33,35 +32,8 @@ export interface InboxRequestResult {
   }>;
 }
 
-export interface LlmRuntimeSnapshot {
-  poolKey?: import('@fateclaw/contracts/model-settings').ModelPoolKey;
-  poolRevision?: number;
-  benefitPolicy?: import('@fateclaw/contracts/model-settings').BenefitPolicyDto;
-  benefitRequestId?: string;
-  poolNodes?: import('@fateclaw/contracts/model-settings').RuntimeModelPoolNode[];
-  source: 'custom' | 'official';
-  billingMode: 'none' | 'metered';
-  modelConfigId: string;
-  piApi:
-    | 'openai-completions'
-    | 'openai-responses'
-    | 'anthropic-messages'
-    | 'google-generative-ai';
-  model: string;
-  contextWindowTokens?: number;
-  maxOutputTokens?: number;
-  thinkingLevel?: PiThinkingLevel;
-  apiKey: string;
-  baseUrl?: string;
-  authMode:
-    | 'openai_api_key'
-    | 'anthropic_api_key'
-    | 'claude_code_oauth_token'
-    | 'gemini_api_key';
-  providerKey: string;
-  inputTokenPricePerMillionCoins?: number;
-  outputTokenPricePerMillionCoins?: number;
-}
+export type { LlmRuntimeSnapshot } from '@fateclaw/contracts/agent';
+import type { LlmRuntimeSnapshot } from '@fateclaw/contracts/agent';
 
 export type InboxPriority = 'normal' | 'member';
 

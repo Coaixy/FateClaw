@@ -90,6 +90,13 @@ retained for recovery/operator inspection rather than silently evicted.
 - Soul updates lock the canonical and applicable legacy rows in a serializable
   transaction, check the base hash, and report conflicts instead of overwriting.
 
+## Submission, resources and result latency
+
+The IPC request data, model snapshot, thinking levels, board/history shapes and
+session frame protocol are owned by `packages/contracts/src/agent/`. API admission
+options remain in `runtime/request-types.ts`; repositories no longer derive their
+stored input type from the IPC worker implementation.
+
 ## Runtime and dependency compatibility
 
 The supported workspace runtime is Node 24 (`.nvmrc`). Pi packages are pinned to

@@ -1,102 +1,22 @@
-/**
- * 失败原因码（publicReasonCode）取值清单。
- *
- * 这是 `packages/contracts/src/common/reason-codes.ts` 中 PUBLIC_REASON_CODES
- * 的镜像：agent-runtime 的构建产物刻意不依赖 contracts 包（可独立部署），
- * 因此在此维护一份同名副本。两侧一致性由
- * `apps/api/tests/shared/reason-codes-contract.test.ts` 锁定——新增取值时
- * 必须两边同步修改，否则该测试会失败。
- */
-export const PUBLIC_REASON_CODES = [
-  'agent_timeout',
-  'rate_limited',
-  'context_too_long',
-  'model_auth_error',
-  'model_permission_denied',
-  'model_quota_exhausted',
-  'model_not_found',
-  'model_overloaded',
-  'model_unavailable',
-  'model_network_error',
-  'model_content_filtered',
-  'model_request_invalid',
-  'model_empty_response',
-  'model_response_interrupted',
-  'model_pool_unavailable',
-  'model_error',
-  'missing_input',
-  'protocol_error',
-  'router_error',
-  'custom_model_error',
-  'daemon_fatal_error',
-  'daemon_error',
-  'submit_error',
-  'inbox_stall_timeout',
-  'agent_process_exited',
-  'user_stop',
-  'internal_error',
-] as const;
-
-/** 失败原因码联合类型（contracts PublicReasonCode 的镜像）。 */
-export type PublicReasonCode = (typeof PUBLIC_REASON_CODES)[number];
+export { PUBLIC_REASON_CODES } from '@fateclaw/contracts';
+export type { PublicReasonCode } from '@fateclaw/contracts';
 
 /** 对话历史中的单条消息。 */
-export interface HistoryMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp?: string;
-  /** 结构化工具/skill 结果，供模型上下文复用。 */
-  toolContext?: SkillContextEntry[];
-}
+export type {
+  HistoryMessage,
+  ChatInputKind,
+  UserPastedBoardInput,
+  PiThinkingLevel,
+  LlmRuntimeSnapshot,
+} from '@fateclaw/contracts/agent';
+import type {
+  HistoryMessage,
+  ChatInputKind,
+  UserPastedBoardInput,
+  LlmRuntimeSnapshot,
+} from '@fateclaw/contracts/agent';
 
-export type ChatInputKind = 'normal' | 'user_pasted_board';
-
-export interface UserPastedBoardInput {
-  category: string;
-  content: string;
-  question: string;
-}
-
-/** Pi runtime 可选的思考等级，缺省时由 runtime 按 medium 处理。 */
-export type PiThinkingLevel =
-  | 'off'
-  | 'minimal'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'xhigh';
-
-export interface LlmRuntimeSnapshot {
-  poolKey?: import('@fateclaw/contracts/model-settings').ModelPoolKey;
-  poolRevision?: number;
-  benefitPolicy?: import('@fateclaw/contracts/model-settings').BenefitPolicyDto;
-  benefitRequestId?: string;
-  poolNodes?: import('@fateclaw/contracts/model-settings').RuntimeModelPoolNode[];
-  source: 'custom' | 'official';
-  billingMode: 'none' | 'metered';
-  modelConfigId: string;
-  piApi:
-    | 'openai-completions'
-    | 'openai-responses'
-    | 'anthropic-messages'
-    | 'google-generative-ai';
-  model: string;
-  contextWindowTokens?: number;
-  maxOutputTokens?: number;
-  thinkingLevel?: PiThinkingLevel;
-  apiKey: string;
-  baseUrl?: string;
-  authMode:
-    | 'openai_api_key'
-    | 'anthropic_api_key'
-    | 'claude_code_oauth_token'
-    | 'gemini_api_key';
-  providerKey: string;
-  inputTokenPricePerMillionCents?: number;
-  outputTokenPricePerMillionCents?: number;
-}
-
-/** 宿主机通过 stdin 传给容器的输入。 */
+/** Request-scoped input passed from the Redis envelope into Pi. */
 export interface ContainerInput {
   accountId: string;
   sessionId?: string;
@@ -108,6 +28,8 @@ export interface ContainerInput {
   inputKind?: ChatInputKind;
   /** 用户通过自贴盘面入口提交的原始盘面文本和问题。 */
   pastedBoard?: UserPastedBoardInput;
+  piSessionBase?: import('@fateclaw/contracts/agent').PiSessionBase | null;
+  acceptedAtMs?: number;
   /** 当前会话内全部有效盘面；每轮由 FateClaw API 从 DB 重建后注入 Pi system context。 */
   sessionBoardContexts?: SessionBoardContext[];
   /** 结构化对话历史（按时间正序）。 */
@@ -124,18 +46,12 @@ export interface ContainerInput {
   outboxQueue?: string;
 }
 
-export interface SessionBoardContext {
-  sourceMessageId: string;
-  source: 'official_paipan' | 'user_pasted_board';
-  skill: string;
-  artifactTitle?: string;
-  promptText: string;
-  artifactData?: unknown;
-  createdAt?: string;
-  isCurrent?: boolean;
-}
+export type { SessionBoardContext } from '@fateclaw/contracts/agent';
+import type { SessionBoardContext } from '@fateclaw/contracts/agent';
 
 export interface ChatTaskInboxRequest {
+  piSessionBase?: import('@fateclaw/contracts/agent').PiSessionBase | null;
+  acceptedAtMs?: number;
   executionId?: string;
   type: 'chat' | 'task';
   requestId: string;
@@ -180,11 +96,8 @@ export interface CancelInboxRequest {
 }
 
 /** API 返回的真实 token 用量（多轮累加后的总和）。 */
-export interface TokenUsage {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
+export type { TokenUsage } from '@fateclaw/contracts/agent';
+import type { TokenUsage } from '@fateclaw/contracts/agent';
 
 /** 本次请求中产生的 skill 执行结果（跨请求保留用）。 */
 export interface SkillContextEntry {
@@ -443,23 +356,8 @@ export type TraceEventEntry = Record<string, unknown> & {
   accountId?: string;
 };
 
-export interface PiSessionSnapshot {
-  id?: string;
-  file?: string;
-  persisted: boolean;
-  provider: string;
-  model: string;
-  userPrompt: string;
-  systemPrompt: string;
-  appendSystemPrompt: string[];
-  allowedTools: string[];
-  readableSkills: Array<{
-    name: string;
-    description?: string;
-  }>;
-  messageCount: number;
-  messages: unknown[];
-}
+export type { PiSessionSnapshot } from '@fateclaw/contracts/agent';
+import type { PiSessionSnapshot } from '@fateclaw/contracts/agent';
 
 /**
  * 容器运行结束后回传给宿主机的结构。
@@ -485,7 +383,9 @@ export interface ContainerOutput {
   /** 本次请求的持久化 task/evidence graph。 */
   agentGraph?: AgentTaskGraph;
   /** Pi session 持久化状态与本轮完成后的消息快照。 */
-  piSession?: PiSessionSnapshot;
+  piSession?:
+    | PiSessionSnapshot
+    | import('@fateclaw/contracts/agent').PiSessionFrame;
 }
 
 export interface OutboxResponse {
@@ -518,7 +418,9 @@ export interface OutboxResponse {
   /** 持久化 task/evidence graph。 */
   agentGraph?: AgentTaskGraph;
   /** Pi session 持久化状态与本轮完成后的消息快照。 */
-  piSession?: PiSessionSnapshot;
+  piSession?:
+    | PiSessionSnapshot
+    | import('@fateclaw/contracts/agent').PiSessionFrame;
   /** 结构化响应标识，例如最终回复完成标记。 */
   metadata?: unknown;
 }

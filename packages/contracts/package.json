@@ -65,6 +65,16 @@
       "types": "./dist/service-status/index.d.ts",
       "import": "./dist/service-status/index.js",
       "default": "./dist/service-status/index.js"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js",
+      "default": "./dist/agent/index.js"
+    },
+    "./agent/session": {
+      "types": "./dist/agent/session.d.ts",
+      "import": "./dist/agent/session.js",
+      "default": "./dist/agent/session.js"
     }
   },
   "files": [

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { getDbPool } from '../db-pool.js';
 import { storeMessage } from './chat-repository.js';
-import type { AiChatSubmission } from '../../runtime/ipc-worker.js';
+import type { AiChatSubmission } from '../../runtime/request-types.js';
 import type { LlmRuntimeSnapshot } from '../../runtime/ipc-payloads.js';
 import {
   reserveBenefitTurn,

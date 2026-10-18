@@ -199,23 +199,11 @@ export interface SkillContextEntry {
   artifactData?: unknown;
 }
 
-export interface SessionBoardContext {
-  sourceMessageId: string;
-  source: 'official_paipan' | 'user_pasted_board';
-  skill: string;
-  artifactTitle?: string;
-  promptText: string;
-  artifactData?: unknown;
-  createdAt?: string;
-  isCurrent?: boolean;
-}
-
-export interface HistoryMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp?: string;
-  toolContext?: SkillContextEntry[];
-}
+export type {
+  SessionBoardContext,
+  HistoryMessage,
+} from '@fateclaw/contracts/agent';
+import type { HistoryMessage } from '@fateclaw/contracts/agent';
 
 function parseToolContext(
   raw: string | null | undefined,
