@@ -1,6 +1,6 @@
 # Agent 架构
 
-最近核对：2026-06-29。
+Last checked: 2026-10-17.
 
 这份文档描述当前代码里的 agent 运行架构。当前主链路是宿主进程通过 Redis IPC 调用账号级 agent-runtime，agent-runtime 每次请求创建 Pi SDK Runtime，由 Pi 负责模型 loop、用户知识读取和最终回复。系统排盘由 Web/API 侧的确定性运行包执行。
 
@@ -62,8 +62,8 @@ Pi SDK 模型 loop / 授权 Skill 文件读取
 - 开发环境默认优先源码入口 `src/daemon.ts`，生产或 `LOCAL_AGENT_ENTRY_MODE=dist` 使用 `dist/daemon.js`。
 - 每个 runtimeId 对应一个常驻子进程；站内 AI Chat runtimeId 为 `web:{userId}`，微信场景为账号 ID。
 - 子进程 env 由 `apps/api/src/runtime/agent-env.ts` 统一构建，只注入身份、PostgreSQL、Redis、项目根、Pi session 目录等运行依赖，不注入全局模型密钥。
-- `runtime_config.local_agent_max_processes` 控制最多常驻进程数；达到上限时优先回收最久未使用的空闲 runtime。
-- `runtime_config.local_agent_idle_ttl_ms` 控制空闲回收；请求入队前会 `retainLocalAgent()`，最终响应、取消或超时后 `releaseLocalAgent()`。
+- The current local policy permits four resident account processes. At capacity, the host retires the oldest idle runtime and counts it until actual exit.
+- Idle runtimes retire after ten minutes. An admitted execution retains its exact child lease until final response, cancellation or timeout.
 - Linux 启动时会清理上一任宿主异常退出后留下的本项目孤儿 agent-runtime，避免旧进程继续消费 Redis 队列。
 
 ## Skill 与排盘模型
@@ -179,7 +179,7 @@ Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 cu
 主要真源：
 
 - PostgreSQL：用户、账号、会话、消息、任务、模型配置、技能 metadata、账单、`conversation_logs` 和 `conversation_log_payloads`。
-- 文件系统：用户 Text Skill Bundle 正文。
+- Filesystem: rebuildable authorized Skill revision snapshots, Pi session files and unsent result spools. PostgreSQL owns Skill content.
 - Redis：IPC 队列、会话 busy 标记、短期历史/上下文边界等运行态数据。
 - `apps/api/src/modules/chat/paipan-registry.ts`：系统排盘目录清单、参数 schema 和 runner 绑定。
 - `apps/api/src/modules/chat/paipan-runners/`：系统排盘 TypeScript 确定性实现。
@@ -193,6 +193,16 @@ Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 cu
 - `agentGraph`：任务、证据和最终回复的图结构。
 
 宿主在 outbox handler 中把 usage、模型、事件计数和摘要写入 `conversation_logs`，把 transcript、traceEvents 和 agentGraph 正文写入 `conversation_log_payloads`。Web 的“查询过程”能力通过消息 metadata 中的 `request_id` 回查这些日志。
+
+## Runtime scheduling
+
+Capacity scheduling is owned by `apps/api/src/runtime/agent-scheduler.ts`.
+A Redis account lease precedes local startup and the global execution gate.
+Waiting requests retain durable admission and their original deadline without
+occupying global slots. Member priority applies among runnable accounts. Release
+atomically removes account/global ownership and publishes a capacity notification;
+local wakeups and finite reconciliation bound recovery when notifications fail.
+Queued requests are not failed when an earlier execution's child exits.
 
 ## Runtime transport and stream batching
 

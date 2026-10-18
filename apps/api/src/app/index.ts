@@ -1,3 +1,4 @@
+import { stopAgentScheduler } from '../runtime/agent-scheduler.js';
 import {
   startAgentRequestRecovery,
   stopAgentRequestRecovery,
@@ -131,6 +132,7 @@ export async function main(): Promise<void> {
       stopBillingSweepWorker();
       stopPiSessionHealthWorker();
       stopInboxStallSweeper();
+      stopAgentScheduler();
       await disconnectRedis();
       await closeDatabase();
       logger.info('优雅退出完成');

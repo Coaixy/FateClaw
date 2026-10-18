@@ -1,3 +1,4 @@
+import { capacityChanged } from './capacity-signal.js';
 /**
  * 本地模式 agent-runtime 管理。
  *
@@ -266,6 +267,7 @@ function stopLocalAgentRecord(
   ) {
     clearForceKillTimer(record);
     retiringAgents.delete(record);
+    capacityChanged.notify();
     return;
   }
 
@@ -426,11 +428,9 @@ export async function ensureLocalAgentRunning(
   accountId: string,
   options: LocalAgentAdmissionOptions = {},
 ): Promise<void> {
-  const capacityDeadline = Math.min(
-    options.deadlineAtMs ?? Infinity,
-    Date.now() + 30_000,
-  );
+  const capacityDeadline = options.deadlineAtMs ?? Date.now() + 30_000;
   while (true) {
+    const revision = capacityChanged.revision;
     checkAdmission(options, capacityDeadline);
     const policy = await resolveLocalAgentPolicy();
     checkAdmission(options, capacityDeadline);
@@ -468,11 +468,9 @@ export async function ensureLocalAgentRunning(
     const idle = findOldestIdleLocalAgent();
     if (!retiringSameAccount && idle && retiringAgents.size === 0)
       stopLocalAgentRecord(idle, 'capacity_limit');
-    await new Promise<void>((resolve) =>
-      setTimeout(
-        resolve,
-        Math.min(100, Math.max(1, capacityDeadline - Date.now())),
-      ),
+    await capacityChanged.wait(
+      Math.min(1_000, Math.max(1, capacityDeadline - Date.now())),
+      revision,
     );
   }
 }
@@ -696,6 +694,7 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   child.on('exit', (code, signal) => {
     initializingAgents.delete(accountId);
     retiringAgents.delete(record);
+    capacityChanged.notify();
     clearTimeout(readyTimeoutTimer);
     settleReady?.(new Error('本地 agent 进程在就绪前已退出'));
     settleReady = null;
@@ -722,6 +721,7 @@ async function doSpawnLocalAgent(accountId: string): Promise<void> {
   child.on('error', (err) => {
     initializingAgents.delete(accountId);
     retiringAgents.delete(record);
+    capacityChanged.notify();
     clearTimeout(readyTimeoutTimer);
     settleReady?.(new Error('本地 agent 进程 error 事件'));
     settleReady = null;
@@ -786,6 +786,7 @@ export async function releaseLocalAgent(leaseId?: string): Promise<void> {
   if (localAgentProcesses.get(record.accountId) !== record || record.stopping)
     return;
   record.busyCount = Math.max(0, record.busyCount - 1);
+  capacityChanged.notify();
   record.lastUsedAt = Date.now();
   if (record.busyCount > 0) return;
   const policy = await resolveLocalAgentPolicy();

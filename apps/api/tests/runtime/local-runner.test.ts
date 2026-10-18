@@ -454,6 +454,27 @@ describe('local-runner', () => {
     expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
+  it('uses the admitted request deadline when busy capacity lasts longer than thirty seconds', async () => {
+    mockGetLocalAgentRuntimePolicy.mockResolvedValue({
+      maxProcesses: 1,
+      idleTtlMs: 86_400_000,
+    });
+    await ensureLocalAgentRunning('busy');
+    const lease = retainLocalAgent('busy');
+    const next = ensureLocalAgentRunning('waiting', {
+      deadlineAtMs: Date.now() + 90_000,
+    });
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    await releaseLocalAgent(lease);
+    await vi.advanceTimersByTimeAsync(100);
+    spawnedChildren[0].child.exitCode = 0;
+    spawnedChildren[0].child.emit('exit', 0, null);
+    await vi.advanceTimersByTimeAsync(100);
+    await next;
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
+  });
+
   it('cancels a capacity waiter without reserving or starting a process', async () => {
     mockGetLocalAgentRuntimePolicy.mockResolvedValue({
       maxProcesses: 1,
@@ -466,9 +487,9 @@ describe('local-runner', () => {
       isCancelled: () => cancelled,
     });
     const rejection = expect(next).rejects.toThrow('请求已取消或超时');
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(1_000);
     cancelled = true;
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(1_000);
     await rejection;
     expect(mockSpawn).toHaveBeenCalledTimes(1);
   });

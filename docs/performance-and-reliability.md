@@ -10,9 +10,9 @@ their existing public interfaces. No balance is frozen: billing uses actual
 reported usage, including completed turns before cancellation or failure.
 
 The original memory cap and idle recycling serve small single-host deployments.
-They remain in place. Runtime startup and global capacity acquisition remain
-parallel, and HTTP acceptance now follows durable admission rather than worker
-startup. A no-progress watchdog remains distinct from the absolute deadline.
+They remain in place. Account admission and runtime readiness precede global execution capacity.
+HTTP acceptance follows durable admission, so busy local capacity queues until the
+original request deadline instead of failing after thirty seconds. A no-progress watchdog remains distinct from the absolute deadline.
 
 ## Durable request lifecycle
 
@@ -81,9 +81,15 @@ retained for recovery/operator inspection rather than silently evicted.
 - Healthy business stream traffic reduces message polling from 1.2 seconds to about
   15.6 seconds. Five seconds without business progress, disconnects and new requests
   restore the fast recovery cadence. A socket handshake alone does not mark progress.
-- Local process capacity waits for up to 30 seconds and honors cancellation and the
-  request deadline. Waiters do not reserve slots; retiring processes count until
-  actual exit. Same-account startup remains coalesced.
+- Local process capacity honors the admitted request deadline and cancellation.
+  Calls without a request deadline retain a thirty-second bound. Waiters do not
+  reserve process or global execution slots; retiring children count until actual
+  exit. Redis account leases admit one runnable request per runtime, and the
+  global gate preserves member priority among runnable accounts. Ownership and
+  global capacity release atomically; attempt tokens prevent stale admission
+  cleanup from releasing a replacement owner. One shared subscriber per API receives
+  release notifications; five-second reconciliation handles lost notifications.
+  Local child exit and lease release also wake process-capacity waiters.
 - PostgreSQL pools use 10 API connections and 2 per daemon. Connections wait at most
   5 seconds; ordinary statements use 30-second server timeouts. See
   [database reliability](database-reliability.md) for transaction and migration budgets.
@@ -95,6 +101,11 @@ retained for recovery/operator inspection rather than silently evicted.
 Normal submission queries only board fields and checks for a final reply after
 the current board with an existence query. It does not fetch the complete message
 history. All authorized boards and the existing first-question wording remain.
+
+Each account listener uses separate finite blocking reads for ordinary results
+and reliable AI results. AI `BLMOVE` wakes on its own queue and retains the
+processing copy until successful delivery; waiting on an ordinary outbox cannot
+add a one-second AI delivery delay. Both connections close with the listener.
 
 The IPC request data, model snapshot, thinking levels, board/history shapes and
 session frame protocol are owned by `packages/contracts/src/agent/`. API admission

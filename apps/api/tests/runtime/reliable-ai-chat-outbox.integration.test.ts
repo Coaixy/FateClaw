@@ -50,6 +50,37 @@ describe.skipIf(!url)('reliable results with real Redis', () => {
     await acknowledgeAiChatResult(queue, 'first');
     expect(await claimAiChatResult(queue)).toBe('second');
   });
+  it('wakes the reliable AI consumer while an unrelated queue remains blocked', async () => {
+    const blocking = redis.duplicate();
+    const unrelated = redis.duplicate();
+    try {
+      const ordinary = unrelated.brpop(`${queue}:unrelated`, 1);
+      const claimed = claimAiChatResult(queue, blocking);
+      await redis.lpush(queue, 'synthetic immediate result');
+      expect(
+        await Promise.race([
+          claimed,
+          new Promise((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error('AI result was delayed by the unrelated queue'),
+                ),
+              500,
+            ),
+          ),
+        ]),
+      ).toBe('synthetic immediate result');
+      expect(await redis.lrange(processing, 0, -1)).toEqual([
+        'synthetic immediate result',
+      ]);
+      await acknowledgeAiChatResult(queue, 'synthetic immediate result');
+      await ordinary;
+    } finally {
+      blocking.disconnect();
+      unrelated.disconnect();
+    }
+  });
   it('never loses messages under concurrent claims and duplicate acknowledgements', async () => {
     await redis.lpush(queue, 'first', 'second');
     const claims = await Promise.all([

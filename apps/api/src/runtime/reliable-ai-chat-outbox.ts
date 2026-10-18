@@ -1,15 +1,24 @@
 import { getRedis } from '../infrastructure/redis.js';
+import type { Redis } from 'ioredis';
 
 export function processingOutboxKey(queue: string): string {
   return `${queue}:processing`;
 }
 
 /** Keep the transport copy until the database delivery boundary succeeds. */
-export async function claimAiChatResult(queue: string): Promise<string | null> {
+export async function claimAiChatResult(
+  queue: string,
+  blocking?: Pick<Redis, 'blmove'>,
+): Promise<string | null> {
   const redis = getRedis();
   const processing = processingOutboxKey(queue);
   const existing = await redis.lindex(processing, -1);
-  return existing ?? redis.rpoplpush(queue, processing);
+  return (
+    existing ??
+    (blocking
+      ? blocking.blmove(queue, processing, 'RIGHT', 'LEFT', 1)
+      : redis.rpoplpush(queue, processing))
+  );
 }
 
 export async function acknowledgeAiChatResult(

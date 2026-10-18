@@ -201,6 +201,15 @@ function createPending(
   };
 }
 
+beforeEach(() => {
+  mockDuplicate.mockImplementation(() => ({
+    connect: vi.fn(async () => undefined),
+    brpop: vi.fn(() => new Promise<null>(() => {})),
+    blmove: vi.fn(() => new Promise<null>(() => {})),
+    disconnect: vi.fn(),
+  }));
+});
+
 describe('Redis IPC listener lifecycle', () => {
   const accountId = 'web:listener-user';
   const queue = `ipc:${accountId}:outbox`;
@@ -214,6 +223,14 @@ describe('Redis IPC listener lifecycle', () => {
         return [queue, JSON.stringify(payload)];
       }),
       quit: vi.fn(async () => 'OK'),
+      disconnect: vi.fn(),
+    };
+  }
+
+  function createAiConsumer() {
+    return {
+      connect: vi.fn(async () => undefined),
+      blmove: vi.fn(() => new Promise<null>(() => {})),
       disconnect: vi.fn(),
     };
   }
@@ -243,7 +260,9 @@ describe('Redis IPC listener lifecycle', () => {
           ready = resolve;
         }),
     );
-    mockDuplicate.mockReturnValue(consumer);
+    mockDuplicate
+      .mockReturnValueOnce(consumer)
+      .mockReturnValueOnce(createAiConsumer());
 
     addAccountListener(accountId);
     await vi.advanceTimersByTimeAsync(0);
@@ -281,7 +300,11 @@ describe('Redis IPC listener lifecycle', () => {
           "Stream isn't writeable and enableOfflineQueue options is false",
         ),
       );
-      mockDuplicate.mockReturnValueOnce(failed).mockReturnValueOnce(recovered);
+      mockDuplicate
+        .mockReturnValueOnce(failed)
+        .mockReturnValueOnce(createAiConsumer())
+        .mockReturnValueOnce(recovered)
+        .mockReturnValueOnce(createAiConsumer());
 
       addAccountListener(accountId);
       await vi.advanceTimersByTimeAsync(0);
@@ -292,12 +315,12 @@ describe('Redis IPC listener lifecycle', () => {
       );
       expect(failed.disconnect).toHaveBeenCalledOnce();
       expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
-      expect(mockDuplicate).toHaveBeenCalledTimes(1);
+      expect(mockDuplicate).toHaveBeenCalledTimes(2);
       if (phase === 'connect') expect(failed.brpop).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(mockDuplicate).toHaveBeenCalledTimes(2);
+      expect(mockDuplicate).toHaveBeenCalledTimes(4);
       expect(processOutboxPayload).toHaveBeenCalledWith(
         payload,
         accountId,
@@ -459,7 +482,15 @@ describe('global agent concurrency gate', () => {
     const result = await cancelAiChatSessionRequest('session-1');
 
     expect(result).toBe(true);
-    expect(mockZrem).toHaveBeenCalledWith('agent:concurrency:active', 'slot-1');
+    expect(mockEval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('ZREM', KEYS[1]"),
+      2,
+      'agent:concurrency:active',
+      'agent:runtime:owner:slot-1',
+      'slot-1',
+      'agent:capacity:changed',
+      '',
+    );
   });
 });
 
@@ -525,22 +556,14 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
     } as never);
   });
 
-  it('accepts AI Chat after wait queue registration and keeps the lease', async () => {
-    let releaseGate: ((value: unknown) => void) | undefined;
-    let releaseRuntime: (() => void) | undefined;
-    mockEval.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          releaseGate = resolve;
-        }),
-    );
+  it('accepts durably before startup and takes no global slot until the runtime is ready', async () => {
+    let ready!: () => void;
     mockEnsureLocalAgentRunning.mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
-          releaseRuntime = resolve;
+          ready = resolve;
         }),
     );
-
     const result = await submitAiChatInboxRequest({
       accountId: 'web:user-1',
       userMessage: 'hi',
@@ -550,50 +573,43 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       authorizedSkillIds: ['skill-bazi'],
       waitForResponse: false,
     });
-
-    expect(result).toEqual({
-      requestId: expect.stringMatching(/^aichat-/),
-      status: 'success',
-      text: '',
-    });
-    expect(mockReleaseLocalAgent).not.toHaveBeenCalled();
-    expect(mockZadd).toHaveBeenCalledWith(
-      'agent:concurrency:waitq:member',
-      expect.any(Number),
-      result.requestId,
-    );
-    expect(getUserByAccountId).not.toHaveBeenCalled();
-    expect(mockEnsureLocalAgentRunning).toHaveBeenCalledWith(
-      'web:user-1',
-      expect.objectContaining({
-        deadlineAtMs: expect.any(Number),
-        isCancelled: expect.any(Function),
-      }),
-    );
+    await vi.waitFor(() => expect(ready).toBeTypeOf('function'));
+    expect(mockZadd).not.toHaveBeenCalled();
     expect(mockRetainLocalAgent).not.toHaveBeenCalled();
-
-    await vi.waitFor(() => {
-      expect(releaseGate).toBeTypeOf('function');
-    });
-    releaseGate?.([1, 'member']);
-    expect(mockRetainLocalAgent).not.toHaveBeenCalled();
-    releaseRuntime?.();
-    await vi.waitFor(() => {
-      expect(mockRetainLocalAgent).toHaveBeenCalledWith('web:user-1');
+    ready();
+    await vi.waitFor(() =>
       expect(mockLpush).toHaveBeenCalledWith(
-        expect.stringMatching(/^ipc:web:user-1:inbox:member$/),
+        'ipc:web:user-1:inbox:member',
         expect.stringContaining('"authorizedSkillIds":["skill-bazi"]'),
-      );
+      ),
+    );
+    expect(
+      __getPendingAiChatRequestsForTests().get(result.requestId)
+        ?.localAgentLeaseId,
+    ).toBe('web:user-1');
+  });
+  it('releases an unqueued runtime and leaves failed persistence eligible for durable recovery', async () => {
+    const requests =
+      await import('../../src/infrastructure/repositories/agent-requests-repository.js');
+    vi.mocked(requests.markAgentRequestDispatched).mockResolvedValueOnce(false);
+    vi.mocked(requests.persistAgentFailure).mockRejectedValueOnce(
+      new Error('synthetic database failure'),
+    );
+    const result = await submitAiChatInboxRequest({
+      accountId: 'web:user-1',
+      userMessage: 'synthetic',
+      history: [],
+      sessionId: 'session-1',
+      llmRuntime: effectiveRuntime,
+      waitForResponse: false,
     });
-    expect(mockLpush).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining('"authorizedSkillIds":["skill-bazi"]'),
+    await vi.waitFor(() =>
+      expect(__getPendingAiChatRequestsForTests().has(result.requestId)).toBe(
+        false,
+      ),
     );
-    expect(__getPendingAiChatRequestsForTests().get(result.requestId)).toEqual(
-      expect.objectContaining({
-        localAgentLeaseId: 'web:user-1',
-      }),
-    );
+    expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
+    expect(mockLpush).not.toHaveBeenCalled();
   });
 
   it('releases normal inbox runtime lease when enqueue fails', async () => {
@@ -666,6 +682,14 @@ describe('local agent-runtime process exit notifies in-flight AI Chat requests',
     pending.set(
       'req-crash-1',
       createPending({ accountId: 'web:crash-acct', sessionId: 'session-a' }),
+    );
+    pending.set(
+      'req-queued',
+      createPending({
+        accountId: 'web:crash-acct',
+        sessionId: 'queued',
+        localAgentLeaseId: undefined,
+      }),
     );
     pending.set(
       'req-other',
