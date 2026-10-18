@@ -280,7 +280,7 @@ describe('model pool transport', () => {
       expect.objectContaining({
         type: 'model_pool_attempt_completed',
         level: 'warn',
-        outcome: 'provider_failure',
+        outcome: 'local_failure',
         error: expect.objectContaining({
           name: 'TypeError',
           message: 'fetch failed',
@@ -488,7 +488,7 @@ describe('model pool transport', () => {
     );
     expect((await complete()).model).toBe('model-b');
     expect(store.finish.mock.calls.map((call) => call[2])).toEqual([
-      'failure',
+      'release',
       'success',
     ]);
   });
@@ -520,7 +520,7 @@ describe('model pool transport', () => {
       errorMessage: expect.stringContaining('超时'),
     });
     expect(backup).not.toHaveBeenCalled();
-    expect(store.finish.mock.calls.map((call) => call[2])).toEqual(['failure']);
+    expect(store.finish.mock.calls.map((call) => call[2])).toEqual(['release']);
   });
 
   it('does not fail over or penalize nodes when the caller cancels', async () => {

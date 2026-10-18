@@ -30,12 +30,12 @@ export async function probeBenefitModelAvailability(
     [node.modelConfigId, node.revision, id],
   );
   if (!rows[0]?.claim) return { latency: null, attempted: false };
-  const { latency, cooldown } = await probeModel(node, signal);
+  const { latency, cooldown, providerFailure } = await probeModel(node, signal);
   await getDbPool().query(
     'SELECT settle_benefit_attempt($1,0,0,false,$2,$3,$4)',
     [
       id,
-      signal.aborted ? 'release' : latency === null ? 'failure' : 'success',
+      latency !== null ? 'success' : providerFailure ? 'failure' : 'release',
       cooldown?.seconds ?? null,
       cooldown?.reason ?? null,
     ],
@@ -77,11 +77,17 @@ async function probeModel(
   node: RuntimeModelPoolNode,
   callerSignal: AbortSignal,
   timeoutMs = STATUS_PROBE_TIMEOUT_MS,
-): Promise<{ latency: number | null; cooldown?: ModelPoolCooldown }> {
-  if (callerSignal.aborted) return { latency: null };
+): Promise<{
+  latency: number | null;
+  cooldown?: ModelPoolCooldown;
+  providerFailure: boolean;
+}> {
+  if (callerSignal.aborted) return { latency: null, providerFailure: false };
   let status: number | undefined;
   let retryAfter: string | undefined;
   let cooldown: ModelPoolCooldown | undefined;
+  let providerFailure = false;
+  let transportFailed = false;
   const controller = new AbortController();
   const signal = AbortSignal.any([callerSignal, controller.signal]);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -137,7 +143,13 @@ async function probeModel(
                   input: Parameters<typeof fetch>[0],
                   init?: Parameters<typeof fetch>[1],
                 ) => {
-                  const response = await globalThis.fetch(input, init);
+                  let response: Response;
+                  try {
+                    response = await globalThis.fetch(input, init);
+                  } catch (error) {
+                    transportFailed = true;
+                    throw error;
+                  }
                   status = response.status;
                   retryAfter = response.headers.get('retry-after') ?? undefined;
                   return response;
@@ -152,6 +164,7 @@ async function probeModel(
       );
       for await (const event of events) {
         if (event.type === 'error') {
+          providerFailure = !signal.aborted && !transportFailed;
           cooldown = modelPoolCooldown(
             status,
             event.error.errorMessage ?? '',
@@ -176,8 +189,14 @@ async function probeModel(
         )
           return Math.round(performance.now() - started);
       }
+      providerFailure = !signal.aborted && !transportFailed;
       return null;
     } catch (error) {
+      providerFailure =
+        !signal.aborted &&
+        !transportFailed &&
+        status !== undefined &&
+        status >= 400;
       // Provider failures are probe outcomes. Never persist or log returned bodies or credentials.
       cooldown = modelPoolCooldown(
         status,
@@ -189,7 +208,11 @@ async function probeModel(
   };
   try {
     const latency = await Promise.race([read(), aborted]);
-    return { latency, cooldown };
+    return {
+      latency,
+      cooldown: providerFailure ? cooldown : undefined,
+      providerFailure: providerFailure && !signal.aborted,
+    };
   } finally {
     clearTimeout(timer);
     controller.abort();

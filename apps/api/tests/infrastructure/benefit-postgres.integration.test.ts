@@ -45,6 +45,7 @@ import {
   tryAcquireBenefitExecutionSlot,
   getBenefitAllowance,
   getBenefitSupply,
+  getPreferredModelPool,
   saveModelPoolPreference,
 } from '../../src/infrastructure/repositories/benefit-repository.js';
 import type { LlmRuntimeSnapshot } from '../../src/runtime/ipc-payloads.js';
@@ -81,7 +82,7 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
   beforeEach(async () => {
     await state.pool!
       .query(`UPDATE official_model_pool_settings SET primary_node_id=NULL;
-      TRUNCATE benefit_model_attempts,benefit_requests,benefit_daily_usage,agent_result_deliveries,agent_requests;
+      TRUNCATE benefit_model_attempts,benefit_requests,benefit_daily_usage,agent_result_deliveries,agent_requests,user_model_preferences;
       DELETE FROM official_model_pool_nodes; DELETE FROM official_model_configs;
       DELETE FROM system_secrets; UPDATE official_model_pool_settings SET enabled=false WHERE id='benefit'`);
     await state.pool!.query(
@@ -167,6 +168,23 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     );
     return rows[0].claim as { benefitAttemptId: string } | null;
   }
+  it.each([false, true])(
+    'defaults new conversations to paid models when the free service is enabled=%s',
+    async (enabled) => {
+      await state.pool!.query(
+        "UPDATE official_model_pool_settings SET enabled=$1 WHERE id='benefit'",
+        [enabled],
+      );
+      expect(await getPreferredModelPool('a')).toBe('official');
+    },
+  );
+  it.each(['official', 'benefit'] as const)(
+    'preserves an explicit %s preference for new conversations',
+    async (poolKey) => {
+      await saveModelPoolPreference('a', poolKey);
+      expect(await getPreferredModelPool('a')).toBe(poolKey);
+    },
+  );
   it('fences model changes against active durable requests even if the transient session lock is lost', async () => {
     const id = await admit();
     await expect(

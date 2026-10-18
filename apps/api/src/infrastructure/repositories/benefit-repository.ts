@@ -23,8 +23,7 @@ export async function getPreferredModelPool(
 ): Promise<ModelPoolKey> {
   const { rows } = await getDbPool().query<{ pool_key: ModelPoolKey }>(
     `SELECT COALESCE((SELECT pool_key FROM user_model_preferences WHERE user_id=$1),
-      CASE WHEN EXISTS(SELECT 1 FROM official_model_pool_settings WHERE id='benefit' AND enabled)
-      THEN 'benefit' ELSE 'official' END) AS pool_key`,
+      'official') AS pool_key`,
     [userId],
   );
   return rows[0].pool_key;
@@ -158,11 +157,19 @@ export async function reserveBenefitTurn(
     allowance_date: string;
     consumed_turns: number;
     reserved_turns: number;
+    failed_turns: number;
+    retry_after_at: Date | null;
   }>(
     `SELECT * FROM benefit_daily_usage WHERE user_id=$1 AND allowance_date=(now() AT TIME ZONE 'Asia/Shanghai')::date FOR UPDATE`,
     [userId],
   );
   const day = rows[0];
+  if (day.failed_turns >= policy.daily_turns)
+    throw new BenefitAdmissionError(
+      '今日免费服务失败重试次数已用完，明日 00:00 恢复',
+    );
+  if (day.retry_after_at && new Date(day.retry_after_at).getTime() > Date.now())
+    throw new BenefitAdmissionError('免费请求刚刚失败，请等待 30 秒后重试');
   if (day.consumed_turns + day.reserved_turns >= policy.daily_turns)
     throw new BenefitAdmissionError('今日免费额度已用完，明日 00:00 恢复');
   const active = await db.query(
@@ -252,10 +259,13 @@ export async function settleBenefitTurn(
   );
   const stopped = cancelled || cancellation.rows[0]?.cancelled;
   const consume = stopped ? request.answer_visible : success;
+  const failed = !consume && request.model_calls > 0;
   await db.query(
     `UPDATE benefit_daily_usage SET reserved_turns=GREATEST(0,reserved_turns-1),
-    consumed_turns=consumed_turns+$3 WHERE user_id=$1 AND allowance_date=$2`,
-    [request.user_id, request.allowance_date, consume ? 1 : 0],
+    consumed_turns=consumed_turns+$3,failed_turns=failed_turns+$4,
+    retry_after_at=CASE WHEN $4>0 THEN now()+interval '30 seconds' ELSE retry_after_at END
+    WHERE user_id=$1 AND allowance_date=$2`,
+    [request.user_id, request.allowance_date, consume ? 1 : 0, failed ? 1 : 0],
   );
   await db.query('UPDATE benefit_requests SET state=$2 WHERE request_id=$1', [
     requestId,

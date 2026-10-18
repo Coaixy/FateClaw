@@ -30,6 +30,8 @@ const FIRST_CONTENT_TIMEOUT_MS = 45_000;
 const STREAM_IDLE_TIMEOUT_MS = 60_000;
 const ATTEMPT_TIMEOUT_MS = 180_000;
 
+class LocalModelTimeoutError extends Error {}
+
 function errorDetails(
   error: unknown,
   runtime: LlmRuntimeSnapshot,
@@ -159,7 +161,10 @@ async function nextEvent(
     const abort = () =>
       finish(() => reject(new Error('Model request aborted')));
     const timer = setTimeout(
-      () => finish(() => reject(new Error('Model pool provider timeout'))),
+      () =>
+        finish(() =>
+          reject(new LocalModelTimeoutError('Model pool provider timeout')),
+        ),
       Math.max(1, timeoutMs),
     );
     const finish = (complete: () => void) => {
@@ -485,10 +490,15 @@ export function installModelPool(
             !aborted &&
             phase === 'provider' &&
             isProviderFailure(status, failureMessage);
+          // Failover eligibility does not establish that the shared provider is unhealthy.
+          const providerFailure =
+            retryable &&
+            !(error instanceof LocalModelTimeoutError) &&
+            transportError === undefined;
           accumulated = addUsage(accumulated, latest?.usage ?? emptyUsage());
           const attemptUsage = latest?.usage;
           const cooldown =
-            benefitRequestId && retryable
+            benefitRequestId && providerFailure
               ? modelPoolCooldown(status, failureMessage, retryAfter)
               : undefined;
           options.trace?.({
@@ -498,20 +508,23 @@ export function installModelPool(
             ...nodeContext(node),
             outcome: aborted
               ? 'cancelled'
-              : retryable
+              : providerFailure
                 ? 'provider_failure'
-                : 'request_error',
+                : retryable
+                  ? 'local_failure'
+                  : 'request_error',
             statusCode: status,
             phase,
             durationMs: Date.now() - startedAt,
             published,
             retryable,
+            providerFailure,
             error: errorDetails(failure, runtime, phase === 'provider'),
           });
           await finishHealth(
             node,
             claim,
-            retryable ? 'failure' : 'release',
+            providerFailure ? 'failure' : 'release',
             benefitRequestId
               ? {
                   inputTokens: attemptUsage

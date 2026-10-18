@@ -108,12 +108,12 @@ and the new-conversation default in one transaction, but changing a default neve
 rewrites unrelated or running sessions. Local UI state is a draft, not another
 authoritative preference store. All entry points use the same owner and contract.
 
-Existing conversations retain the paid pool. Without a remembered explicit
-preference, new conversations initially select free models when the service is enabled. A
-remembered choice takes precedence. If the free service is temporarily unavailable,
-the selected free service stays visible and disabled with its reason; paid
-execution always requires an explicit user selection followed by a paid submit.
-When the free service is disabled, new conversations follow the existing paid flow.
+Existing conversations keep their selected pool. Without a remembered explicit
+preference, new conversations initially select paid models, whether or not the
+free service is enabled. The selector lists paid models first and free models
+second. A remembered choice takes precedence. If the selected free service is
+temporarily unavailable, it stays visible and disabled with its reason; switching
+to paid execution requires an explicit selection followed by a paid submit.
 
 The selected pool belongs to the server-side session. Changing it affects future
 turns only and is rejected while a turn is active. Each admitted turn records its

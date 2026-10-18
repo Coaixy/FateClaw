@@ -41,7 +41,8 @@ The server stores the last explicit preference for new sessions and the selected
 pool of each existing session. A session switch also updates the new-session
 preference. A preference change does not rewrite unrelated sessions. Existing
 sessions migrate to paid; new sessions without a remembered preference select
-free models when enabled. Exhaustion never automatically selects paid.
+paid models, whether or not the free service is enabled. The selector lists paid
+models first and free models second. Exhaustion never automatically selects paid.
 
 Switches use the existing session processing lock plus the durable session-row
 boundary. Admission verifies the selected pool and absence of another active
@@ -86,7 +87,13 @@ The administrator can configure only these free-service limits:
 These are source defaults, not the policy of every deployment. Upgrades preserve
 the configured daily turns and concurrency while removing obsolete policy fields.
 Membership gating does not change these configured values or grant a trial allowance.
-The per-user active-request cap remains one, including queueing.
+The per-user active-request cap remains one, including queueing. Refunded requests
+that claimed a provider attempt also spend a separate daily failure budget equal
+to the configured daily turns. They pause new attempts for 30 seconds. Queue-only
+failures do not spend that budget; cancellation after an attempted dispatch does.
+Both daily budgets reset at Asia/Shanghai midnight. A duplicate settlement cannot
+spend either budget twice. The failure budget does not change displayed successful
+turn allowance or create a wallet charge.
 
 Deploy the API, agent runtime and admin together. Migration
 `0090_benefit_turns_and_concurrency` changes the model-attempt claim signature;
@@ -116,7 +123,10 @@ the other enabled nodes in the same pool.
 A valid `Retry-After` interval or HTTP date sets the cooldown, bounded to one second
 through 24 hours. Without one, rate limits default to 60 seconds; daily quota,
 insufficient balance and exhausted quota default to one hour. Other supplier
-failures keep the existing 30-second exponential backoff capped at five minutes.
+failures require three consecutive provider failures before a 30-second
+exponential backoff capped at five minutes. A failed half-open recovery attempt
+immediately reopens the circuit. Local first-content/idle deadlines and transport
+errors may trigger failover but release the node without changing shared health.
 After cooldown, one leased request or scheduled probe tests recovery; success clears
 the cooldown and failure starts another cooldown. Unrelated administration saves
 preserve cooldowns. All nodes cooling due to quota report exhausted supply;
@@ -138,7 +148,8 @@ Final reply persistence and personal allowance settlement share the durable resu
 delivery transaction. A complete answer consumes one turn. A provider/platform
 failure refunds the personal turn, including interrupted partial answers.
 User cancellation consumes a turn after answer text has been published, and
-otherwise releases it. Duplicate results and recovery cannot settle twice.
+otherwise releases it. A released request with a claimed provider attempt still
+spends the separate failure budget. Duplicate results and recovery cannot settle twice.
 Running/ambiguous requests are not resubmitted after a crash.
 Free requests bypass paid wallet admission; wallet debt does not block them.
 
