@@ -1,18 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 
-import { AppShell } from '@/components/app-shell';
-import { getApiBase } from '@/lib/http/client';
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  ChevronRight,
+  Code2,
+  Link2,
+  Search,
+  X,
+} from 'lucide-react';
+
+import { DeveloperShell } from '@/components/developer/developer-shell';
+import { CodeBlock, CopyButton } from '@/components/developer/code-block';
+import { useOpenApiBase } from '@/features/api-keys/use-open-api-base';
 
 type HttpMethod = 'GET' | 'POST' | 'DELETE';
 
 const METHOD_STYLE: Record<HttpMethod, string> = {
-  GET: 'text-emerald-600 bg-emerald-500/10',
-  POST: 'text-sky-600 bg-sky-500/10',
-  DELETE: 'text-rose-600 bg-rose-500/10',
+  GET: 'text-chart-wood bg-success/10',
+  POST: 'text-primary bg-primary/10',
+  DELETE: 'text-error bg-error/10',
 };
 
 /** 必填状态：是=必填、否=可选、条件=由起卦方式等决定。 */
@@ -724,38 +736,104 @@ const ERROR_CODES: Array<{
     type: 'api_error',
     when: '服务器内部错误',
   },
+  {
+    status: '503',
+    code: 'service_unavailable',
+    type: 'api_error',
+    when: '限流服务暂不可用，请稍后重试',
+  },
 ];
 
-/** 顶部 tab。 */
-const TABS = [
-  { id: 'start', label: '快速开始' },
-  { id: 'paipan', label: '排盘' },
-  { id: 'agent', label: '解读 · Agent' },
-  { id: 'reference', label: '参考' },
+const DOC_GROUPS = [
+  {
+    id: 'start',
+    label: '快速开始',
+    sections: [
+      {
+        id: 'start-intro',
+        label: '概览与接入',
+        keywords: 'API Key Base URL 接入 认证',
+      },
+      {
+        id: 'start-auth',
+        label: '身份认证',
+        keywords: 'Authorization Bearer 401 402 环境变量',
+      },
+      {
+        id: 'start-example',
+        label: '第一个请求',
+        keywords: 'curl Python JavaScript 示例 八字 bazi',
+      },
+      {
+        id: 'start-flow',
+        label: '排盘到 AI 解读',
+        keywords: '完整流程 会话 session 多轮',
+      },
+    ],
+  },
+  {
+    id: 'paipan',
+    label: '排盘 API',
+    sections: [
+      {
+        id: 'paipan-overview',
+        label: '排盘概览',
+        keywords: 'catalog schema 排盘类型 免费',
+      },
+      ...PAIPAN_SPECS.map((spec) => ({
+        id: spec.id,
+        label: spec.name,
+        keywords: `${spec.type} /paipan/${spec.type} /api/v1/paipan/${spec.type} ${spec.summary} ${spec.params.map((param) => param.name).join(' ')}`,
+      })),
+    ],
+  },
+  {
+    id: 'agent',
+    label: 'AI 解读 API',
+    sections: [
+      {
+        id: 'agent-chat',
+        label: '会话与消息',
+        keywords:
+          'POST GET DELETE /sessions /api/v1/sessions messages content system board 多轮 Python usage token',
+      },
+      {
+        id: 'agent-models',
+        label: '模型',
+        keywords: 'GET /models /api/v1/models model 官方',
+      },
+      {
+        id: 'agent-skills',
+        label: '技能',
+        keywords: 'GET /skills /api/v1/skills UUID 订阅',
+      },
+    ],
+  },
+  {
+    id: 'reference',
+    label: '参考',
+    sections: [
+      {
+        id: 'ref-billing',
+        label: '计费说明',
+        keywords: '积分 token 消耗 会员 价格 免费',
+      },
+      {
+        id: 'ref-ratelimit',
+        label: '请求限流',
+        keywords: '60 429 Retry-After 并发 rate limit',
+      },
+      {
+        id: 'ref-errors',
+        label: '错误码',
+        keywords: ERROR_CODES.map(
+          (error) => `${error.status} ${error.code} ${error.when}`,
+        ).join(' '),
+      },
+    ],
+  },
 ] as const;
-type TabId = (typeof TABS)[number]['id'];
-
-/**
- * 解析文档展示用的「API 公网基址」（不含 /api/v1）。
- *
- * 优先级：构建期注入的 PUBLIC_API_BASE_URL（后端同款，即 API 对外的真实公网地址）
- * > 前端请求基址 NEXT_PUBLIC_API_BASE > 运行时同源 origin。
- * 注意：origin 是「当前 web 页面」的地址，仅在 web 与 API 同源部署时才等于 API 地址，
- * 故只作最后兜底，不优先采用——避免把 web 地址误当 API 地址。
- */
-function resolveApiBase(): string {
-  const configured =
-    process.env.NEXT_PUBLIC_OPEN_API_BASE_URL?.trim() || getApiBase();
-  if (configured) return configured;
-  return typeof window !== 'undefined' ? window.location.origin : '';
-}
-
-/** 文档示例的初始 Base URL：优先用构建期即可确定的配置地址，否则先用相对 /api/v1（hydration 后补全）。 */
-function initialBaseUrl(): string {
-  const base =
-    process.env.NEXT_PUBLIC_OPEN_API_BASE_URL?.trim() || getApiBase();
-  return base ? `${base}/api/v1` : '/api/v1';
-}
+type TabId = (typeof DOC_GROUPS)[number]['id'];
 
 function MethodBadge({ method }: { method: HttpMethod }) {
   return (
@@ -772,25 +850,15 @@ function Endpoint({ method, path }: { method: HttpMethod; path: string }) {
   return (
     <div className="flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-cream-strong/50 px-3 py-2">
       <MethodBadge method={method} />
-      <code className="font-mono text-[13px] text-ink">{path}</code>
+      <code className="min-w-0 break-all font-mono text-xs text-ink">
+        {path}
+      </code>
     </div>
   );
 }
 
-/** 代码块：可选语言标签。 */
 function Code({ lang, children }: { lang?: string; children: string }) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-hairline bg-surface-card">
-      {lang && (
-        <div className="border-b border-hairline/60 px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-muted">
-          {lang}
-        </div>
-      )}
-      <pre className="overflow-x-auto p-4 font-mono text-[12px] leading-relaxed text-ink">
-        <code>{children}</code>
-      </pre>
-    </div>
-  );
+  return <CodeBlock language={lang}>{children}</CodeBlock>;
 }
 
 /** 必填状态徽章。 */
@@ -805,48 +873,55 @@ function ReqBadge({ state }: { state: ReqState }) {
     <span
       className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${style}`}
     >
-      {state}
+      {state === '是' ? '必填' : state === '否' ? '可选' : '条件必填'}
     </span>
   );
 }
 
-/** 参数表：参数 / 类型 / 必填 / 默认 / 约束 / 说明。 */
 function ParamTable({ params }: { params: ParamRow[] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-hairline">
-      <table className="w-full border-collapse text-left text-[12px]">
-        <thead>
-          <tr className="border-b border-hairline bg-surface-cream-strong/40 text-muted">
-            <th className="px-3 py-2 font-medium">参数</th>
-            <th className="px-3 py-2 font-medium">类型</th>
-            <th className="px-3 py-2 font-medium">必填</th>
-            <th className="px-3 py-2 font-medium">默认</th>
-            <th className="px-3 py-2 font-medium">约束</th>
-            <th className="px-3 py-2 font-medium">说明</th>
+    <div className="relative overflow-x-auto rounded-xl border border-hairline bg-surface-raised">
+      <table className="w-full min-w-[560px] border-collapse text-left text-xs">
+        <caption className="sr-only">
+          请求参数、类型、必填条件、默认值与约束
+        </caption>
+        <thead className="border-b border-hairline bg-surface-soft/60 text-[11px] text-muted">
+          <tr>
+            {['参数', '类型', '必填', '说明'].map((label) => (
+              <th key={label} scope="col" className="px-4 py-3 font-normal">
+                {label}
+              </th>
+            ))}
           </tr>
         </thead>
-        <tbody>
-          {params.map((p) => (
-            <tr
-              key={p.name}
-              className="border-b border-hairline/50 last:border-0"
-            >
-              <td className="px-3 py-2 align-top">
-                <code className="font-mono text-[11px] text-ink">{p.name}</code>
+        <tbody className="divide-y divide-hairline/60">
+          {params.map((param) => (
+            <tr key={param.name}>
+              <th
+                scope="row"
+                className="px-4 py-4 align-top font-mono text-[11px] font-medium text-ink"
+              >
+                {param.name}
+              </th>
+              <td className="px-4 py-4 align-top font-mono text-[11px] text-muted">
+                {param.type}
               </td>
-              <td className="px-3 py-2 align-top font-mono text-[11px] text-muted">
-                {p.type}
+              <td className="whitespace-nowrap px-4 py-4 align-top">
+                <ReqBadge state={param.req} />
               </td>
-              <td className="px-3 py-2 align-top">
-                <ReqBadge state={p.req} />
+              <td className="min-w-56 px-4 py-4 align-top text-body">
+                <p className="leading-6">{param.desc}</p>
+                {param.constraints && param.constraints !== '—' && (
+                  <p className="mt-1 break-words font-mono text-[10px] leading-5 text-muted">
+                    {param.constraints}
+                  </p>
+                )}
+                {param.def && (
+                  <p className="mt-1 text-[10px] text-muted">
+                    默认：<code className="font-mono">{param.def}</code>
+                  </p>
+                )}
               </td>
-              <td className="px-3 py-2 align-top font-mono text-[11px] text-muted">
-                {p.def || '—'}
-              </td>
-              <td className="px-3 py-2 align-top text-[11px] text-muted">
-                {p.constraints || '—'}
-              </td>
-              <td className="px-3 py-2 align-top text-ink">{p.desc}</td>
             </tr>
           ))}
         </tbody>
@@ -858,8 +933,8 @@ function ParamTable({ params }: { params: ParamRow[] }) {
 /** 通用表格（错误码等）。 */
 function Table({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-hairline">
-      <table className="w-full border-collapse text-left text-[12px]">
+    <div className="relative overflow-x-auto rounded-lg border border-hairline">
+      <table className="w-full min-w-[560px] border-collapse text-left text-xs">
         <thead>
           <tr className="border-b border-hairline bg-surface-cream-strong/40 text-muted">
             {headers.map((h) => (
@@ -905,10 +980,7 @@ function Bullets({
   return (
     <ul className="space-y-1.5">
       {items.map((it, i) => (
-        <li
-          key={i}
-          className="flex gap-2 text-[12px] leading-relaxed text-body"
-        >
+        <li key={i} className="flex gap-2 text-xs leading-6 text-body">
           <span
             className={`mt-1.5 h-1 w-1 shrink-0 rounded-full ${tone === 'warn' ? 'bg-warning' : 'bg-primary/60'}`}
           />
@@ -929,9 +1001,16 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-32 space-y-4">
-      <h2 className="font-display border-b border-hairline/60 pb-2 text-lg font-semibold tracking-tight text-ink">
+    <section id={id} className="scroll-mt-24 space-y-5">
+      <h2 className="group flex items-center gap-2 border-b border-hairline pb-4 text-xl font-medium text-ink">
         {title}
+        <a
+          href={`#${id}`}
+          aria-label={`链接到${title}`}
+          className="rounded p-1 text-muted-soft opacity-0 group-hover:opacity-100 focus:opacity-100"
+        >
+          <Link2 size={14} />
+        </a>
       </h2>
       {children}
     </section>
@@ -940,7 +1019,7 @@ function Section({
 
 /** 段落文字。 */
 function P({ children }: { children: ReactNode }) {
-  return <p className="text-[13px] leading-relaxed text-muted">{children}</p>;
+  return <p className="text-[13px] leading-7 text-body">{children}</p>;
 }
 
 /** 内联代码。 */
@@ -984,17 +1063,17 @@ function Step({
 
 /** 单个排盘类型的文档卡片（精简版）。 */
 function PaipanType({ spec, baseUrl }: { spec: PaipanSpec; baseUrl: string }) {
-  const curl = `curl -X POST ${baseUrl}/paipan/${spec.type} \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+  const curl = `curl --fail-with-body --max-time 180 -X POST ${baseUrl}/paipan/${spec.type} \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${spec.example}'`;
   return (
     <div
       id={spec.id}
-      className="scroll-mt-32 space-y-3.5 rounded-xl border border-hairline bg-surface-card/40 p-4"
+      className="scroll-mt-24 space-y-5 rounded-xl border border-hairline bg-surface-raised/50 p-4 sm:p-6"
     >
       <div className="space-y-2">
-        <h3 className="font-display text-[15px] font-semibold text-ink">
+        <h3 className="text-lg font-medium text-ink">
           {spec.name}
           <span className="ml-2 font-mono text-[11px] font-normal text-muted">
             type = {spec.type}
@@ -1034,155 +1113,250 @@ function PaipanType({ spec, baseUrl }: { spec: PaipanSpec; baseUrl: string }) {
   );
 }
 
-/**
- * 开发者 API 文档正文（client 组件）。
- *
- * 用顶部 4 个 tab 把内容分块（快速开始 / 排盘 / 解读 / 参考），内容已对齐后端 /api/v1 实现，
- * 但以调用方视角精简：保留参数表、规则与可跑示例，去掉内部实现细节。Base URL 取自配置的
- * API 公网地址（后端 PUBLIC_API_BASE_URL），未配置时兜底为同源 origin。
- */
 export function ApiDocsContent() {
-  const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
+  const baseUrl = useOpenApiBase();
   const [tab, setTab] = useState<TabId>('start');
+  const [section, setSection] = useState('start-intro');
+  const [search, setSearch] = useState('');
+  const scrollPending = useRef(false);
 
-  // hydration 后补全为最终地址：配置的 API 公网地址优先，仅在同源部署时兜底为 origin。
   useEffect(() => {
-    const base = resolveApiBase();
-    setBaseUrl(base ? `${base}/api/v1` : '/api/v1');
+    const followHash = () => {
+      const id = window.location.hash.slice(1) || 'start-intro';
+      const group = DOC_GROUPS.find((item) =>
+        item.sections.some((entry) => entry.id === id),
+      );
+      if (!group) return;
+      scrollPending.current = Boolean(window.location.hash);
+      setTab(group.id);
+      setSection(id);
+    };
+    followHash();
+    window.addEventListener('hashchange', followHash);
+    return () => window.removeEventListener('hashchange', followHash);
   }, []);
 
+  useEffect(() => {
+    if (!scrollPending.current) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(section)?.scrollIntoView({ block: 'start' });
+      scrollPending.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tab, section]);
+
+  const query = search.trim().toLowerCase();
+  const groups = DOC_GROUPS.map((group) => ({
+    ...group,
+    sections: group.sections.filter((entry) =>
+      `${group.label} ${entry.label} ${entry.keywords}`
+        .toLowerCase()
+        .includes(query),
+    ),
+  })).filter((group) => group.sections.length > 0);
+  const currentGroup = DOC_GROUPS.find((group) => group.id === tab)!;
+
   return (
-    <AppShell requireAuth={false} wide>
-      <div className="mx-auto max-w-4xl">
-        {/* 头部 */}
-        <header className="space-y-2 pb-5">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-primary">
-            Developer API · v1
-          </p>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">
-            FateClaw 开放 API
-          </h1>
-          <p className="max-w-2xl text-[13px] leading-relaxed text-muted">
-            用 API Key 程序化调用两类能力：确定性
-            <strong className="text-ink">排盘</strong>
-            （八字 / 紫微 / 六爻 / 经占 / 梅花 / 奇门 / 六壬）与有状态多轮的{' '}
-            <strong className="text-ink">AI 解读（Agent）</strong>。在
-            <Link
-              href="/settings/api-keys"
-              className="mx-1 text-primary hover:underline"
-            >
-              设置 · API Key
-            </Link>
-            生成你的 Key（仅会员可生成）。
-          </p>
-        </header>
-
-        {/* Tab 栏 */}
-        <div className="sticky top-16 z-10 mb-7 flex gap-1 border-b border-hairline/70 bg-canvas/85 backdrop-blur">
-          {TABS.map((t) => {
-            const active = tab === t.id;
-            return (
+    <DeveloperShell
+      active="docs"
+      title="API 文档"
+      description="从第一个请求到多轮 AI 解读，查阅接入指南、接口参数与代码示例。"
+      actions={
+        <Link
+          href="/settings/api-keys"
+          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-hairline bg-surface-raised px-4 text-xs text-ink hover:border-primary/40"
+        >
+          管理 API Key
+          <ArrowUpRight size={14} />
+        </Link>
+      }
+    >
+      <div className="grid items-start gap-8 lg:grid-cols-[184px_minmax(0,1fr)] xl:gap-10">
+        <aside className="min-w-0 lg:sticky lg:top-8" aria-label="文档目录">
+          <label className="flex h-10 items-center gap-2 rounded-lg border border-hairline bg-surface-raised px-3">
+            <Search size={14} className="shrink-0 text-muted" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="搜索接口、参数…"
+              aria-label="搜索 API 文档目录"
+              className="min-w-0 w-full bg-transparent text-xs text-ink outline-none placeholder:text-muted-soft"
+            />
+            {search && (
               <button
-                key={t.id}
                 type="button"
-                onClick={() => setTab(t.id)}
-                className={`relative px-3.5 py-2.5 text-[13px] font-medium transition-colors ${
-                  active ? 'text-ink' : 'text-muted hover:text-ink'
-                }`}
+                onClick={() => setSearch('')}
+                aria-label="清除文档搜索"
+                className="flex h-7 w-7 shrink-0 items-center justify-center text-muted"
               >
-                {t.label}
-                {active && (
-                  <span className="absolute inset-x-2.5 -bottom-px h-0.5 rounded-full bg-primary" />
-                )}
+                <X size={12} />
               </button>
-            );
-          })}
-        </div>
+            )}
+          </label>
+          <div className="mt-3 lg:hidden">
+            <select
+              aria-label="选择文档章节"
+              value={section}
+              onChange={(event) => {
+                window.location.hash = event.target.value;
+              }}
+              className="h-10 w-full rounded-lg border border-hairline bg-canvas px-3 text-xs text-ink"
+            >
+              {DOC_GROUPS.map((group) => (
+                <optgroup key={group.id} label={group.label}>
+                  {group.sections.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <nav
+            aria-label="API 文档章节"
+            className={`${search ? 'block' : 'hidden'} mt-6 max-h-72 space-y-6 overflow-y-auto pr-1 lg:block lg:max-h-[calc(100dvh-9rem)]`}
+          >
+            {groups.length === 0 && (
+              <p role="status" className="px-2 text-xs leading-6 text-muted">
+                没有匹配的章节，试试接口名或参数名。
+              </p>
+            )}
+            {groups.map((group) => (
+              <div key={group.id}>
+                <p className="mb-2 px-2 text-[10px] font-medium text-muted">
+                  {group.label}
+                </p>
+                <ul className="space-y-0.5">
+                  {group.sections.map((entry) => (
+                    <li key={entry.id}>
+                      <a
+                        href={`#${entry.id}`}
+                        onClick={() => setSearch('')}
+                        aria-current={
+                          section === entry.id ? 'location' : undefined
+                        }
+                        className={`flex min-h-9 items-center justify-between gap-1 rounded-md px-2 text-xs transition-colors ${section === entry.id ? 'bg-primary/8 font-medium text-primary' : 'text-body hover:bg-surface-soft hover:text-ink'}`}
+                      >
+                        {entry.label}
+                        {section === entry.id && (
+                          <ChevronRight size={12} className="shrink-0" />
+                        )}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        </aside>
 
-        {/* 快速开始 */}
-        {tab === 'start' && (
-          <div className="space-y-12">
-            <Section id="start-intro" title="三步上手">
-              <Bullets
-                items={[
-                  '生成 Key：在「设置 · API Key」创建（仅会员，最多 10 个），明文只显示一次，妥善保存。',
-                  '选能力：要盘面就用「排盘」，要 AI 解读就用「解读 · Agent」。',
-                  '调用：所有接口都在下面的 Base URL 下，请求头带上你的 Key 即可。',
-                ]}
-              />
-              <Code lang="text">{`Base URL    ${baseUrl}
-认证        Authorization: Bearer fc_live_xxxxxxxx
+        <article className="min-w-0">
+          <div className="mb-7 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-hairline bg-surface-soft/50 px-3 py-2.5">
+            <Code2 size={14} className="shrink-0 text-primary" />
+            <span className="shrink-0 text-[10px] text-muted">Base URL</span>
+            <code className="min-w-0 flex-1 break-all font-mono text-[11px] text-ink">
+              {baseUrl}
+            </code>
+            <CopyButton value={baseUrl} label="复制地址" />
+          </div>
+          <div className="mb-7 flex items-center gap-2 text-[11px] text-muted">
+            <BookOpen size={13} />
+            API 文档
+            <ChevronRight size={11} />
+            <span className="text-ink">{currentGroup.label}</span>
+          </div>
+
+          {/* 快速开始 */}
+          {tab === 'start' && (
+            <div className="space-y-12">
+              <Section id="start-intro" title="三步上手">
+                <Bullets
+                  items={[
+                    '生成 Key：在「开发者中心 · API Key」创建（仅会员，最多 10 个），明文只显示一次，妥善保存。',
+                    '选能力：要盘面就用「排盘」，要 AI 解读就用「解读 · Agent」。',
+                    '调用：所有接口都在下面的 Base URL 下，请求头带上你的 Key 即可。',
+                  ]}
+                />
+                <Code lang="text">{`Base URL    ${baseUrl}
+认证        Authorization: Bearer $FATECLAW_API_KEY
 内容类型    application/json`}</Code>
-              <Note>
-                请求参数统一用 <C>snake_case</C>。排盘返回{' '}
-                <C>{`{ type, text, data }`}</C>：<C>text</C>{' '}
-                是排好的中文盘面文字，直接能展示或喂给模型；<C>data</C>{' '}
-                是同一盘面的结构化数据， 字段较多、且可能随算法库升级调整——
-                <strong className="text-ink">建议以 text 为主</strong>， 需要
-                data 时做容错读取。
-              </Note>
-            </Section>
+                <Note>
+                  请求参数统一用 <C>snake_case</C>。排盘返回{' '}
+                  <C>{`{ type, text, data }`}</C>：<C>text</C>{' '}
+                  是排好的中文盘面文字，直接能展示或喂给模型；<C>data</C>{' '}
+                  是同一盘面的结构化数据， 字段较多、且可能随算法库升级调整——
+                  <strong className="text-ink">建议以 text 为主</strong>， 需要
+                  data 时做容错读取。
+                </Note>
+              </Section>
 
-            <Section id="start-auth" title="认证">
-              <P>在请求头携带 API Key：</P>
-              <Code lang="curl">{`curl ${baseUrl}/paipan/catalog \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
-              <P>
-                Key 无效或过期返回 401；积分欠费返回 402。会员到期后，已有有效
-                Key 仍可调用，解读按普通用户价格计费。完整错误码见「参考」。
-              </P>
-            </Section>
+              <Section id="start-auth" title="认证">
+                <P>
+                  将密钥保存到服务端的 <C>FATECLAW_API_KEY</C>{' '}
+                  环境变量，再通过请求头携带。不要把密钥写入浏览器代码或公开仓库。
+                </P>
+                <Code lang="curl">{`curl --fail-with-body --max-time 60 ${baseUrl}/paipan/catalog \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY"`}</Code>
+                <P>
+                  Key 无效或过期返回 401；积分欠费返回 402。会员到期后，已有有效
+                  Key 仍可调用，解读按普通用户价格计费。完整错误码见「参考」。
+                </P>
+              </Section>
 
-            <Section id="start-example" title="最小示例">
-              <P>一次八字排盘（其余排盘换 URL 与参数即可）：</P>
-              <Code lang="curl">{`curl -X POST ${baseUrl}/paipan/bazi \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+              <Section id="start-example" title="最小示例">
+                <P>一次八字排盘（其余排盘换 URL 与参数即可）：</P>
+                <Code lang="curl">{`curl --fail-with-body --max-time 180 -X POST ${baseUrl}/paipan/bazi \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"solar_date":"2000-08-16","hour":14,"gender":"male"}'`}</Code>
-              <Code lang="json">{`{
+                <Code lang="json">{`{
   "type": "bazi",
   "text": "八字排盘（系统排盘结果）……",
-  "data": { /* 结构化盘面 */ }
+  "data": {}
 }`}</Code>
-            </Section>
+              </Section>
 
-            <Section id="start-flow" title="完整流程：排盘 → 解读">
-              <P>
-                把确定性<strong className="text-ink">排盘</strong>和 AI{' '}
-                <strong className="text-ink">解读</strong>
-                串成一次完整调用，照抄即可跑通。盘面只在建会话时传一次，之后多轮自动带上。
-              </P>
-              <div className="space-y-7">
-                <Step n={1} title="生成 API Key">
-                  <P>
-                    在「设置 · API Key」生成（仅会员，最多 10
-                    个）。明文只显示一次，下文用 <C>fc_live_xxxxxxxx</C> 代指。
-                  </P>
-                </Step>
+              <Section id="start-flow" title="完整流程：排盘 → 解读">
+                <P>
+                  把确定性<strong className="text-ink">排盘</strong>和 AI{' '}
+                  <strong className="text-ink">解读</strong>
+                  串成一次完整调用，照抄即可跑通。盘面只在建会话时传一次，之后多轮自动带上。
+                </P>
+                <div className="space-y-7">
+                  <Step n={1} title="生成 API Key">
+                    <P>
+                      在「开发者中心 · API Key」生成（仅会员，最多 10
+                      个）。明文只显示一次，将密钥设为服务端的{' '}
+                      <C>FATECLAW_API_KEY</C> 环境变量后运行下方示例。
+                    </P>
+                  </Step>
 
-                <Step n={2} title="排盘（拿盘面）">
-                  <Code lang="curl">{`curl -X POST ${baseUrl}/paipan/bazi \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+                  <Step n={2} title="排盘（拿盘面）">
+                    <Code lang="curl">{`curl --fail-with-body --max-time 180 -X POST ${baseUrl}/paipan/bazi \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"solar_date":"2000-08-16","hour":14,"gender":"male"}'`}</Code>
-                  <Code lang="json">{`{ "type": "bazi", "text": "八字排盘（系统排盘结果）……", "data": { /* 结构化盘面 */ } }`}</Code>
-                  <P>
-                    留下其中的 <C>text</C>，下一步作为盘面传入。
-                  </P>
-                </Step>
+                    <Code lang="json">{`{ "type": "bazi", "text": "八字排盘（系统排盘结果）……", "data": {} }`}</Code>
+                    <P>
+                      留下其中的 <C>text</C>，下一步作为盘面传入。
+                    </P>
+                  </Step>
 
-                <Step n={3} title="（可选）查可用技能">
-                  <Code lang="curl">{`curl ${baseUrl}/skills \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
-                  <P>
-                    取返回 <C>data[].id</C> 填入下一步的 <C>fateclaw.skills</C>
-                    ；没有技能可跳过这步。
-                  </P>
-                </Step>
+                  <Step n={3} title="（可选）查可用技能">
+                    <Code lang="curl">{`curl --fail-with-body --max-time 60 ${baseUrl}/skills \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY"`}</Code>
+                    <P>
+                      取返回 <C>data[].id</C> 填入下一步的{' '}
+                      <C>fateclaw.skills</C>
+                      ；没有技能可跳过这步。
+                    </P>
+                  </Step>
 
-                <Step n={4} title="建会话（盘面 / 技能）">
-                  <Code lang="curl">{`curl -X POST ${baseUrl}/sessions \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+                  <Step n={4} title="建会话（盘面 / 技能）">
+                    <Code lang="curl">{`curl --fail-with-body --max-time 180 -X POST ${baseUrl}/sessions \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "system": "你是一位严谨的命理解读师",
@@ -1191,105 +1365,108 @@ export function ApiDocsContent() {
       "skills": ["<第 3 步的 skill id，可省略>"]
     }
   }'`}</Code>
-                  <Code lang="json">{`{ "id": "sess_AbC123...", "object": "session", "model": "...", "status": "active" }`}</Code>
-                  <P>
-                    拿到 <C>id</C>（即 <C>sid</C>），后续多轮都用它。
-                  </P>
-                </Step>
+                    <Code lang="json">{`{ "id": "sess_AbC123...", "object": "session", "model": "...", "status": "active" }`}</Code>
+                    <P>
+                      拿到 <C>id</C>（即 <C>sid</C>），后续多轮都用它。
+                    </P>
+                  </Step>
 
-                <Step n={5} title="发消息解读（可多轮）">
-                  <Code lang="curl">{`curl -X POST ${baseUrl}/sessions/sess_AbC123.../messages \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+                  <Step n={5} title="发消息解读（可多轮）">
+                    <Code lang="curl">{`curl --fail-with-body --max-time 180 -X POST ${baseUrl}/sessions/sess_AbC123.../messages \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"帮我解读事业走向"}'`}</Code>
-                  <Code lang="json">{`{
+                    <Code lang="json">{`{
   "object": "chat.completion",
   "choices": [{ "message": { "role": "assistant", "content": "……解读正文……" } }],
   "usage": { "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0 }
 }`}</Code>
-                  <P>
-                    再发一条即多轮，历史自动延续、盘面无需重发。同一会话需
-                    <strong className="text-ink">串行</strong>
-                    （上一条没返回就发下一条会得到 409）。
-                  </P>
-                </Step>
+                    <P>
+                      再发一条即多轮，历史自动延续、盘面无需重发。同一会话需
+                      <strong className="text-ink">串行</strong>
+                      （上一条没返回就发下一条会得到 409）。
+                    </P>
+                  </Step>
 
-                <Step n={6} title="结束（可选）">
-                  <Code lang="curl">{`curl -X DELETE ${baseUrl}/sessions/sess_AbC123... \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx"`}</Code>
-                  <P>删除会话；不删也会在 30 天不活动后自动过期。</P>
-                </Step>
+                  <Step n={6} title="结束（可选）">
+                    <Code lang="curl">{`curl --fail-with-body --max-time 180 -X DELETE ${baseUrl}/sessions/sess_AbC123... \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY"`}</Code>
+                    <P>删除会话；不删也会在 30 天不活动后自动过期。</P>
+                  </Step>
+                </div>
+              </Section>
+            </div>
+          )}
+
+          {/* 排盘 */}
+          {tab === 'paipan' && (
+            <div className="space-y-8">
+              <div id="paipan-overview" className="scroll-mt-24 space-y-4">
+                <h2 className="border-b border-hairline pb-4 text-xl font-medium text-ink">
+                  排盘 API
+                </h2>
+                <P>
+                  排盘是本地确定性计算，
+                  <strong className="text-ink">不计费</strong>
+                  （需要有效 API Key，且账户不欠费）。 每个排盘都返回{' '}
+                  <C>{`{ type, text, data }`}</C>，参数统一 <C>snake_case</C>。
+                </P>
+                <Endpoint method="GET" path="/api/v1/paipan/catalog" />
+                <P>列出全部排盘类型及其参数 Schema，可用来动态获取参数定义。</P>
+                <div className="flex flex-wrap gap-1.5">
+                  {PAIPAN_SPECS.map((s) => (
+                    <a
+                      key={s.id}
+                      href={`#${s.id}`}
+                      className="rounded-full border border-hairline bg-surface-card px-3 py-1 text-[12px] text-muted transition-colors hover:border-primary/40 hover:text-ink"
+                    >
+                      {s.name}
+                    </a>
+                  ))}
+                </div>
               </div>
-            </Section>
-          </div>
-        )}
-
-        {/* 排盘 */}
-        {tab === 'paipan' && (
-          <div className="space-y-8">
-            <div className="space-y-4">
-              <P>
-                排盘是本地确定性计算，
-                <strong className="text-ink">不计费</strong>
-                （需要有效 API Key，且账户不欠费）。 每个排盘都返回{' '}
-                <C>{`{ type, text, data }`}</C>，参数统一 <C>snake_case</C>。
-              </P>
-              <Endpoint method="GET" path="/api/v1/paipan/catalog" />
-              <P>列出全部排盘类型及其参数 Schema，可用来动态获取参数定义。</P>
-              <div className="flex flex-wrap gap-1.5">
-                {PAIPAN_SPECS.map((s) => (
-                  <a
-                    key={s.id}
-                    href={`#${s.id}`}
-                    className="rounded-full border border-hairline bg-surface-card px-3 py-1 text-[12px] text-muted transition-colors hover:border-primary/40 hover:text-ink"
-                  >
-                    {s.name}
-                  </a>
+              <div className="space-y-5">
+                {PAIPAN_SPECS.map((spec) => (
+                  <PaipanType key={spec.id} spec={spec} baseUrl={baseUrl} />
                 ))}
               </div>
             </div>
-            <div className="space-y-5">
-              {PAIPAN_SPECS.map((spec) => (
-                <PaipanType key={spec.id} spec={spec} baseUrl={baseUrl} />
-              ))}
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* 解读 · Agent */}
-        {tab === 'agent' && (
-          <div className="space-y-12">
-            <Section id="agent-chat" title="AI 解读（有状态会话）">
-              <P>
-                解读是<strong className="text-ink">有状态会话</strong>
-                ：先建一个会话，一次性设定人设、盘面、技能，拿到一个
-                <C>sid</C>；之后每轮只发本轮提问，
-                <strong className="text-ink">历史和盘面服务端记着</strong>
-                ，无需重发。
-              </P>
-              <Note>
-                两步走：<strong className="text-ink">① POST /sessions</strong>{' '}
-                建会话（可带 <C>system</C> / <C>fateclaw.board</C> /{' '}
-                <C>fateclaw.skills</C>）→ 拿 <C>id</C>；
-                <strong className="text-ink">
-                  ② POST /sessions/{'{id}'}/messages
-                </strong>{' '}
-                发提问，可多轮。响应 <C>usage</C> 为真实 token 数。 同一会话需
-                <strong className="text-ink">串行</strong>
-                发消息（上一条未完成时发下一条返回 409）。会话 30
-                天不活动自动过期（每次发消息顺延）。
-              </Note>
+          {/* 解读 · Agent */}
+          {tab === 'agent' && (
+            <div className="space-y-12">
+              <Section id="agent-chat" title="AI 解读（有状态会话）">
+                <P>
+                  解读是<strong className="text-ink">有状态会话</strong>
+                  ：先建一个会话，一次性设定人设、盘面、技能，拿到一个
+                  <C>sid</C>；之后每轮只发本轮提问，
+                  <strong className="text-ink">历史和盘面服务端记着</strong>
+                  ，无需重发。
+                </P>
+                <Note>
+                  两步走：<strong className="text-ink">① POST /sessions</strong>{' '}
+                  建会话（可带 <C>system</C> / <C>fateclaw.board</C> /{' '}
+                  <C>fateclaw.skills</C>）→ 拿 <C>id</C>；
+                  <strong className="text-ink">
+                    ② POST /sessions/{'{id}'}/messages
+                  </strong>{' '}
+                  发提问，可多轮。响应 <C>usage</C> 为真实 token 数。 同一会话需
+                  <strong className="text-ink">串行</strong>
+                  发消息（上一条未完成时发下一条返回 409）。会话 30
+                  天不活动自动过期（每次发消息顺延）。
+                </Note>
 
-              <Label>① 建会话</Label>
-              <Endpoint method="POST" path="/api/v1/sessions" />
-              <ParamTable params={SESSION_CREATE_PARAMS} />
-              <P>
-                解读一张盘：把 <C>/api/v1/paipan/:type</C> 的返回填进{' '}
-                <C>fateclaw.board</C>（优先 <C>text</C>，缺失才用 <C>data</C>
-                ）。盘面只在这里传一次。
-              </P>
-              <Code lang="curl">{`curl -X POST ${baseUrl}/sessions \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+                <Label>① 建会话</Label>
+                <Endpoint method="POST" path="/api/v1/sessions" />
+                <ParamTable params={SESSION_CREATE_PARAMS} />
+                <P>
+                  解读一张盘：把 <C>/api/v1/paipan/:type</C> 的返回填进{' '}
+                  <C>fateclaw.board</C>（优先 <C>text</C>，缺失才用 <C>data</C>
+                  ）。盘面只在这里传一次。
+                </P>
+                <Code lang="curl">{`curl --fail-with-body --max-time 180 -X POST ${baseUrl}/sessions \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "system": "你是一位严谨的命理解读师。",
@@ -1300,127 +1477,132 @@ export function ApiDocsContent() {
       }
     }
   }'`}</Code>
-              <Code lang="json">{`{
-  "id": "sess_xxxxxxxx",          // 之后发消息用这个 sid
+                <Code lang="json">{`{
+  "id": "sess_xxxxxxxx",
   "object": "session",
   "model": "<official-model-key>",
   "status": "active",
-  "created_at": "2026-06-27T...",
-  "last_active_at": "2026-06-27T...",
-  "expires_at": "2026-07-27T..."
+  "created_at": "2026-10-18T00:00:00Z",
+  "last_active_at": "2026-10-18T00:00:00Z",
+  "expires_at": "2026-11-17T00:00:00Z"
 }`}</Code>
 
-              <Label>② 发消息（可多轮）</Label>
-              <Endpoint method="POST" path="/api/v1/sessions/{id}/messages" />
-              <ParamTable params={SESSION_MESSAGE_PARAMS} />
-              <Code lang="curl">{`curl -X POST ${baseUrl}/sessions/sess_xxxxxxxx/messages \\
-  -H "Authorization: Bearer fc_live_xxxxxxxx" \\
+                <Label>② 发消息（可多轮）</Label>
+                <Endpoint method="POST" path="/api/v1/sessions/{id}/messages" />
+                <ParamTable params={SESSION_MESSAGE_PARAMS} />
+                <Code lang="curl">{`curl --fail-with-body --max-time 180 -X POST ${baseUrl}/sessions/sess_xxxxxxxx/messages \\
+  -H "Authorization: Bearer $FATECLAW_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "content": "请帮我解读这张盘的事业走向。" }'`}</Code>
-              <P>示例：Python（标准 requests，无需 OpenAI SDK）</P>
-              <Code lang="python">{`import requests
+                <P>
+                  Python 示例：先安装 <C>requests</C>
+                  ，并设置服务端环境变量。请求最长等待 180 秒。
+                </P>
+                <Code lang="python">{`import os
+import requests
 
 BASE = "${baseUrl}"
-H = {"Authorization": "Bearer fc_live_xxxxxxxx"}
+H = {"Authorization": "Bearer " + os.environ["FATECLAW_API_KEY"]}
 
-# 建会话（带盘面，只传一次）
+# Create a session with the board once.
 sid = requests.post(f"{BASE}/sessions", headers=H, json={
     "system": "你是一位严谨的命理解读师。",
     "fateclaw": {"board": {"type": "bazi", "text": "<paipan text>"}},
-}).json()["id"]
+}, timeout=180).json()["id"]
 
-# 多轮提问，每轮只发 content
+# Send only the new content on subsequent turns.
 r1 = requests.post(f"{BASE}/sessions/{sid}/messages", headers=H,
-                   json={"content": "解读事业走向。"}).json()
+                   json={"content": "解读事业走向。"}, timeout=180).json()
 print(r1["choices"][0]["message"]["content"])
 
 r2 = requests.post(f"{BASE}/sessions/{sid}/messages", headers=H,
-                   json={"content": "那感情呢？"}).json()  # 自动带上上一轮上下文
+                   json={"content": "那感情呢？"}, timeout=180).json()  # The server retains previous context.
 print(r2["choices"][0]["message"]["content"])`}</Code>
 
-              <Label>返回</Label>
-              <P>
-                解读正文在 <C>choices[0].message.content</C>，<C>usage</C>{' '}
-                为真实 token 用量（OpenAI <C>chat.completion</C> 风格响应体）。
-                整段解读生成完才返回，长解读请把客户端读超时设宽松些。
-              </P>
+                <Label>返回</Label>
+                <P>
+                  解读正文在 <C>choices[0].message.content</C>，<C>usage</C>{' '}
+                  为真实 token 用量（OpenAI <C>chat.completion</C>{' '}
+                  风格响应体）。
+                  整段解读生成完才返回，长解读请把客户端读超时设宽松些。
+                </P>
 
-              <Label>管理会话</Label>
-              <P>
-                <C>GET /api/v1/sessions/{'{id}'}</C> 查会话元信息；
-                <C>DELETE /api/v1/sessions/{'{id}'}</C> 删除会话（之后该 sid
-                续聊返回 404）。
-              </P>
-            </Section>
+                <Label>管理会话</Label>
+                <P>
+                  <C>GET /api/v1/sessions/{'{id}'}</C> 查会话元信息；
+                  <C>DELETE /api/v1/sessions/{'{id}'}</C> 删除会话（之后该 sid
+                  续聊返回 404）。
+                </P>
+              </Section>
 
-            <Section id="agent-models" title="模型">
-              <Endpoint method="GET" path="/api/v1/models" />
-              <P>
-                返回当前唯一可用的官方模型（OpenAI 兼容 <C>list</C>{' '}
-                结构），最多一项。建会话时可省略 <C>model</C>。
-              </P>
-              <Code lang="json">{`{
+              <Section id="agent-models" title="模型">
+                <Endpoint method="GET" path="/api/v1/models" />
+                <P>
+                  返回当前唯一可用的官方模型（OpenAI 兼容 <C>list</C>{' '}
+                  结构），最多一项。建会话时可省略 <C>model</C>。
+                </P>
+                <Code lang="json">{`{
   "object": "list",
   "data": [
     { "id": "<model_key>", "object": "model", "owned_by": "fateclaw" }
   ]
 }`}</Code>
-              <Note>
-                模型暂不可用时列表为空。每轮对话使用后台当前设定的模型和思考等级，已有会话也随配置更新；请求无法指定思考等级。
-              </Note>
-            </Section>
+                <Note>
+                  模型暂不可用时列表为空。每轮对话使用后台当前设定的模型和思考等级，已有会话也随配置更新；请求无法指定思考等级。
+                </Note>
+              </Section>
 
-            <Section id="agent-skills" title="技能">
-              <Endpoint method="GET" path="/api/v1/skills" />
-              <P>
-                返回你<strong className="text-ink">有效可用</strong>
-                的技能（自有已启用 + 订阅已启用），其 <C>id</C> 即建会话{' '}
-                <C>fateclaw.skills</C> 所需的 UUID。先调它拿 <C>id</C>，再填进{' '}
-                <C>POST /sessions</C>。
-              </P>
-              <Code lang="json">{`{
+              <Section id="agent-skills" title="技能">
+                <Endpoint method="GET" path="/api/v1/skills" />
+                <P>
+                  返回你<strong className="text-ink">有效可用</strong>
+                  的技能（自有已启用 + 订阅已启用），其 <C>id</C> 即建会话{' '}
+                  <C>fateclaw.skills</C> 所需的 UUID。先调它拿 <C>id</C>，再填进{' '}
+                  <C>POST /sessions</C>。
+                </P>
+                <Code lang="json">{`{
   "object": "list",
   "data": [
     { "id": "<skill-uuid>", "object": "skill", "name": "技能名", "description": "简介", "source": "self" }
   ]
 }`}</Code>
-              <Note>
-                只列出当前可用的技能；这里没有的 id 即便填进{' '}
-                <C>fateclaw.skills</C> 也会被静默忽略。<C>source</C>：
-                <C>self</C>=自有，<C>subscribed</C>=订阅。
-              </Note>
-            </Section>
-          </div>
-        )}
+                <Note>
+                  只列出当前可用的技能；这里没有的 id 即便填进{' '}
+                  <C>fateclaw.skills</C> 也会被静默忽略。<C>source</C>：
+                  <C>self</C>=自有，<C>subscribed</C>=订阅。
+                </Note>
+              </Section>
+            </div>
+          )}
 
-        {/* 参考 */}
-        {tab === 'reference' && (
-          <div className="space-y-12">
-            <Section id="ref-billing" title="计费">
-              <Bullets
-                items={[
-                  '排盘免费：所有排盘接口不扣积分（需要有效 API Key，且账户不欠费）。',
-                  '解读按 token 计费：按官方模型输入 / 输出单价扣积分，普通用户按会员价的 1.5 倍计费，与站内一致。',
-                  '账户欠费会拦截所有请求（402）；会员到期后已有有效 API Key 仍可调用。',
-                  '所有解读统一使用后台配置的官方模型与思考等级。',
-                ]}
-              />
-            </Section>
+          {/* 参考 */}
+          {tab === 'reference' && (
+            <div className="space-y-12">
+              <Section id="ref-billing" title="计费">
+                <Bullets
+                  items={[
+                    '排盘免费：所有排盘接口不扣积分（需要有效 API Key，且账户不欠费）。',
+                    '解读按 token 计费：按官方模型输入 / 输出单价扣积分，普通用户按会员价的 1.5 倍计费，与站内一致。',
+                    '账户欠费会拦截所有请求（402）；会员到期后已有有效 API Key 仍可调用。',
+                    '所有解读统一使用后台配置的官方模型与思考等级。',
+                  ]}
+                />
+              </Section>
 
-            <Section id="ref-ratelimit" title="限流">
-              <P>
-                每个 API Key 默认{' '}
-                <strong className="text-ink">60 次 / 分钟</strong>，超出返回
-                429，并在 <C>Retry-After</C>{' '}
-                头给出需等待的秒数。此外，连续鉴权失败会临时限制来源 IP。
-              </P>
-            </Section>
+              <Section id="ref-ratelimit" title="限流">
+                <P>
+                  每个 API Key 默认{' '}
+                  <strong className="text-ink">60 次 / 分钟</strong>，超出返回
+                  429，并在 <C>Retry-After</C>{' '}
+                  头给出需等待的秒数。此外，连续鉴权失败会临时限制来源 IP。
+                </P>
+              </Section>
 
-            <Section id="ref-errors" title="错误码">
-              <P>
-                所有错误统一返回如下结构（<C>param</C> 恒为 <C>null</C>）：
-              </P>
-              <Code lang="json">{`{
+              <Section id="ref-errors" title="错误码">
+                <P>
+                  所有错误统一返回如下结构（<C>param</C> 恒为 <C>null</C>）：
+                </P>
+                <Code lang="json">{`{
   "error": {
     "message": "账户积分欠费，请补充积分后继续调用",
     "type": "insufficient_quota",
@@ -1428,31 +1610,48 @@ print(r2["choices"][0]["message"]["content"])`}</Code>
     "param": null
   }
 }`}</Code>
-              <Table
-                headers={['状态码', 'code', 'type', '含义']}
-                rows={ERROR_CODES.map((e) => [
-                  <span key="s" className="font-mono font-medium">
-                    {e.status}
-                  </span>,
-                  <C key="c">{e.code}</C>,
-                  <span key="t" className="font-mono text-[11px] text-muted">
-                    {e.type}
-                  </span>,
-                  <span key="w" className="text-muted">
-                    {e.when}
-                  </span>,
-                ])}
-              />
-              <Note>
-                排盘的<strong className="text-ink">参数问题</strong>是 400，
-                <strong className="text-ink">执行阶段</strong>
-                的问题（比如时间非法、漏传该方式必需的参数）是
-                500；判断具体原因看 <C>code</C> 字段即可。
-              </Note>
-            </Section>
+                <Table
+                  headers={['状态码', 'code', 'type', '含义']}
+                  rows={ERROR_CODES.map((e) => [
+                    <span key="s" className="font-mono font-medium">
+                      {e.status}
+                    </span>,
+                    <C key="c">{e.code}</C>,
+                    <span key="t" className="font-mono text-[11px] text-muted">
+                      {e.type}
+                    </span>,
+                    <span key="w" className="text-muted">
+                      {e.when}
+                    </span>,
+                  ])}
+                />
+                <Note>
+                  排盘的<strong className="text-ink">参数问题</strong>是 400，
+                  <strong className="text-ink">执行阶段</strong>
+                  的问题（比如时间非法、漏传该方式必需的参数）是
+                  500；判断具体原因看 <C>code</C> 字段即可。
+                </Note>
+              </Section>
+            </div>
+          )}
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-5">
+            <span className="text-[11px] text-muted">下一步</span>
+            <a
+              href={`#${tab === 'start' ? 'paipan-overview' : tab === 'paipan' ? 'agent-chat' : tab === 'agent' ? 'ref-billing' : 'start-intro'}`}
+              className="inline-flex min-h-9 items-center gap-2 text-xs font-medium text-primary"
+            >
+              {tab === 'start'
+                ? '探索排盘 API'
+                : tab === 'paipan'
+                  ? '接入 AI 解读'
+                  : tab === 'agent'
+                    ? '了解计费与限流'
+                    : '返回快速开始'}
+              <ArrowRight size={14} />
+            </a>
           </div>
-        )}
+        </article>
       </div>
-    </AppShell>
+    </DeveloperShell>
   );
 }

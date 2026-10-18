@@ -2,6 +2,7 @@
 
 import {
   ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -58,6 +59,7 @@ export interface BottomSheetProps {
   zIndex?: number;
   'aria-label'?: string;
   hideCloseButton?: boolean;
+  initialFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
@@ -72,6 +74,7 @@ export function BottomSheet({
   closeOnOverlay = true,
   zIndex = 100,
   hideCloseButton = false,
+  initialFocusRef,
   children,
   ...rest
 }: BottomSheetProps) {
@@ -148,6 +151,7 @@ export function BottomSheet({
     if (!panel) return;
     const focusables = getFocusableElements(panel);
     const target =
+      initialFocusRef?.current ||
       focusables.find((el) => el.hasAttribute('autofocus')) ||
       focusables[0] ||
       panel;
@@ -157,7 +161,7 @@ export function BottomSheet({
     return () => {
       previouslyFocusedRef.current?.focus?.({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, initialFocusRef]);
 
   if (!mounted || !open) return null;
 

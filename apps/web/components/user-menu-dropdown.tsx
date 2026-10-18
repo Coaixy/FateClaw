@@ -78,7 +78,7 @@ export function UserMenuDropdown({
           <MenuItem
             href="/settings/api-keys"
             icon={KeyRound}
-            label="API Key"
+            label="开发者中心"
             onNavigate={onNavigate}
           />
         </MenuSection>

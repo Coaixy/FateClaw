@@ -182,6 +182,18 @@ body {
   font-family: var(--font-display);
 }
 
+/* Technical workspaces use a system sans face to keep identifiers and dense tables legible. */
+.developer-workspace {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-display: var(--font-sans);
+  font-family: var(--font-sans);
+}
+
+.developer-workspace :where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
 /* ---- 按钮物理质感（微拟物 tactile）----
    实体按键的三要素：顶部内高光（受光面）、底缘内压边（背光面）、贴地投影。
    配合使用方的 active:scale 形成「按下」反馈。
