@@ -1,6 +1,6 @@
 # Agent 架构
 
-Last checked: 2026-10-17.
+Last checked: 2026-10-18.
 
 这份文档描述当前代码里的 agent 运行架构。当前主链路是宿主进程通过 Redis IPC 调用账号级 agent-runtime，agent-runtime 每次请求创建 Pi SDK Runtime，由 Pi 负责模型 loop、用户知识读取和最终回复。系统排盘由 Web/API 侧的确定性运行包执行。
 
@@ -155,6 +155,13 @@ methods. It is loaded only with a Jingzhan board.
 
 Pi session 创建时内置工具被禁用，FateClaw 只显式注入自己的 custom tools，例如授权 Markdown 读取、Soul 读取/编辑和与当前会话盘面相关的上下文工具。模型不能假设存在全局本地 Skill 或排盘执行工具。
 
+The runtime and API pin Pi SDK packages to 1.3.0. `SessionManager` owns finalized
+provider context, including compaction and context edits; restore version-3 JSONL
+sessions through the manager rather than assigning message arrays to agent state.
+The request-scoped resource loader supplies no extensions, and the explicit tool
+allowlist contains only FateClaw tools. Pi's MCP, codemode, and tool-search
+extensions require separate host integration.
+
 ## Bounded Skill search and runtime recovery
 
 - Each `grep` invocation runs scope resolution, Markdown discovery, regex compilation
@@ -247,4 +254,4 @@ preparation, timing definitions, retention and validation boundaries.
 
 See [performance and reliability](performance-and-reliability.md) for the durable
 admission state machine, result acknowledgement, recovery, bounded queues and
-Pi 0.86.0 deployment contract.
+Pi 1.3.0 deployment contract.

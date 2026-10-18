@@ -52,7 +52,7 @@ function chunk(response: ServerResponse, payload: unknown) {
   response.write(`data: ${JSON.stringify(payload)}\n\n`);
 }
 
-describe('Pi 0.86 provider transport', () => {
+describe('Pi provider transport', () => {
   it('keeps concurrent request credentials isolated and preserves prompt, tools, text and usage', async () => {
     const requests: Array<{
       authorization?: string;

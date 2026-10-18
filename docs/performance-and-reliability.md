@@ -158,10 +158,10 @@ remain separate from the unchanged input/output billing calculation.
 ## Runtime and dependency compatibility
 
 The supported workspace runtime is Node 24 (`.nvmrc`). Pi packages are pinned to
-`0.86.0`; WebSocket integration uses `@fastify/websocket` `11.2.0`. Pi credential
+`1.3.0`; WebSocket integration uses `@fastify/websocket` `11.2.0`. Backend package
+builds use each package's declared TypeScript compiler. Pi credential
 initialization is awaited and cache warming is explicitly disabled to avoid added
-provider calls. Exact-version release-age exceptions are recorded in the workspace
-policy. The SDK's built-in transcript adapters remain the only compatibility path.
+provider calls. The SDK's built-in transcript adapters remain the only compatibility path.
 
 Deploy migration 0076 with the API before starting the new daemon binary. Keep the
 existing session directory on persistent storage. Old in-flight inbox envelopes

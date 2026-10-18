@@ -6,13 +6,13 @@
   "license": "GPL-3.0-only",
   "main": "dist/daemon.js",
   "scripts": {
-    "build": "node ../../scripts/clean-build-dist.mjs agent-runtime && pnpm --dir ../.. exec tsc -p apps/agent-runtime/tsconfig.build.json && node ../../scripts/copy-shared-assets.mjs agent-runtime",
+    "build": "node ../../scripts/clean-build-dist.mjs agent-runtime && tsc -p tsconfig.build.json && node ../../scripts/copy-shared-assets.mjs agent-runtime",
     "start": "node dist/daemon.js"
   },
   "dependencies": {
     "@fateclaw/contracts": "workspace:*",
-    "@earendil-works/pi-ai": "0.86.0",
-    "@earendil-works/pi-coding-agent": "0.86.0",
+    "@earendil-works/pi-ai": "1.3.0",
+    "@earendil-works/pi-coding-agent": "1.3.0",
     "ioredis": "^5.10.1",
     "pg": "^8.20.0",
     "tyme4ts": "^1.4.5",

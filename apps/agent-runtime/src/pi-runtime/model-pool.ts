@@ -344,7 +344,7 @@ export function installModelPool(
               maxRetries: 0,
               ...(node.piApi !== 'google-generative-ai'
                 ? {
-                    // pi-ai 0.86 invokes onResponse only after SDK success; capture error headers before normalization.
+                    // onResponse follows SDK success; capture error headers before normalization.
                     fetch: async (
                       input: Parameters<typeof fetch>[0],
                       init?: Parameters<typeof fetch>[1],

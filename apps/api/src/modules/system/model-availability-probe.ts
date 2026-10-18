@@ -138,7 +138,7 @@ async function probeModel(
           ...(node.poolKey === 'benefit' &&
           node.piApi !== 'google-generative-ai'
             ? {
-                // pi-ai 0.86 normalizes SDK errors before exposing onResponse.
+                // onResponse follows SDK success; capture error headers before normalization.
                 fetch: async (
                   input: Parameters<typeof fetch>[0],
                   init?: Parameters<typeof fetch>[1],

@@ -132,7 +132,7 @@ the cooldown and failure starts another cooldown. Unrelated administration saves
 preserve cooldowns. All nodes cooling due to quota report exhausted supply;
 other cooldowns or an active recovery lease report busy supply.
 
-The pinned pi-ai 0.86 SDK invokes `onResponse` only after successful SDK requests.
+The pinned pi-ai 1.3 SDK invokes `onResponse` only after successful SDK requests.
 OpenAI and Anthropic adapters therefore capture status and `Retry-After` through
 their supported fetch hook before SDK error normalization. The Google Generative AI
 adapter rejects a custom fetch hook; its normalized error supplies the failure
