@@ -1,6 +1,6 @@
 'use client';
 
-import { Coins, RotateCcw } from 'lucide-react';
+import { Coins, Plus, RotateCcw, X } from 'lucide-react';
 
 import { PaipanStepFrame } from '../shared/paipan-step-frame';
 import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
@@ -25,6 +25,123 @@ const YAO_VALUE_TONES: Record<YaoValue, string> = {
   '8': 'border-hairline bg-surface-card/90 text-ink',
   '9': 'border-amber-500/50 bg-amber-500/14 text-ink',
 };
+
+function normalizeNumberSlots(
+  rawSlots: unknown,
+  numbers: unknown,
+  method: string,
+): string[] {
+  const source = Array.isArray(rawSlots)
+    ? rawSlots
+    : Array.isArray(numbers)
+      ? numbers
+      : [];
+  const count = method === 'three' ? 3 : Math.max(2, source.length);
+  return Array.from({ length: count }, (_, index) => {
+    const value = source[index];
+    return typeof value === 'string'
+      ? value
+      : typeof value === 'number' && Number.isFinite(value)
+        ? String(value)
+        : '';
+  });
+}
+
+function isValidNumberSlot(value: string): boolean {
+  return /^[+-]?\d+$/.test(value) && Number.isInteger(Number(value));
+}
+
+function buildNumberSlotChanges(slots: string[]): PaipanFlowChange[] {
+  return [
+    { path: ['$numberSlots'], value: slots },
+    {
+      path: ['numbers'],
+      // Keep empty positions in the draft; submitting a compacted list changes the cast.
+      value: slots.every(isValidNumberSlot) ? slots.map(Number) : undefined,
+    },
+  ];
+}
+
+function NumberSlotsInput({
+  slots,
+  resizable,
+  onChange,
+}: {
+  slots: string[];
+  resizable: boolean;
+  onChange: (slots: string[]) => void;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <fieldset className="min-w-0 rounded-2xl border border-hairline bg-surface-card/45 p-3 sm:p-4">
+      <legend className="sr-only">
+        {t(`aiChat.paipanFlows.iching.${resizable ? 'numberList' : 'threeNumbers'}`)}
+      </legend>
+      <p className="mb-3 text-[11px] leading-5 text-muted">
+        {t(`aiChat.paipanFlows.iching.${resizable ? 'numberListDescription' : 'threeNumbersDescription'}`)}
+      </p>
+      <div className={`grid gap-3 ${resizable ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3'}`}>
+        {slots.map((value, index) => {
+          const label = t('aiChat.paipanFlows.iching.numberSlot', {
+            index: index + 1,
+          });
+          const invalid = value !== '' && !isValidNumberSlot(value);
+          return (
+            <div key={index} className="min-w-0">
+              <div className="mb-1.5 flex min-h-7 items-center justify-between gap-1">
+                <span className="text-[11px] font-medium text-ink">{label}</span>
+                {resizable && slots.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange(slots.filter((_, slotIndex) => slotIndex !== index))
+                    }
+                    aria-label={t('aiChat.paipanFlows.iching.removeNumber', {
+                      index: index + 1,
+                    })}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-card hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[+-]?[0-9]+"
+                aria-label={label}
+                aria-invalid={invalid || undefined}
+                value={value}
+                onChange={(event) => {
+                  const nextSlots = [...slots];
+                  nextSlots[index] = event.currentTarget.value.trim();
+                  onChange(nextSlots);
+                }}
+                className="min-h-12 w-full min-w-0 rounded-xl border border-hairline bg-canvas px-2 py-2 text-center text-base text-ink tabular-nums focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 aria-invalid:border-error"
+              />
+              {invalid && (
+                <p className="mt-1 text-[11px] text-error">
+                  {t('aiChat.paipanFlows.iching.integerRequired')}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {resizable && (
+        <button
+          type="button"
+          onClick={() => onChange([...slots, ''])}
+          className="mt-3 inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-hairline bg-canvas px-3 text-[12px] font-medium text-ink hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+        >
+          <Plus size={14} />
+          {t('aiChat.paipanFlows.iching.addNumber')}
+        </button>
+      )}
+    </fieldset>
+  );
+}
 
 function buildIchingMethodOptions(t: TranslateFn): ChoiceGridOption[] {
   return [
@@ -290,17 +407,11 @@ export function IchingFlow({
   onResultStepChange,
 }: PaipanFlowProps) {
   const { t } = useI18n();
-  const {
-    DateTimeField,
-    ChoiceGrid,
-    FieldTextInput,
-  } = fieldKit;
+  const { DateTimeField, ChoiceGrid } = fieldKit;
   const {
     getValueAtPath,
     getCurrentLocalDateParts,
     fromDateTimeLocalValue,
-    formatArrayInputValue,
-    parseDelimitedArrayInput,
   } = helpers;
   const method =
     typeof getValueAtPath(draft, ['method']) === 'string'
@@ -320,17 +431,19 @@ export function IchingFlow({
     yao,
   );
   const numbers = getValueAtPath(draft, ['numbers']);
+  const rawNumberSlots = getValueAtPath(draft, ['$numberSlots']);
+  const numberSlots = normalizeNumberSlots(rawNumberSlots, numbers, method);
   const hasValidMethodParams =
     method === 'manual'
       ? /^[6789]{6}$/.test(yao)
       : method === 'three'
         ? Array.isArray(numbers) &&
           numbers.length === 3 &&
-          numbers.every((value) => typeof value === 'number' && !Number.isNaN(value))
+          numbers.every((value) => typeof value === 'number' && Number.isInteger(value))
         : method === 'array'
           ? Array.isArray(numbers) &&
             numbers.length >= 2 &&
-            numbers.every((value) => typeof value === 'number' && !Number.isNaN(value))
+            numbers.every((value) => typeof value === 'number' && Number.isInteger(value))
           : true;
   const methodOptions = buildIchingMethodOptions(t);
 
@@ -346,7 +459,16 @@ export function IchingFlow({
             title={t('aiChat.paipanFlows.iching.methodTitle')}
             value={method}
             options={methodOptions}
-            onChange={(value) => onChange(['method'], value)}
+            onChange={(value) => {
+              if (value === 'three' || value === 'array') {
+                onManyChanges([
+                  { path: ['method'], value },
+                  ...buildNumberSlotChanges(normalizeNumberSlots(rawNumberSlots, numbers, value)),
+                ]);
+                return;
+              }
+              onChange(['method'], value);
+            }}
           />
         </PaipanStepFrame>
       ),
@@ -417,30 +539,10 @@ export function IchingFlow({
         method === 'three' || method === 'array' || method === 'manual' ? (
           <PaipanStepFrame title={t('aiChat.paipanFlows.iching.paramsTitle')}>
             {(method === 'three' || method === 'array') && (
-              <FieldTextInput
-                title={
-                  method === 'three'
-                    ? t('aiChat.paipanFlows.iching.threeNumbers')
-                    : t('aiChat.paipanFlows.iching.numberList')
-                }
-                required
-                description={
-                  method === 'three'
-                    ? t('aiChat.paipanFlows.iching.threeNumbersDescription')
-                    : t('aiChat.paipanFlows.iching.numberListDescription')
-                }
-                value={formatArrayInputValue(getValueAtPath(draft, ['numbers']))}
-                placeholder={
-                  method === 'three'
-                    ? t('aiChat.paipanFlows.iching.threeNumbersPlaceholder')
-                    : t('aiChat.paipanFlows.iching.numberListPlaceholder')
-                }
-                onChange={(value) =>
-                  onChange(
-                    ['numbers'],
-                    parseDelimitedArrayInput(value ?? '', 'integer'),
-                  )
-                }
+              <NumberSlotsInput
+                slots={numberSlots}
+                resizable={method === 'array'}
+                onChange={(slots) => onManyChanges(buildNumberSlotChanges(slots))}
               />
             )}
 

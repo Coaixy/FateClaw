@@ -64,7 +64,7 @@ const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>>
   'qimen-paipan':
     'lg:max-w-[min(27rem,calc(100vh-20rem))] xl:max-w-[min(29rem,calc(100vh-21rem))]',
   'ziwei-paipan':
-    'lg:max-w-[min(40rem,calc(100vh-14rem))] xl:max-w-[min(42rem,calc(100vh-15rem))]',
+    'lg:max-w-[40rem] xl:max-w-[42rem]',
   'jingzhan-paipan':
     'lg:max-w-[min(29rem,calc(100vh-18rem))] xl:max-w-[min(31rem,calc(100vh-19rem))]',
   'meihua-paipan': 'lg:max-w-[900px] xl:max-w-[960px]',
@@ -77,7 +77,6 @@ const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>>
 const FIT_MOBILE_CHAT_HEIGHT_SKILLS = new Set<SkillContextEntry['skill']>([
   'bazi-paipan',
   'iching-paipan',
-  'ziwei-paipan',
   'qimen-paipan',
   'liuren-paipan',
   'meihua-paipan',
@@ -309,12 +308,15 @@ function ArtifactBlock({
             shellClassName,
           )}
         >
-          <ResponsiveArtifactFrame
-            fitMobileChatHeight={fitMobileChatHeight}
-            fitViewportHeight={fitViewportHeight}
-          >
-            {chart}
-          </ResponsiveArtifactFrame>
+          {/* Ziwei reflows at container width; height scaling makes palace text unreadable. */}
+          {entry.skill === 'ziwei-paipan' ? chart : (
+            <ResponsiveArtifactFrame
+              fitMobileChatHeight={fitMobileChatHeight}
+              fitViewportHeight={fitViewportHeight}
+            >
+              {chart}
+            </ResponsiveArtifactFrame>
+          )}
         </div>
       </ChartErrorBoundary>
       {/* 复制按钮放在错误边界外：即便盘面图渲染失败，formatter 文本仍可导出。 */}

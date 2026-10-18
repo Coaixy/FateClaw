@@ -652,9 +652,9 @@ function validateDraftForSkill(
       if (
         !Array.isArray(numbers) ||
         numbers.length !== 3 ||
-        numbers.some((value) => typeof value !== 'number' || Number.isNaN(value))
+        numbers.some((value) => !isValidInteger(value))
       ) {
-        return t?.('aiChat.paipanSheet.validation.invalidThreeNumbers') ?? '三数起卦需要输入 3 个数字，例如 3, 8, 5';
+        return t?.('aiChat.paipanSheet.validation.invalidThreeNumbers') ?? '请填写全部 3 个数字，每个框内填写一个整数';
       }
     }
 
@@ -662,9 +662,9 @@ function validateDraftForSkill(
       if (
         !Array.isArray(numbers) ||
         numbers.length < 2 ||
-        numbers.some((value) => typeof value !== 'number' || Number.isNaN(value))
+        numbers.some((value) => !isValidInteger(value))
       ) {
-        return t?.('aiChat.paipanSheet.validation.invalidNumberArray') ?? '数字起卦至少需要输入 2 个数字';
+        return t?.('aiChat.paipanSheet.validation.invalidNumberArray') ?? '请填写至少 2 个数字，并补全所有数字框';
       }
     }
   }

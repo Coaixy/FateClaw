@@ -62,8 +62,10 @@ const MUTAGEN_COLOR: Record<string, string> = {
   忌: CHART.error,
 };
 
+const COLUMN_CLASSES = ['col-start-1', 'col-start-2', 'col-start-3', 'col-start-4'];
+
 function StarCell({ star, isMajor }: { star: Star; isMajor: boolean }) {
-  const fontSize = isMajor ? 'text-[10px] sm:text-[12px]' : 'text-[9px] sm:text-[11px]';
+  const fontSize = isMajor ? 'text-[14px]' : 'text-[12px]';
 
   let colorClass = isMajor ? `${CHART.ink} font-bold` : `${CHART.muted} font-medium`;
   if (star.mutagen && MUTAGEN_COLOR[star.mutagen]) {
@@ -84,7 +86,7 @@ function StarCell({ star, isMajor }: { star: Star; isMajor: boolean }) {
           {star.mutagen && (
             <span
               className={cn(
-                'text-[7px] font-bold scale-90',
+                'text-[10px] font-bold',
                 MUTAGEN_COLOR[star.mutagen] ?? 'text-ink',
               )}
             >
@@ -92,7 +94,7 @@ function StarCell({ star, isMajor }: { star: Star; isMajor: boolean }) {
             </span>
           )}
           {star.brightness && isMajor && !star.mutagen && (
-            <span className="text-[7px] text-muted-soft scale-75">
+            <span className="text-[9px] text-muted">
               {star.brightness}
             </span>
           )}
@@ -114,7 +116,7 @@ function SmallStarList({
   return (
     <div
       className={cn(
-        'basis-full flex flex-wrap gap-x-1 gap-y-0.5 text-[8px] sm:text-[9px] leading-tight',
+        'basis-full flex flex-wrap gap-x-1 gap-y-0.5 text-[10px] leading-snug',
         className,
       )}
     >
@@ -155,13 +157,13 @@ function PalaceCell({
   return (
     <div
       className={cn(
-        'relative border border-hairline bg-surface-card transition-all cursor-pointer',
+        'relative min-w-0 border border-hairline bg-surface-card transition-shadow cursor-pointer',
         isSelected ? 'ring-2 ring-primary z-10' : 'hover:ring-1 hover:ring-primary',
         className,
       )}
       onClick={onClick}
     >
-      <div className="flex flex-col h-full justify-between p-1 min-h-[inherit]">
+      <div className="flex min-h-[inherit] h-full flex-col justify-between p-1 @lg/ziwei:p-1.5">
         {/* 星曜区 */}
         <div className="flex-1 flex flex-row items-start justify-start flex-wrap content-start gap-x-1 gap-y-0.5">
           {majorStars.map((star, i) => (
@@ -181,11 +183,11 @@ function PalaceCell({
         </div>
 
         {/* 底部：宫名、干支、大限 */}
-        <div className="mt-1 pt-0.5 border-t border-hairline-soft flex justify-between items-end shrink-0">
+        <div className="mt-2 flex shrink-0 flex-col-reverse items-end gap-1 border-t border-hairline-soft pt-1 @lg/ziwei:flex-row @lg/ziwei:justify-between">
           {/* 左下：大限 */}
-          <div className="flex flex-col items-start min-w-[36px]">
+          <div className="flex flex-col items-start self-start @lg/ziwei:self-end">
             {palace.decadal?.range && palace.decadal.range.length === 2 && (
-              <div className="text-[9px] sm:text-[10px] font-bold text-ink whitespace-nowrap">
+              <div className="text-[10px] font-bold text-ink whitespace-nowrap">
                 {palace.decadal.range[0]}-{palace.decadal.range[1]}
               </div>
             )}
@@ -193,15 +195,15 @@ function PalaceCell({
 
           {/* 右下：干支 + 宫名 */}
           <div className="flex items-end gap-1 text-right">
-            <div className="flex flex-col items-center text-muted text-[9px] sm:text-[11px] leading-tight">
+            <div className="flex flex-col items-center text-muted text-[11px] leading-tight">
               <span>{palace.heavenlyStem}</span>
               <span>{palace.earthlyBranch}</span>
             </div>
-            <div className="flex flex-col items-center justify-center min-w-[18px] sm:min-w-[24px]">
+            <div className="flex min-w-[18px] flex-col items-center justify-center">
               {Array.from(palace.name).map((char, i) => (
                 <span
                   key={i}
-                  className="text-[12px] sm:text-[14px] font-bold text-ink leading-none block"
+                  className="block text-[14px] font-bold text-ink leading-none"
                 >
                   {char}
                 </span>
@@ -209,7 +211,7 @@ function PalaceCell({
               {(palace.isBodyPalace || palace.isOriginalPalace) && (
                 <span
                   className={cn(
-                    'mt-0.5 text-[8px] font-bold px-1 rounded-sm leading-none border',
+                    'mt-0.5 text-[9px] font-bold px-1 rounded-sm leading-none border',
                     palace.isBodyPalace
                       ? 'text-on-primary bg-primary border-primary-active'
                       : 'text-on-primary bg-accent-teal border-accent-teal',
@@ -246,13 +248,13 @@ export default function ZiWeiChart({ data }: { data: ZiWeiData }) {
   }
 
   const ORDER = ['巳', '午', '未', '申', '辰', '酉', '卯', '戌', '寅', '丑', '子', '亥'];
-  const cellHeight = 'min-h-[96px] sm:min-h-[112px]';
+  const cellHeight = 'min-h-[200px] @lg/ziwei:min-h-[152px]';
 
   const click = (branch: string) =>
     setSelectedBranch((prev) => (prev === branch ? null : branch));
 
   return (
-    <div className="w-full max-w-full mx-auto">
+    <div className="@container/ziwei mx-auto w-full max-w-full">
       <div className="relative grid grid-cols-4 grid-rows-4 border-2 border-hairline bg-canvas">
         {/* 顶行：巳 午 未 申 */}
         {[0, 1, 2, 3].map((col) => {
@@ -261,7 +263,7 @@ export default function ZiWeiChart({ data }: { data: ZiWeiData }) {
             <PalaceCell
               key={branch}
               palace={palaceMap[branch]}
-              className={cn(`row-start-1 col-start-${col + 1}`, cellHeight)}
+              className={cn('row-start-1', COLUMN_CLASSES[col], cellHeight)}
               isSelected={selectedBranch === branch}
               onClick={() => click(branch)}
             />
@@ -301,39 +303,39 @@ export default function ZiWeiChart({ data }: { data: ZiWeiData }) {
           <PalaceCell
             key={branch}
             palace={palaceMap[branch]}
-            className={cn(`row-start-4 col-start-${col + 1}`, cellHeight)}
+            className={cn('row-start-4', COLUMN_CLASSES[col], cellHeight)}
             isSelected={selectedBranch === branch}
             onClick={() => click(branch)}
           />
         ))}
 
         {/* 中宫 */}
-        <div className="row-start-2 row-end-4 col-start-2 col-end-4 flex flex-col items-center justify-center p-1 sm:p-2 bg-surface-card m-[1px]">
-          <div className="border-2 border-double border-hairline p-2 sm:p-3 w-full h-full flex flex-col items-center justify-center bg-surface-soft">
-            <h2 className="text-[14px] sm:text-lg font-bold text-primary mb-1.5 sm:mb-2 tracking-widest">
+        <div className="row-start-2 row-end-4 col-start-2 col-end-4 m-[1px] flex min-w-0 flex-col items-center justify-center bg-surface-card p-1 @lg/ziwei:p-2">
+          <div className="flex h-full w-full min-w-0 flex-col items-center justify-center border-2 border-double border-hairline bg-surface-soft p-2 @lg/ziwei:p-3">
+            <h2 className="mb-3 text-[16px] font-bold tracking-widest text-primary @lg/ziwei:text-lg">
               紫微斗数
             </h2>
-            <div className="grid grid-cols-2 gap-x-2.5 gap-y-0.5 text-[10px] sm:text-[11px] text-ink w-full">
+            <div className="grid w-full grid-cols-1 gap-x-2.5 gap-y-1.5 text-[12px] text-ink @lg/ziwei:grid-cols-2">
               {data.soul && (
                 <div className="flex gap-1.5">
-                  <span className={CHART.muted}>命主:</span>
+                  <span className={cn(CHART.muted, 'shrink-0')}>命主:</span>
                   <span className="font-medium">{data.soul}</span>
                 </div>
               )}
               {data.body && (
                 <div className="flex gap-1.5">
-                  <span className={CHART.muted}>身主:</span>
+                  <span className={cn(CHART.muted, 'shrink-0')}>身主:</span>
                   <span className="font-medium">{data.body}</span>
                 </div>
               )}
               {data.fiveElementsClass && (
-                <div className="flex gap-1.5 col-span-2">
-                  <span className={CHART.muted}>五行局:</span>
+                <div className="flex gap-1.5 @lg/ziwei:col-span-2">
+                  <span className={cn(CHART.muted, 'shrink-0')}>五行局:</span>
                   <span className="font-medium">{data.fiveElementsClass}</span>
                 </div>
               )}
             </div>
-            <div className="mt-1.5 sm:mt-2 pt-1.5 border-t border-hairline-soft w-full text-[9px] sm:text-[10px] text-muted space-y-0.5">
+            <div className="mt-3 w-full space-y-1 break-words border-t border-hairline-soft pt-2 text-[11px] leading-relaxed text-muted">
               {data.solarDate && <div>阳历 {data.solarDate}</div>}
               {data.lunarDate && <div>农历 {data.lunarDate}</div>}
               {data.chineseDate && (

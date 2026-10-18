@@ -975,9 +975,8 @@ export const enMessages = {
         missingDivinationTime: 'Choose the divination time first',
         invalidManualYao:
           'Manual divination needs 6 yao values, for example 789678',
-        invalidThreeNumbers:
-          'Three-number divination needs 3 numbers, for example 3, 8, 5',
-        invalidNumberArray: 'Number-list divination needs at least 2 numbers',
+        invalidThreeNumbers: 'Fill all 3 boxes with one integer each',
+        invalidNumberArray: 'Fill every number box with an integer; at least 2 are required',
         missingUpper: 'Enter the upper trigram number first',
         missingLower: 'Enter the lower trigram number first',
         invalidMoving: 'Moving-line number must be an integer',
@@ -1187,10 +1186,12 @@ export const enMessages = {
           'Only needed for number methods or manual / virtual coin toss.',
         threeNumbers: 'Three numbers',
         numberList: 'Number list',
-        threeNumbersDescription: 'Enter 3 numbers separated by commas.',
-        numberListDescription: 'Enter at least 2 numbers separated by commas.',
-        threeNumbersPlaceholder: 'Example: 3, 8, 5',
-        numberListPlaceholder: 'Example: 7, 2, 9, 4',
+        threeNumbersDescription: 'Enter 3 numbers in order, one integer per box.',
+        numberListDescription: 'Enter one integer per box, at least 2 in total. Add or remove boxes as needed.',
+        numberSlot: 'Number {index}',
+        addNumber: 'Add number',
+        removeNumber: 'Remove number {index}',
+        integerRequired: 'Enter an integer',
         manualYaoTitle: 'Six yao lines',
         manualYaoDescription:
           'Set lines from bottom to top. Click a line to cycle its type.',
