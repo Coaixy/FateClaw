@@ -9,18 +9,21 @@ type LanguageSwitcherMenuPlacement = 'top' | 'bottom';
 
 interface LanguageSwitcherProps {
   compact?: boolean;
+  collapseOnDesktop?: boolean;
   menuPlacement?: LanguageSwitcherMenuPlacement;
 }
 
 /**
- * 渲染紧凑语言切换器，供侧边栏等全局入口复用。
+ * Render the shared language selector, including the desktop sidebar rail.
  *
- * @param props.compact 是否使用更紧凑的尺寸。
- * @param props.menuPlacement 菜单展开方向；侧边栏底部默认向上，登录页顶部可改为向下。
- * @returns 当前语言选择控件。
+ * @param props.compact Use the compact control size.
+ * @param props.collapseOnDesktop Show only the icon at desktop widths.
+ * @param props.menuPlacement Open upward by default, or downward in page headers.
+ * @returns The current language selector.
  */
 export function LanguageSwitcher({
   compact = false,
+  collapseOnDesktop = false,
   menuPlacement = 'top',
 }: LanguageSwitcherProps) {
   const { locale, setLocale, t } = useI18n();
@@ -66,7 +69,7 @@ export function LanguageSwitcher({
           compact
             ? 'h-9 w-full gap-1.5 px-2 text-[11px]'
             : 'h-10 w-full gap-2 px-3 text-[12px]'
-        }`}
+        } ${collapseOnDesktop ? 'lg:h-10 lg:w-10 lg:justify-center lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none' : ''}`}
         title={t('language.currentLabel', { language: currentLanguage })}
         aria-label={t('language.switchLabel')}
         aria-haspopup="menu"
@@ -74,20 +77,24 @@ export function LanguageSwitcher({
       >
         <Languages
           size={compact ? 13 : 14}
-          className="shrink-0 text-primary"
+          className={`shrink-0 text-primary ${collapseOnDesktop ? 'lg:size-[18px]' : ''}`}
           aria-hidden="true"
         />
-        <span className="shrink-0 font-medium text-muted">
+        <span
+          className={`shrink-0 font-medium text-muted ${collapseOnDesktop ? 'lg:hidden' : ''}`}
+        >
           {t('language.label')}
         </span>
-        <span className="min-w-0 flex-1 truncate text-left font-semibold">
+        <span
+          className={`min-w-0 flex-1 truncate text-left font-semibold ${collapseOnDesktop ? 'lg:hidden' : ''}`}
+        >
           {currentLanguage}
         </span>
         <ChevronDown
           size={compact ? 12 : 13}
           className={`shrink-0 text-muted transition-transform ${
             open ? 'rotate-180 text-primary' : ''
-          }`}
+          } ${collapseOnDesktop ? 'lg:hidden' : ''}`}
           aria-hidden="true"
         />
       </button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import {
@@ -13,6 +13,8 @@ import { useI18n } from '@/lib/i18n';
 import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { ErrorBoundary } from './error-boundary';
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'fateclaw:sidebar-collapsed';
 
 /**
  * 应用外壳，负责统一处理登录态、侧边栏、顶部栏、内容区和合规备案页脚。
@@ -38,6 +40,17 @@ export function AppShell({
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(
+        window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true',
+      );
+    } catch {
+      // Unavailable browser storage must not prevent navigation.
+    }
+  }, []);
 
   useEffect(() => {
     if (requireAuth && !loading && !user) {
@@ -69,12 +82,25 @@ export function AppShell({
     router.replace('/login');
   };
 
+  const toggleSidebar = () => {
+    const nextCollapsed = !sidebarCollapsed;
+    setSidebarCollapsed(nextCollapsed);
+    try {
+      window.localStorage.setItem(
+        SIDEBAR_COLLAPSED_STORAGE_KEY,
+        String(nextCollapsed),
+      );
+    } catch {
+      // Keep the current page usable when preferences cannot be persisted.
+    }
+  };
+
   // 桌面端没有顶栏（Claude 式结构：用户区在侧栏底部，主画布完整留给内容），
   // 移动端保留 pt-14 顶栏；noPadding（聊天页）时内容区纵向 flex、主体内部滚动。
   const shellClassName = noPadding ? 'h-dvh overflow-hidden' : 'min-h-dvh';
-  const contentFrameClassName = noPadding
-    ? 'flex h-full flex-col overflow-hidden pt-14 lg:ml-[260px] lg:pt-0'
-    : 'pt-14 lg:pt-0 lg:ml-[260px]';
+  const contentFrameClassName = `pt-14 lg:pt-0 transition-[margin-left] duration-300 ease-out motion-reduce:transition-none ${
+    sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-[260px]'
+  } ${noPadding ? 'flex h-full flex-col overflow-hidden' : ''}`;
   // noPadding(聊天页) lg:pt-16 为右上角悬浮胶囊预留空间,避免消息被压住。
   const mainClassName = wide
     ? noPadding
@@ -95,7 +121,11 @@ export function AppShell({
           {t('shell.skipMain')}
         </a>
 
-        <Sidebar onLogout={handleLogout} />
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebar}
+          onLogout={handleLogout}
+        />
         {/* 桌面用户入口:悬浮右上角胶囊(不占整条顶栏,避免空白带)。 */}
         <div className="hidden lg:flex fixed top-4 right-6 z-30 items-center">
           <TopBar onLogout={handleLogout} />

@@ -6,6 +6,7 @@ import {
   Archive,
   Activity,
   CircleDot,
+  History,
   Loader2,
   LogIn,
   MessageCircle,
@@ -16,6 +17,8 @@ import {
   X,
   Search,
   Pencil,
+  PanelLeftClose,
+  PanelLeftOpen,
   Check,
   SquarePen,
   Sun,
@@ -227,13 +230,25 @@ function sessionListReducer(
   }
 }
 
-export function Sidebar({ onLogout }: { onLogout: () => void }) {
+export function Sidebar({
+  collapsed,
+  onToggleCollapsed,
+  onLogout,
+}: {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  onLogout: () => void;
+}) {
   const { formatDate, formatNumber, t } = useI18n();
   const pathname = usePathname();
+  const isHistoryPage = pathname === '/history' || pathname === '/history/';
   const router = useRouter();
   const { toast } = useToast();
   const { loading: authLoading } = useAuth();
   const [open, setOpen] = useState(false);
+  const toggleLabel = t(
+    collapsed ? 'sidebar.expandSidebar' : 'sidebar.collapseSidebar',
+  );
   const [sessionList, dispatchSessionList] = useReducer(
     sessionListReducer,
     INITIAL_SESSION_LIST_STATE,
@@ -463,6 +478,7 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
                 open ? t('sidebar.mobileMenuClose') : t('sidebar.mobileMenuOpen')
               }
               aria-expanded={open}
+              aria-controls="app-sidebar"
             >
               {open ? (
                 <X size={16} strokeWidth={1.8} />
@@ -489,21 +505,39 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
       {/* 侧栏专用深底色(sidebar token,比画布深约 6%):与主画布形成肉眼可见的双色分层,
           这是整页结构层次的地基。 */}
       <aside
-        className={`fixed top-0 left-0 h-full w-[260px] bg-sidebar border-r border-hairline flex flex-col z-50 transition-transform duration-300 ease-out lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        id="app-sidebar"
+        className={`fixed top-0 left-0 h-full w-[260px] bg-sidebar border-r border-hairline flex flex-col z-50 transition-[width,transform] duration-300 ease-out motion-reduce:transition-none lg:translate-x-0 ${collapsed ? 'lg:w-16' : ''} ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
 
         {/* Logo 区域：点击后统一回到新建对话首屏。 */}
-        <div className="relative flex items-center justify-between px-5 h-16 shrink-0">
+        <div
+          className={`relative flex h-16 shrink-0 items-center justify-between px-5 ${collapsed ? 'lg:justify-center lg:px-3' : ''}`}
+        >
           <button
             type="button"
             onClick={() => {
               closeSidebar();
               setSelectedSession('');
             }}
-            className="cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
+            className={`cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${collapsed ? 'lg:hidden' : ''}`}
             aria-label={t('hub.newChat')}
           >
             <Logo />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="hidden h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-canvas/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 lg:flex"
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            aria-expanded={!collapsed}
+            aria-controls="app-sidebar"
+          >
+            {collapsed ? (
+              <PanelLeftOpen size={18} strokeWidth={1.8} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose size={18} strokeWidth={1.8} aria-hidden="true" />
+            )}
           </button>
           <button
             onClick={closeSidebar}
@@ -523,16 +557,44 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
               // 清空选中会话 → ChatSessionsProvider 自动跳转 /ai-chat 开新对话
               setSelectedSession('');
             }}
-            className="flex h-10 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-[13px] font-semibold text-primary transition-colors duration-200 hover:bg-primary/10"
+            className={`flex h-10 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-[13px] font-semibold text-primary transition-colors duration-200 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${collapsed ? 'lg:w-10 lg:justify-center lg:px-0' : ''}`}
             aria-label={t('hub.newChat')}
+            title={t('hub.newChat')}
           >
-            <SquarePen size={15} strokeWidth={2} className="shrink-0" />
-            <span className="truncate">{t('hub.newChat')}</span>
+            <SquarePen
+              size={15}
+              strokeWidth={2}
+              className={`shrink-0 ${collapsed ? 'lg:size-[18px]' : ''}`}
+            />
+            <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>
+              {t('hub.newChat')}
+            </span>
           </button>
         </div>
 
+        {collapsed && (
+          <div className="relative hidden min-h-0 flex-1 px-3 pt-2 lg:block">
+            <Link
+              href="/history"
+              onClick={closeSidebar}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-canvas/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${
+                isHistoryPage
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted'
+              }`}
+              aria-label={t('sidebar.chatHistory')}
+              title={t('sidebar.chatHistory')}
+              aria-current={isHistoryPage ? 'page' : undefined}
+            >
+              <History size={18} strokeWidth={1.8} aria-hidden="true" />
+            </Link>
+          </div>
+        )}
+
         {/* 对话历史列表:节标签让列表区有明确的分组起点(对齐 Claude 侧栏的 Recents)。 */}
-        <div className="relative flex-1 min-h-0 flex flex-col mt-5">
+        <div
+          className={`relative flex-1 min-h-0 flex flex-col mt-5 ${collapsed ? 'lg:hidden' : ''}`}
+        >
           <div className="flex shrink-0 items-center justify-between gap-2 pl-5 pr-3 pb-1.5">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted/60">
               <span className="h-3 w-[2.5px] rounded-full bg-primary/70" aria-hidden="true" />
@@ -773,36 +835,64 @@ export function Sidebar({ onLogout }: { onLogout: () => void }) {
           <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-hairline/40 to-transparent" />
 
           <div className="mb-2">
-            <LanguageSwitcher compact />
+            <LanguageSwitcher compact collapseOnDesktop={collapsed} />
           </div>
 
           {/* 无框 ghost 工具行:底部工具是最低层级,不用边框和常亮高亮抢会话列表的注意力。 */}
           <div
-            className="grid grid-cols-3 gap-1"
+            className={`grid grid-cols-3 gap-1 ${collapsed ? 'lg:grid-cols-1' : ''}`}
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
-            <Link href="/status" onClick={closeSidebar}
-              className="flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink"
-              aria-label={t('sidebar.viewStatus')} title={t('sidebar.viewStatus')}>
-              <Activity size={14} strokeWidth={1.8} /><span>{t('sidebar.status')}</span>
+            <Link
+              href="/status"
+              onClick={closeSidebar}
+              className={`flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink ${collapsed ? 'lg:h-10 lg:w-10' : ''}`}
+              aria-label={t('sidebar.viewStatus')}
+              title={t('sidebar.viewStatus')}
+            >
+              <Activity
+                size={14}
+                strokeWidth={1.8}
+                className={collapsed ? 'lg:size-[18px]' : ''}
+              />
+              <span className={collapsed ? 'lg:hidden' : ''}>
+                {t('sidebar.status')}
+              </span>
             </Link>
-            <Link href="/issues" onClick={closeSidebar}
-              className="flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink"
-              aria-label={t('sidebar.issues')} title={t('sidebar.issues')}>
-              <CircleDot size={14} strokeWidth={1.8}/><span>{t('sidebar.issues')}</span>
+            <Link
+              href="/issues"
+              onClick={closeSidebar}
+              className={`flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink ${collapsed ? 'lg:h-10 lg:w-10' : ''}`}
+              aria-label={t('sidebar.issues')}
+              title={t('sidebar.issues')}
+            >
+              <CircleDot
+                size={14}
+                strokeWidth={1.8}
+                className={collapsed ? 'lg:size-[18px]' : ''}
+              />
+              <span className={collapsed ? 'lg:hidden' : ''}>
+                {t('sidebar.issues')}
+              </span>
             </Link>
             <button
               type="button"
               onClick={cycleThemeMode}
-              className="flex h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink"
+              className={`flex h-11 min-w-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-all duration-200 hover:bg-canvas/70 hover:text-ink ${collapsed ? 'lg:h-10 lg:w-10' : ''}`}
               aria-label={t('sidebar.switchTheme', {
                 theme: activeThemeLabel,
               })}
               title={t('sidebar.currentTheme', { theme: activeThemeLabel })}
             >
-              <ActiveThemeIcon size={14} strokeWidth={1.8} />
-              <span className="max-w-full truncate leading-tight">
+              <ActiveThemeIcon
+                size={14}
+                strokeWidth={1.8}
+                className={collapsed ? 'lg:size-[18px]' : ''}
+              />
+              <span
+                className={`max-w-full truncate leading-tight ${collapsed ? 'lg:hidden' : ''}`}
+              >
                 {activeThemeLabel}
               </span>
             </button>
