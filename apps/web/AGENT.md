@@ -29,6 +29,7 @@ apps/web/
 │   ├── clients/page.tsx
 │   ├── membership/page.tsx
 │   ├── profile/page.tsx
+│   ├── acknowledgements/page.tsx
 │   ├── wallet/page.tsx
 │   ├── studio/
 │   ├── settings/page.tsx
@@ -85,6 +86,11 @@ When investigating behavior that works locally but fails in production, first id
 - `app/devices/page.tsx`: Device and account binding.
 - `app/profile/page.tsx`: User profile.
 - `app/settings/page.tsx`: Settings.
+- `app/acknowledgements/page.tsx`: Public open source acknowledgements.
+
+### Open source acknowledgements
+
+`/acknowledgements` is a public, statically exported page linked from the sidebar on desktop and mobile. Site notice dialogs do not block this page. Credit entries and license links belong to `features/acknowledgements/projects.ts`; display copy belongs to the existing locale dictionaries. When changing credited dependencies, verify versions against `pnpm-lock.yaml` and licenses against the matching package or upstream source. Keep version-dependent service licenses explicit rather than inferring them from a client library.
 
 ### API clients
 

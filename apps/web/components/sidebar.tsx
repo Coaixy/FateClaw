@@ -6,6 +6,7 @@ import {
   Archive,
   Activity,
   CircleDot,
+  Heart,
   History,
   Loader2,
   LogIn,
@@ -840,7 +841,7 @@ export function Sidebar({
 
           {/* 无框 ghost 工具行:底部工具是最低层级,不用边框和常亮高亮抢会话列表的注意力。 */}
           <div
-            className={`grid grid-cols-3 gap-1 ${collapsed ? 'lg:grid-cols-1' : ''}`}
+            className={`grid grid-cols-4 gap-1 ${collapsed ? 'lg:grid-cols-1' : ''}`}
             role="group"
             aria-label={t('sidebar.shortcutsAndTheme')}
           >
@@ -874,6 +875,23 @@ export function Sidebar({
               />
               <span className={collapsed ? 'lg:hidden' : ''}>
                 {t('sidebar.issues')}
+              </span>
+            </Link>
+            <Link
+              href="/acknowledgements"
+              onClick={closeSidebar}
+              className={`flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink ${collapsed ? 'lg:h-10 lg:w-10' : ''}`}
+              aria-label={t('acknowledgements.title')}
+              title={t('acknowledgements.title')}
+            >
+              <Heart
+                size={14}
+                strokeWidth={1.8}
+                aria-hidden="true"
+                className={collapsed ? 'lg:size-[18px]' : ''}
+              />
+              <span className={collapsed ? 'lg:hidden' : ''}>
+                {t('acknowledgements.navigation')}
               </span>
             </Link>
             <button

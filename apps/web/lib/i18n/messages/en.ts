@@ -1,4 +1,87 @@
 export const enMessages = {
+  acknowledgements: {
+    navigation: 'Credits',
+    eyebrow: 'To the open source community',
+    title: 'Open source acknowledgements',
+    introduction:
+      'Every chart and conversation in FateClaw builds on tools and knowledge shared by the open source community.',
+    thanks:
+      'Thank you to the authors, maintainers, and contributors whose work makes this possible.',
+    contents: 'Acknowledgements contents',
+    projectCount: '{count} projects',
+    viewLicense: 'View the {license} license for {project}',
+    licenseTitle: 'About the licenses',
+    projectLicense: 'FateClaw itself is licensed under',
+    licenseNote:
+      'This page credits major open source projects and their licenses. Copyright belongs to the respective rights holders. Use, modification, and distribution are governed by the licenses and copyright notices accompanying each version.',
+    communityThanks:
+      'We also thank the many transitive dependencies and everyone who contributes code, reports issues, or shares their experience with FateClaw.',
+    groups: {
+      charts: 'Charts and calendars',
+      runtime: 'AI and services',
+      interface: 'Interface and reading',
+      infrastructure: 'Infrastructure and references',
+      tooling: 'Development and transitive dependencies',
+    },
+    roles: {
+      bazi: 'Bazi charts and related calculations.',
+      ziwei: 'Ziwei astrology charts and calculations.',
+      qimen: 'Qimen Dunjia charts.',
+      liuren: 'Liuren charts and calculations.',
+      iching: 'Liuyao and I Ching divination and hexagram data.',
+      meihua: 'Meihua divination and chart calculations.',
+      calendar: 'Calendar conversion, solar terms, and Ganzhi calculations.',
+      pi: 'Model APIs, agent sessions, and tool execution through pi-ai and pi-coding-agent.',
+      fastify:
+        'HTTP services and the official compress, cors, jwt, static, and websocket plugins.',
+      redisClient: 'Redis connections and messaging.',
+      postgresClient: 'PostgreSQL connections and queries.',
+      logging: 'Structured logging and development log formatting.',
+      validation: 'Request validation and tool parameter schemas.',
+      passwords: 'Password hashing and verification.',
+      qr: 'QR code generation.',
+      terminalQr: 'QR codes in the terminal.',
+      cloudCredentials: 'Credential resolution for Alibaba Cloud SDKs.',
+      cloudRuntime: 'Alibaba Cloud OpenAPI client and Tea runtime.',
+      cloudVerification: 'SMS verification APIs and SDK utilities.',
+      next: 'Page framework for the user site and admin app.',
+      react: 'Components and interactive UI rendering.',
+      icons: 'Line icons throughout the interface.',
+      markdown: 'Markdown, tables, and highlighted code blocks.',
+      highlighting: 'Code syntax highlighting.',
+      styles: 'Page styling and CSS builds.',
+      classes: 'Conditional class names and Tailwind class merging.',
+      database:
+        'Persistence for conversations, knowledge libraries, and application data.',
+      redis: 'Messaging and runtime scheduling between services.',
+      font: 'Chinese serif font loaded through Fontsource on the separate landing page.',
+      weixin:
+        'Reference implementation and protocol documentation for the WeChat iLink integration.',
+      node: 'JavaScript runtime and workspace package management.',
+      typescript: 'Static type checking.',
+      testing: 'Build support, automated tests, and coverage tools.',
+      quality: 'Linting, TypeScript rules, and formatting.',
+      development: 'TypeScript development execution and concurrent processes.',
+      types:
+        'Type declarations for Node.js, React, PostgreSQL, QR codes, and other dependencies.',
+      css: 'CSS transformation, optimization, and platform bindings.',
+      accessibility: 'Accessibility checks through development dependencies.',
+      compatibility: 'Browser compatibility data.',
+      images: 'Image processing components brought in by Next.js.',
+    },
+    notes: {
+      feather:
+        'Some icons derive from Feather and retain its MIT license and author notice.',
+      qrEncoder:
+        'The embedded QR encoder also includes an MIT notice from Kazuhiko Arase.',
+      redis:
+        'Redis 7.2 and earlier use BSD-3-Clause. The 7.4 series uses RSALv2 or SSPLv1; the applicable license depends on the deployed version.',
+      weixin:
+        'The retained integration references this project; the WeChat entry point is currently disabled.',
+      images:
+        'Native libvips components use LGPL-3.0-or-later; the details depend on the platform package.',
+    },
+  },
   modelChoice: {
     paid_operational: 'Paid model service is operational',
     paid_unavailable: 'Paid model service is unavailable',

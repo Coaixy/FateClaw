@@ -18,6 +18,13 @@ function NoticeSequence() {
 
 export function SiteNotices() {
   const pathname = usePathname();
-  if (pathname === '/status' || pathname === '/status/') return null;
+  if (
+    pathname === '/status' ||
+    pathname === '/status/' ||
+    pathname === '/acknowledgements' ||
+    pathname === '/acknowledgements/'
+  ) {
+    return null;
+  }
   return <NoticeSequence />;
 }
