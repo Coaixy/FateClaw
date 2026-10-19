@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
@@ -7,12 +11,14 @@ const {
   mockLoggerWarn,
   mockPublicStatus,
   mockStatusLimit,
+  mockProjectRoot,
 } = vi.hoisted(() => ({
   mockGetUserById: vi.fn(),
   mockLoggerError: vi.fn(),
   mockLoggerWarn: vi.fn(),
   mockPublicStatus: vi.fn(),
   mockStatusLimit: vi.fn(),
+  mockProjectRoot: vi.fn(() => '/tmp/fateclaw-api-server-test'),
 }));
 
 vi.mock('#modules/system/service-status', () => ({
@@ -42,7 +48,7 @@ vi.mock('#infrastructure/logger', () => ({
 }));
 
 vi.mock('#infrastructure/project-root', () => ({
-  resolveProjectRoot: vi.fn(() => '/tmp/fateclaw-api-server-test'),
+  resolveProjectRoot: mockProjectRoot,
 }));
 
 vi.mock('#runtime/ai-chat-stream', () => ({
@@ -101,6 +107,50 @@ describe('createApiServer auth guard', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('preserves document, immutable asset, and font headers when serving real static files', async () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'fateclaw-server-static-'),
+    );
+    const files = [
+      'index.html',
+      '_next/static/chunks/app.js',
+      '_next/static/media/font.woff2',
+    ];
+    try {
+      for (const file of files) {
+        const filename = path.join(root, 'apps/web/out', file);
+        fs.mkdirSync(path.dirname(filename), { recursive: true });
+        fs.writeFileSync(filename, 'static fixture');
+      }
+      mockProjectRoot.mockReturnValue(root);
+      await app.close();
+      app = await createApiServer();
+
+      const document = await app.inject('/index.html');
+      expect(document.statusCode).toBe(200);
+      expect(document.headers['cache-control']).toContain('no-store');
+      expect(document.headers['cdn-cache-control']).toBe('no-store');
+      expect(document.headers['surrogate-control']).toBe('no-store');
+
+      const chunk = await app.inject('/_next/static/chunks/app.js');
+      expect(chunk.statusCode).toBe(200);
+      expect(chunk.headers['cache-control']).toBe(
+        'public, max-age=31536000, immutable',
+      );
+
+      const font = await app.inject({
+        url: '/_next/static/media/font.woff2',
+        headers: { 'sec-fetch-site': 'same-origin' },
+      });
+      expect(font.statusCode).toBe(200);
+      expect(font.headers['cross-origin-resource-policy']).toBe('same-origin');
+      expect(font.headers.vary).toContain('Sec-Fetch-Site');
+    } finally {
+      mockProjectRoot.mockReturnValue('/tmp/fateclaw-api-server-test');
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('serves public status with coherent cache headers while protected APIs remain private', async () => {

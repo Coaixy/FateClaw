@@ -117,19 +117,6 @@ function setNoStoreHeaders(reply: {
   reply.header('Expires', '0');
 }
 
-function setNoStoreResponseHeaders(response: {
-  setHeader(name: string, value: string): void;
-}) {
-  response.setHeader(
-    'Cache-Control',
-    'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-  );
-  response.setHeader('CDN-Cache-Control', 'no-store');
-  response.setHeader('Surrogate-Control', 'no-store');
-  response.setHeader('Pragma', 'no-cache');
-  response.setHeader('Expires', '0');
-}
-
 function isPrematureStreamCloseError(error: FastifyError): boolean {
   const code = (error as FastifyError & { code?: unknown }).code;
   return (
@@ -418,30 +405,24 @@ export async function createApiServer(): Promise<FastifyInstance> {
       prefix: '/',
       wildcard: false,
       cacheControl: false,
-      setHeaders: (response, filePath) => {
+      setHeaders: (reply, filePath) => {
         if (FONT_ASSET_FILE_PATTERN.test(filePath)) {
-          response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-          response.setHeader('Vary', 'Origin, Referer, Sec-Fetch-Site');
+          reply.header('Cross-Origin-Resource-Policy', 'same-origin');
+          reply.header('Vary', 'Origin, Referer, Sec-Fetch-Site');
         }
 
         if (IMMUTABLE_STATIC_ASSET_PATTERN.test(filePath)) {
-          response.setHeader(
-            'Cache-Control',
-            'public, max-age=31536000, immutable',
-          );
+          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
           return;
         }
 
         // 静态导出的 HTML 和 App Router 路由数据必须回源，避免 CDN 长时间发旧页面壳。
         if (ROUTE_DOCUMENT_FILE_PATTERN.test(filePath)) {
-          setNoStoreResponseHeaders(response);
+          setNoStoreHeaders(reply);
           return;
         }
 
-        response.setHeader(
-          'Cache-Control',
-          'public, max-age=0, must-revalidate',
-        );
+        reply.header('Cache-Control', 'public, max-age=0, must-revalidate');
       },
     });
 

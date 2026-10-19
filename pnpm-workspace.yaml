@@ -5,13 +5,23 @@ packages:
 trustLockfile: true
 
 overrides:
-  fast-jwt: '>=6.2.4'
-  fast-uri: '>=3.1.2'
-  postcss: '>=8.5.10'
-  vite: '>=8.0.5'
-  picomatch: '>=4.0.4'
-  brace-expansion@^1.0.0: 1.1.13
-  brace-expansion@^5.0.0: 5.0.6
+  '@humanfs/node@^0.16.0': '^0.16.8'
+  fast-copy@^4.0.0: '^4.1.0'
+  fast-jwt: '^6.3.5'
+  fast-uri@^3.0.0: '^3.1.8'
+  js-yaml@^4.0.0: '^4.3.2'
+  moment: '^2.31.0'
+  postcss: '^8.5.30'
+  shell-quote: '^1.12.0'
+  source-map-js: '^1.2.2'
+  vite: '^8.3.4'
+  picomatch: '^4.0.4'
+  brace-expansion@^1.0.0: '^1.1.21'
+  brace-expansion@^5.0.0: '^5.0.12'
+
+# No upstream release fixes GHSA-vfj7-8cjw-p6xm yet.
+patchedDependencies:
+  braces@3.0.3: patches/braces@3.0.3.patch
 
 packageExtensions:
   '@alicloud/openapi-core@1.0.7':

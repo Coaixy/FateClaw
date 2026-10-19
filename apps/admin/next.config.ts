@@ -2,12 +2,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { NextConfig } from 'next';
+import { createReleaseLicensePlugin } from '../../scripts/write-release-notices.mjs';
 
 const isDev = process.env.NODE_ENV === 'development';
 const adminRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(path.dirname(adminRoot));
 
 const nextConfig: NextConfig = {
+  webpack(config, { isServer }) {
+    if (!isServer && !isDev) config.plugins.push(createReleaseLicensePlugin());
+    return config;
+  },
   // Admin 依赖在 workspace 下会提升到仓库根 node_modules，
   // 所以 Turbopack 根需要覆盖到仓库根，而不是只停留在 apps/admin/。
   turbopack: {

@@ -1,0 +1,17 @@
+FateClaw (命枢)
+Copyright (C) 2026 Gavriel
+
+FateClaw is licensed under the GNU General Public License, version 3 only.
+The complete license is included in LICENSE.
+
+Source repository: https://github.com/Coaixy/FateClaw
+Obtain the corresponding source, including build and installation scripts,
+from the repository revision accompanying this release.
+
+Third-party components retain their own copyright notices and licenses.
+Runtime and frontend archives include THIRD_PARTY_NOTICES.txt. Frontend builds
+preserve the license and notice files of packages contributing modules to the
+emitted browser bundles, including notices for embedded components. Backend
+runtime dependencies are installed separately with their upstream notices.
+
+The project license does not replace the licenses of third-party components.

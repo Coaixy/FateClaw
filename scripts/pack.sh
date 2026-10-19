@@ -90,8 +90,11 @@ rewrite_runtime_package_for_npm() {
     if (pkg.dependencies?.['@fateclaw/contracts'] === 'workspace:*') {
       pkg.dependencies['@fateclaw/contracts'] = 'file:../../packages/contracts';
     }
+    if (process.argv[2]) {
+      pkg.overrides = JSON.parse(process.argv[2]);
+    }
     fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
-  " "$package_file"
+  " "$package_file" "${2:-}"
 }
 
 # 前端静态构建不会自动读取仓库根 .env；这里仅导出公开变量，
@@ -192,9 +195,12 @@ pack_backend_runtime() {
   echo "📦 打包后端生产运行包 v${VERSION} ..."
   mkdir -p "$app_dir/apps/api" "$app_dir/apps/agent-runtime" "$app_dir/packages/contracts"
   cp package.json pnpm-workspace.yaml "$app_dir/"
+  # npm reads overrides only from its root manifest, not pnpm-workspace.yaml.
+  rewrite_runtime_package_for_npm "$app_dir/package.json" "$(pnpm config get overrides --json)"
   if [ -f pnpm-lock.yaml ]; then
     cp pnpm-lock.yaml "$app_dir/pnpm-lock.yaml"
   fi
+  cp -R patches "$app_dir/patches"
   if [ -f .npmrc ]; then
     cp .npmrc "$app_dir/.npmrc"
   fi
@@ -218,6 +224,7 @@ pack_backend_runtime() {
     \( -name '*.test.js' -o -name '*.test.js.map' -o -name '*.test.d.ts' -o -name '*.test.d.ts.map' \) \
     -delete
 
+  node scripts/write-release-notices.mjs backend "$app_dir"
   tar czf "$tmp_out" -C "$stage_dir" "$ROOT_NAME"
   rm -rf "$stage_dir"
 
@@ -239,6 +246,7 @@ pack_www_static() {
   load_frontend_public_env
   pnpm run build:www
 
+  node scripts/write-release-notices.mjs www apps/web/out
   echo "📦 打包 www 静态产物 v${VERSION} ..."
   tar czf "$tmp_out" -C apps/web/out .
 
@@ -260,6 +268,7 @@ pack_admin_static() {
   load_frontend_public_env
   pnpm run build:admin
 
+  node scripts/write-release-notices.mjs admin apps/admin/out
   echo "📦 打包 admin 静态产物 v${VERSION} ..."
   tar czf "$tmp_out" -C apps/admin/out .
 

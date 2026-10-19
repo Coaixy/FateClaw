@@ -75,12 +75,40 @@ bash scripts/pack.sh admin
 The legacy arguments `api-runtime`, `api-source`, and `api` remain aliases for backend packages;
 the legacy `web` argument remains an alias for the `www` static package.
 
+### License materials
+
+Backend runtime and frontend static archives include `LICENSE`, `NOTICE`, and
+`THIRD_PARTY_NOTICES.txt`. The frontend Webpack build collects packages whose
+modules contribute to emitted browser chunks and preserves their upstream
+license and copyright text, including nested notices for embedded components.
+Packaging copies the generated notices to the static site's root. The backend
+archive contains compiled project source; its npm dependencies are installed
+separately and retain the notices accompanying those upstream packages.
+
+Install the locked dependencies before packaging. Missing license text for a
+bundled package fails the frontend build; missing generated notices fail static
+packaging. Backend source archives retain the project license and notice from
+the source tree; third-party dependencies are installed separately.
+
+Retain these files when deploying or redistributing the output. Publish a link
+to the matching complete repository revision, including its build and install
+scripts, alongside each release. The project's GPL declaration does not replace
+third-party licenses.
+
 ## API deployment
+
+`TRUST_PROXY` defaults to `loopback`; no additional configuration is required
+when the reverse proxy connects over a loopback address. Legacy positive numeric
+values also use this default because Fastify no longer supports hop-count-only
+trust. `false` and `0` disable proxy trust. Deployments whose proxy connects from
+a different address must use the actual trusted proxy IP/CIDR allowlist.
 
 Use the backend runtime package in production. It includes `apps/api/dist` and
 `apps/agent-runtime/dist`, so the server does not need to build TypeScript.
 The packaged `.npmrc` sets `package-lock=false` to prevent a leftover
 `package-lock.json` in an existing 1Panel project directory from affecting installation.
+Packaging also copies the workspace security overrides into the runtime root
+`package.json`, so npm applies the same version constraints during installation.
 
 ```bash
 mkdir -p fateclaw-api
@@ -93,8 +121,13 @@ npm run start
 In a 1Panel Node.js runtime environment, use this startup command:
 
 ```bash
-npm install --omit=dev -f && npm run start
+rm -rf node_modules/@fateclaw/contracts && npm install --omit=dev -f && npm run start
 ```
+
+The existing command without `--omit=dev` is also supported; it additionally
+installs development dependencies. Removing the old contracts link allows npm
+to recreate it against the `packages/contracts/dist` shipped in the new archive.
+These commands target the backend runtime archive, not an unbuilt source checkout.
 
 For a server with 2 GB of RAM, also configure these limits in 1Panel / Docker:
 

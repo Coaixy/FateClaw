@@ -77,6 +77,25 @@ The host resolves model settings into a request-level `llmRuntime` snapshot. Do 
 
 The lightweight entry initializes the database, Redis, and HTTP server but skips IPC worker and background startup. Use full development mode to validate the complete AI Chat lifecycle.
 
+## Dependency security
+
+Use the pinned pnpm version to update dependencies and commit `pnpm-lock.yaml`
+together with the package manifests and workspace overrides. Check both
+`pnpm audit` and `pnpm audit --prod`; the latter excludes development tools.
+
+The Next.js lint dependency chain currently uses `braces@3.0.3`, which has no
+published upstream fix for
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+The exact-version patch in `patches/braces@3.0.3.patch` limits the recursive
+compile, expand, and stringify walkers to 128 AST levels. Its regression tests
+also exercise ordinary Next.js lint globs. pnpm applies this patch through
+`patchedDependencies`; keep the patch file with the workspace configuration in
+source and runtime archives. Replace it with an upstream release once that
+release passes the same regression tests.
+
+`pnpm audit` still reports this advisory because the patched package retains
+its upstream version. Review that result alongside the patch and its tests.
+
 ## Backend imports
 
 Backend package aliases are defined by each app's `package.json` `imports` field. In the API, use the source directory prefix for imports across directories, such as `#modules/chat/chat-session-service`, `#infrastructure/db`, or `#shared/types`. In Agent Runtime, use `#agent/` followed by the path relative to `src`, such as `#agent/types` or `#agent/pi-runtime/tools/skill-path`. Alias specifiers omit the file extension. Keep relative imports for files in the same directory, and use the existing `@fateclaw/contracts` exports for shared contracts.

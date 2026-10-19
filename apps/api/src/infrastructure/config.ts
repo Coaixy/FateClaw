@@ -168,14 +168,15 @@ export const PAYMENT_CALLBACK_ALLOWED_HOSTS = normalizeAllowedHosts(
 );
 
 // 反向代理信任拓扑解析。Fastify 据此从 X-Forwarded-For 还原真实客户端 IP。
-function parseTrustProxy(raw: string): boolean | number | string {
+function parseTrustProxy(raw: string): boolean | string {
   const value = raw.trim();
   // 默认仅信任本机回环代理：外部客户端的连接源永远不是回环地址，无法伪造
   // X-Forwarded-For；同机 Nginx 反代的常见部署可直接生效，裸暴露公网时也安全。
   if (!value) return 'loopback';
   if (value === 'true') return true; // 信任全部代理：仅限已知可信内网，谨慎使用
-  if (value === 'false') return false;
-  if (/^\d+$/.test(value)) return Number(value); // 信任的代理跳数
+  if (value === 'false' || /^0+$/.test(value)) return false;
+  // Fastify removed hop-count trust; legacy values use the loopback default.
+  if (/^\d+$/.test(value)) return 'loopback';
   return value; // 逗号分隔的 IP/CIDR 白名单，交给 Fastify 解析
 }
 
