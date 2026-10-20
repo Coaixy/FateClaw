@@ -1,38 +1,31 @@
 #!/usr/bin/env bash
-# 分离打包 API 生产运行包、后端源码包、www 静态产物和 admin 静态产物用于部署
-# 用法:
-#   bash scripts/pack.sh [all|backend-runtime|api-runtime|runtime|backend|api|backend-source|api-source|www|web|admin|source]
-#   bash scripts/pack.sh backend-runtime [输出文件名]
-#   bash scripts/pack.sh backend [输出文件名]
-#   bash scripts/pack.sh www [输出文件名]
-#   bash scripts/pack.sh admin [输出文件名]
-# 兼容旧打包参数: --light --no-obfuscate --skip-install --jobs N 会被忽略
+# Usage: bash scripts/pack.sh [all|backend-runtime|backend-source|www|admin|source] [output] [--jobs N]
+# Legacy target aliases and --light/--no-obfuscate/--skip-install remain accepted.
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$ROOT_DIR"
 
 VERSION=$(node -p "require('./package.json').version")
 ROOT_NAME="$(basename "$ROOT_DIR")"
 MODE="all"
 OUTFILE=""
-LEGACY_ARGS=()
+JOBS=3
 
 while [ "$#" -gt 0 ]; do
   arg="$1"
   if [ "$arg" = "--light" ] || [ "$arg" = "--no-obfuscate" ] || [ "$arg" = "--skip-install" ]; then
-    LEGACY_ARGS+=("$arg")
     shift
   elif [ "$arg" = "--jobs" ]; then
     if [ "$#" -lt 2 ] || [[ "$2" == --* ]]; then
       echo "❌ --jobs 需要一个参数"
       exit 1
     fi
-    LEGACY_ARGS+=("$arg $2")
+    JOBS="$2"
     shift 2
   elif [[ "$arg" == --jobs=* ]]; then
-    LEGACY_ARGS+=("$arg")
+    JOBS="${arg#--jobs=}"
     shift
   elif [[ "$arg" == --* ]]; then
     echo "❌ 未知参数: $arg"
@@ -56,31 +49,105 @@ while [ "$#" -gt 0 ]; do
   fi
 done
 
+if ! [[ "$JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "❌ --jobs 需要一个正整数"
+  exit 1
+fi
+if [ "${#JOBS}" -gt 1 ] || [ "$JOBS" -gt 3 ]; then
+  JOBS=3
+fi
+
 if [ "$MODE" = "all" ] && [ -n "$OUTFILE" ]; then
   echo "❌ all 模式会生成三个文件，不能指定单个输出文件名"
   exit 1
 fi
 
 SCRIPT_START=$SECONDS
-GENERATED_BACKEND_RUNTIME=""
-GENERATED_BACKEND_SOURCE=""
-GENERATED_WWW_STATIC=""
-GENERATED_ADMIN_STATIC=""
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fateclaw-pack.XXXXXX")
+WORK_DIR=$(cd "$WORK_DIR" && pwd -P)
+JOB_PIDS=()
+JOB_LABELS=()
+JOB_LOGS=()
+ACTIVE_JOBS=0
 
-# 输出步骤耗时。
-# 参数:
-#   $1: 步骤名称
-#   $2: 步骤开始时的 SECONDS 值
-# 返回值: 无；仅向标准输出打印耗时。
-log_duration() {
-  local label="$1"
-  local started_at="$2"
-  local elapsed=$((SECONDS - started_at))
-  echo "⏱ ${label}: ${elapsed}s"
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  local pid
+  for pid in ${JOB_PIDS[@]+"${JOB_PIDS[@]}"}; do
+    if [ "$pid" -gt 0 ]; then
+      kill -TERM -- "-$pid" 2>/dev/null || true
+    fi
+  done
+  for pid in ${JOB_PIDS[@]+"${JOB_PIDS[@]}"}; do
+    if [ "$pid" -gt 0 ]; then
+      kill -KILL -- "-$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    fi
+  done
+  rm -rf "$WORK_DIR"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Separate process groups let cleanup stop each worker's build subprocesses too.
+set -m
+
+wait_pack_job() {
+  local index
+  while true; do
+    for index in "${!JOB_PIDS[@]}"; do
+      if [ "${JOB_PIDS[$index]}" -eq 0 ]; then
+        continue
+      fi
+      if [ -f "$WORK_DIR/job-$index.done" ] || ! kill -0 "${JOB_PIDS[$index]}" 2>/dev/null; then
+        if wait "${JOB_PIDS[$index]}"; then
+          JOB_PIDS[$index]=0
+          ACTIVE_JOBS=$((ACTIVE_JOBS - 1))
+          sed -n '/^⚠️/p; /^✅/p' "${JOB_LOGS[$index]}"
+          return
+        else
+          local status=$?
+          echo "❌ ${JOB_LABELS[$index]}失败" >&2
+          cat "${JOB_LOGS[$index]}" >&2
+          return "$status"
+        fi
+      fi
+    done
+    sleep 0.1
+  done
 }
 
-# 生产运行包部署时由 1Panel/npm 安装依赖；npm 不识别 pnpm 的 workspace: 协议。
-# 这里仅改写临时打包目录里的 package.json，源码工作区仍保持 pnpm workspace 配置。
+run_pack_job() {
+  local label="$1"
+  shift
+  local log_file="$WORK_DIR/job-${#JOB_PIDS[@]}.log"
+  local status_file="$WORK_DIR/job-${#JOB_PIDS[@]}.done"
+  echo "📦 ${label} ..."
+  (
+    trap ': > "$status_file"' EXIT
+    "$@"
+  ) > "$log_file" 2>&1 &
+  JOB_PIDS+=("$!")
+  JOB_LABELS+=("$label")
+  JOB_LOGS+=("$log_file")
+  ACTIVE_JOBS=$((ACTIVE_JOBS + 1))
+  if [ "$ACTIVE_JOBS" -ge "$JOBS" ]; then
+    wait_pack_job
+  fi
+}
+
+report_archive() {
+  local outfile="$1"
+  local started_at="$2"
+  local size
+  size=$(du -h "$outfile" | cut -f1)
+  echo "✅ $outfile ($size, $((SECONDS - started_at))s)"
+}
+
+# Only staged runtime manifests use npm-compatible local contracts references.
 rewrite_runtime_package_for_npm() {
   local package_file="$1"
   node -e "
@@ -97,8 +164,7 @@ rewrite_runtime_package_for_npm() {
   " "$package_file" "${2:-}"
 }
 
-# 前端静态构建不会自动读取仓库根 .env；这里仅导出公开变量，
-# 避免把后端密钥类配置带进 Next 构建进程。
+# Export only the public API base needed by the frontend builds.
 load_frontend_public_env() {
   if [ -n "${NEXT_PUBLIC_API_BASE:-}" ]; then
     return
@@ -133,17 +199,12 @@ load_frontend_public_env() {
 
   if [ -n "$api_base" ]; then
     export NEXT_PUBLIC_API_BASE="$api_base"
-    echo "ℹ️ 已从根 .env 为前端构建设置 NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE"
   fi
 }
 
-if [ "${#LEGACY_ARGS[@]}" -gt 0 ]; then
-  echo "ℹ️ 当前为分离部署包，忽略旧的本地混淆参数: ${LEGACY_ARGS[*]}"
-fi
-
 pack_backend_source() {
   local outfile="${1:-fateclaw-backend-v${VERSION}-source.tar.gz}"
-  local tmp_out="/tmp/$outfile"
+  local tmp_out="$WORK_DIR/backend-source.tar.gz"
   local step_start=$SECONDS
 
   echo "📦 打包后端源码 v${VERSION} ..."
@@ -161,6 +222,7 @@ pack_backend_source() {
     --exclude='归档.zip' \
     --exclude='*.tsbuildinfo' \
     --exclude='*.log' \
+    --exclude="$ROOT_NAME/${WORK_DIR#"$ROOT_DIR"/}" \
     --exclude="$ROOT_NAME/apps/web" \
     --exclude="$ROOT_NAME/apps/admin" \
     --exclude="$ROOT_NAME/apps/api/dist" \
@@ -174,23 +236,19 @@ pack_backend_source() {
     "$ROOT_NAME"
 
   mv "$tmp_out" "$outfile"
-  local size
-  size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成后端源码包" "$step_start"
-  echo "✅ 后端源码包: $outfile ($size)"
-  GENERATED_BACKEND_SOURCE="$outfile"
+  report_archive "$outfile" "$step_start"
 }
 
 pack_backend_runtime() {
   local outfile="${1:-fateclaw-backend-v${VERSION}-runtime.tar.gz}"
-  local tmp_out="/tmp/$outfile"
-  local stage_dir
-  stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/fateclaw-backend-runtime.XXXXXX")
+  local tmp_out="$WORK_DIR/backend-runtime.tar.gz"
+  local stage_dir="$WORK_DIR/backend-runtime"
   local app_dir="$stage_dir/$ROOT_NAME"
   local step_start=$SECONDS
 
   echo "🔨 构建后端生产运行产物 ..."
-  pnpm run build:backend
+  pnpm run build:api
+  pnpm run build:agent-runtime
 
   echo "📦 打包后端生产运行包 v${VERSION} ..."
   mkdir -p "$app_dir/apps/api" "$app_dir/apps/agent-runtime" "$app_dir/packages/contracts"
@@ -216,9 +274,7 @@ pack_backend_runtime() {
   rewrite_runtime_package_for_npm "$app_dir/apps/agent-runtime/package.json"
   cp -R apps/agent-runtime/dist "$app_dir/apps/agent-runtime/dist"
   cp packages/contracts/package.json "$app_dir/packages/contracts/package.json"
-  # contracts 已改标准 tsc 构建包(P6):exports 指向 dist,运行时(apps/api/dist 编译产物)
-  # 经 import '@fateclaw/contracts/<域>' 解析到 dist/<域>/index.js。故运行包必须携带【dist】
-  # (build:backend 已含 build:contracts、此刻 dist 已生成),不再是 src(TS 源运行时用不到)。
+  # Contracts package exports resolve to compiled dist modules at runtime.
   cp -R packages/contracts/dist "$app_dir/packages/contracts/dist"
   find "$app_dir/apps/api/dist" "$app_dir/apps/agent-runtime/dist" \
     \( -name '*.test.js' -o -name '*.test.js.map' -o -name '*.test.d.ts' -o -name '*.test.d.ts.map' \) \
@@ -226,127 +282,90 @@ pack_backend_runtime() {
 
   node scripts/write-release-notices.mjs backend "$app_dir"
   tar czf "$tmp_out" -C "$stage_dir" "$ROOT_NAME"
-  rm -rf "$stage_dir"
-
   mv "$tmp_out" "$outfile"
-  local size
-  size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成后端生产运行包" "$step_start"
-  echo "✅ 后端生产运行包: $outfile ($size)"
-  GENERATED_BACKEND_RUNTIME="$outfile"
+  report_archive "$outfile" "$step_start"
 }
 
 pack_www_static() {
   local outfile="${1:-fateclaw-www-v${VERSION}-static.tar.gz}"
-  local tmp_out="/tmp/$outfile"
+  local tmp_out="$WORK_DIR/www-static.tar.gz"
   local step_start=$SECONDS
 
   echo "🔨 构建 www 静态产物 ..."
   rm -rf apps/web/.next apps/web/out
-  load_frontend_public_env
-  pnpm run build:www
+  pnpm --filter fateclaw-web run build
 
   node scripts/write-release-notices.mjs www apps/web/out
   echo "📦 打包 www 静态产物 v${VERSION} ..."
   tar czf "$tmp_out" -C apps/web/out .
 
   mv "$tmp_out" "$outfile"
-  local size
-  size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成 www 静态包" "$step_start"
-  echo "✅ www 包: $outfile ($size)"
-  GENERATED_WWW_STATIC="$outfile"
+  report_archive "$outfile" "$step_start"
 }
 
 pack_admin_static() {
   local outfile="${1:-fateclaw-admin-v${VERSION}-static.tar.gz}"
-  local tmp_out="/tmp/$outfile"
+  local tmp_out="$WORK_DIR/admin-static.tar.gz"
   local step_start=$SECONDS
 
   echo "🔨 构建 admin 静态产物 ..."
   rm -rf apps/admin/.next apps/admin/out
-  load_frontend_public_env
-  pnpm run build:admin
+  pnpm --filter fateclaw-admin run build
 
   node scripts/write-release-notices.mjs admin apps/admin/out
   echo "📦 打包 admin 静态产物 v${VERSION} ..."
   tar czf "$tmp_out" -C apps/admin/out .
 
   mv "$tmp_out" "$outfile"
-  local size
-  size=$(du -h "$outfile" | cut -f1)
-  log_duration "生成 admin 静态包" "$step_start"
-  echo "✅ admin 包: $outfile ($size)"
-  GENERATED_ADMIN_STATIC="$outfile"
+  report_archive "$outfile" "$step_start"
 }
 
 case "$MODE" in
-  all)
-    pack_backend_runtime
-    pack_www_static
-    pack_admin_static
-    ;;
-  backend-runtime)
-    pack_backend_runtime "${OUTFILE:-}"
-    ;;
-  api-runtime)
-    pack_backend_runtime "${OUTFILE:-}"
-    ;;
-  backend)
-    pack_backend_source "${OUTFILE:-}"
-    ;;
-  api)
-    pack_backend_source "${OUTFILE:-}"
-    ;;
-  backend-source)
-    pack_backend_source "${OUTFILE:-}"
-    ;;
-  api-source)
-    pack_backend_source "${OUTFILE:-}"
-    ;;
-  www)
-    pack_www_static "${OUTFILE:-}"
-    ;;
-  admin)
-    pack_admin_static "${OUTFILE:-}"
-    ;;
-  source)
-    pack_backend_source "${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
+  all|www|admin)
+    load_frontend_public_env
     ;;
 esac
 
-log_duration "总耗时" "$SCRIPT_START"
-echo ""
-echo "部署步骤:"
-if [ -n "$GENERATED_BACKEND_RUNTIME" ]; then
-  echo "  后端生产运行包（API + Agent Runtime，1Panel 推荐）:"
-  echo "    1. scp $GENERATED_BACKEND_RUNTIME user@server:~/"
-  echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_BACKEND_RUNTIME --strip-components=1 -C fateclaw"
-  echo "    3. cd fateclaw && npm install --omit=dev -f && npm run start"
-fi
-if [ -n "$GENERATED_BACKEND_SOURCE" ]; then
-  echo "  后端源码包:"
-  echo "    1. scp $GENERATED_BACKEND_SOURCE user@server:~/"
-  echo "    2. mkdir -p fateclaw && tar xzf $GENERATED_BACKEND_SOURCE --strip-components=1 -C fateclaw"
-  echo "    3. cd fateclaw && pnpm install && pnpm run build && pnpm run start"
-fi
-if [ -n "$GENERATED_WWW_STATIC" ]; then
-  echo "  www:"
-  echo "    1. scp $GENERATED_WWW_STATIC user@server:~/"
-  echo "    2. rm -rf /var/www/fateclaw-www/* && mkdir -p /var/www/fateclaw-www"
-  echo "    3. tar xzf $GENERATED_WWW_STATIC -C /var/www/fateclaw-www"
-fi
-if [ -n "$GENERATED_ADMIN_STATIC" ]; then
-  echo "  admin:"
-  echo "    1. scp $GENERATED_ADMIN_STATIC user@server:~/"
-  echo "    2. rm -rf /var/www/fateclaw-admin/* && mkdir -p /var/www/fateclaw-admin"
-  echo "    3. tar xzf $GENERATED_ADMIN_STATIC -C /var/www/fateclaw-admin"
-fi
-echo "  Nginx:"
-echo "    api 站点反代到 http://127.0.0.1:3000"
-echo "    /_next/static/ 长缓存 immutable"
-echo "    *.html 和 *.txt 不缓存 no-store"
-echo "    www 站点指向 /var/www/fateclaw-www，并为 /<route>.txt 路由数据配置到 /<route>/index.txt 的回退"
-echo "    其他 www 页面仍使用 try_files \$uri \$uri/ /index.html"
-echo "    admin 站点指向 /var/www/fateclaw-admin，并为 /<route>.txt 路由数据配置到 /<route>/index.txt 的回退"
-echo "    其他 admin 页面仍使用 try_files \$uri \$uri/ /index.html"
+case "$MODE" in
+  backend|api|backend-source|api-source|source)
+    ;;
+  *)
+    echo "🔨 构建共享 contracts ..."
+    if pnpm run build:contracts > "$WORK_DIR/contracts.log" 2>&1; then
+      :
+    else
+      status=$?
+      cat "$WORK_DIR/contracts.log" >&2
+      exit "$status"
+    fi
+    ;;
+esac
+
+case "$MODE" in
+  all)
+    run_pack_job "后端运行包" pack_backend_runtime
+    run_pack_job "www 静态包" pack_www_static
+    run_pack_job "admin 静态包" pack_admin_static
+    ;;
+  backend-runtime|api-runtime)
+    run_pack_job "后端运行包" pack_backend_runtime "${OUTFILE:-}"
+    ;;
+  backend|api|backend-source|api-source)
+    run_pack_job "后端源码包" pack_backend_source "${OUTFILE:-}"
+    ;;
+  www)
+    run_pack_job "www 静态包" pack_www_static "${OUTFILE:-}"
+    ;;
+  admin)
+    run_pack_job "admin 静态包" pack_admin_static "${OUTFILE:-}"
+    ;;
+  source)
+    run_pack_job "后端源码包" pack_backend_source "${OUTFILE:-fateclaw-v${VERSION}-source.tar.gz}"
+    ;;
+esac
+
+while [ "$ACTIVE_JOBS" -gt 0 ]; do
+  wait_pack_job
+done
+
+echo "⏱ 总耗时: $((SECONDS - SCRIPT_START))s"

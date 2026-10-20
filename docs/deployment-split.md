@@ -62,6 +62,12 @@ fateclaw-www-v<version>-static.tar.gz
 fateclaw-admin-v<version>-static.tar.gz
 ```
 
+Packaging builds shared contracts once, then builds and archives the backend,
+www, and admin in parallel with up to three workers. Use `pnpm run pack --jobs 2`
+to limit concurrency or `pnpm run pack --jobs 1` for sequential packaging.
+Successful builds print archive paths, sizes, and elapsed time; failed builds
+print their captured logs and stop the remaining workers.
+
 You can also package each target separately:
 
 ```bash
