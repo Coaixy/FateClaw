@@ -169,7 +169,7 @@ export function AiChatComposer({
       )}
 
       <div
-        className={`flex flex-col rounded-[28px] border bg-surface-raised transition-all duration-200 touch-manipulation ${
+        className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1.5 rounded-[24px] border bg-surface-raised p-2 transition-all duration-200 touch-manipulation ${
           sending
             ? 'border-primary/40 shadow-sm'
             : 'border-hairline shadow-sm focus-within:border-primary/40 focus-within:shadow-md focus-within:shadow-primary/5'
@@ -210,49 +210,49 @@ export function AiChatComposer({
           }
           disabled={composerDisabled}
           rows={1}
-          className="block min-h-14 max-h-32 w-full resize-none overflow-y-auto bg-transparent px-5 pt-3 pb-1 text-base leading-7 placeholder:text-muted/60 focus:outline-none! disabled:opacity-50"
+          className="col-start-2 row-start-1 block min-h-7 max-h-32 w-full resize-none overflow-y-auto bg-transparent px-1 py-0.5 text-base leading-6 placeholder:text-muted/60 focus:outline-none! disabled:opacity-50"
         />
-        <div className="flex items-center gap-2 px-3 pb-2">
-          {paipanAction && (
-            <button
-              type="button"
-              onClick={paipanAction.onOpen}
-              disabled={paipanAction.disabled || paipanAction.loading}
-              title={paipanAction.title}
-              aria-label={paipanAction.title}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/5 text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
-            >
-              {paipanAction.loading ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <Sparkles size={20} />
-              )}
-            </button>
-          )}
-          <div className="min-w-0 flex-1">{modelControl}</div>
+        {paipanAction && (
           <button
             type="button"
-            onClick={sending ? onStop : onSend}
-            disabled={actionDisabled}
-            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-on-primary transition-colors hover:bg-primary-active active:scale-95 disabled:cursor-not-allowed disabled:bg-primary/35"
-            aria-label={
-              stopping
-                ? t('aiChat.composer.stopping')
-                : sending
-                  ? t('aiChat.composer.stop')
-                  : t('aiChat.composer.send')
-            }
-            aria-busy={stopping || undefined}
+            onClick={paipanAction.onOpen}
+            disabled={paipanAction.disabled || paipanAction.loading}
+            title={paipanAction.title}
+            aria-label={paipanAction.title}
+            className="col-start-1 row-start-1 row-span-2 flex h-10 w-10 self-center shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/5 text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
           >
-            {stopping ? (
+            {paipanAction.loading ? (
               <Loader2 size={20} className="animate-spin" />
-            ) : sending ? (
-              <Square size={16} className="fill-current" />
             ) : (
-              <ArrowUp size={24} />
+              <Sparkles size={20} />
             )}
           </button>
-        </div>
+        )}
+        {modelControl && (
+          <div className="col-start-2 row-start-2 min-w-0">{modelControl}</div>
+        )}
+        <button
+          type="button"
+          onClick={sending ? onStop : onSend}
+          disabled={actionDisabled}
+          className="col-start-3 row-start-1 row-span-2 flex h-10 w-10 shrink-0 self-center cursor-pointer items-center justify-center rounded-full bg-primary text-on-primary transition-colors hover:bg-primary-active active:scale-95 disabled:cursor-not-allowed disabled:bg-primary/35"
+          aria-label={
+            stopping
+              ? t('aiChat.composer.stopping')
+              : sending
+                ? t('aiChat.composer.stop')
+                : t('aiChat.composer.send')
+          }
+          aria-busy={stopping || undefined}
+        >
+          {stopping ? (
+            <Loader2 size={20} className="animate-spin" />
+          ) : sending ? (
+            <Square size={16} className="fill-current" />
+          ) : (
+            <ArrowUp size={24} />
+          )}
+        </button>
         <span role="status" className="sr-only">
           {stopping ? t('aiChat.composer.stopping') : ''}
         </span>

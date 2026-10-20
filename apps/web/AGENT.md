@@ -112,6 +112,8 @@ The current main product entry point is `components/ai-chat/ai-chat-workspace.ts
 - `PaipanSheet` calls `/api/paipan/preview` and `/api/paipan/commit`; chart results enter the conversation as message `tool_context`.
 - Simple mode starts through the unified AI Chat turn flow, with no separate workflow route or client.
 
+For chart sizing, preview boundaries, full-screen reading, and the compact composer, see [Web chart layout](../../docs/web-chart-layout.md).
+
 ## UI characteristics
 
 - The current UI has a strong visual style, especially on the home page and dashboard, rather than a conventional admin-template appearance.

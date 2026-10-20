@@ -119,7 +119,7 @@ export function SharedChatSessionView() {
           </div>
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5">
+        <div data-artifact-viewport className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5">
           {loading ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 size={18} className="animate-spin text-muted" />

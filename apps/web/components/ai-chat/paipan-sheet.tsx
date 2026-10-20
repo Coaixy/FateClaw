@@ -1394,6 +1394,7 @@ export function PaipanSheet({
       open={open}
       onClose={onClose}
       variant="fullscreen-sheet"
+      fillHeight={sheet.resultStepActive}
       size="lg"
       title={t('aiChat.paipanSheet.title')}
       titleExtra={

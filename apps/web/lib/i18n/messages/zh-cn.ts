@@ -137,6 +137,12 @@ export const zhCNMessages = {
     },
   },
   artifact: {
+    expand: '全屏查看',
+    viewTitle: '{title}盘面',
+    fit: '完整盘面',
+    zoomIn: '放大盘面',
+    zoomOut: '缩小盘面',
+    close: '关闭盘面',
     copyText: '复制盘面文本',
     copied: '盘面文本已复制到剪贴板',
     copyEmpty: '该盘面暂无可复制的文本',

@@ -82,6 +82,11 @@ function wuxingColor(char?: string): string {
   return wuxing ? WUXING_TEXT[wuxing] : CHART.body;
 }
 
+function fortuneColumnCount(count: number): number {
+  const rows = Math.max(1, Math.ceil(count / 12));
+  return Math.max(1, Math.ceil(count / rows));
+}
+
 // 大运和流年只给天干十神时，地支十神按地支本气与日干关系补齐。
 function resolveTenStar(dayStem?: string, targetStem?: string): string {
   if (!dayStem || !targetStem) return '';
@@ -429,10 +434,10 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
   });
 
   return (
-    <div className="w-full space-y-3 font-sans [container-type:inline-size]">
+    <div className="w-full space-y-2 @[480px]/artifact:space-y-3 font-sans [container-type:inline-size]">
       {/* 顶部基础信息区 */}
       {(bazi?.birthTime || bazi?.baziString) && (
-        <div className="flex flex-wrap items-center gap-x-2 sm:gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline text-[11px] sm:text-xs">
+        <div className="flex flex-wrap items-center gap-x-2 @[480px]/artifact:gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline text-[11px] @[480px]/artifact:text-xs">
           {bazi?.birthTime && (
             <span className={CHART.body}>{bazi.birthTime}</span>
           )}
@@ -450,14 +455,14 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
         <table className="w-full table-fixed text-center border-collapse">
           <thead>
             <tr className="bg-surface-soft border-b border-hairline-soft">
-              <th className="py-1.5 px-0.5 sm:px-1 text-muted-soft font-medium text-[10px] sm:text-[11px] w-8 sm:w-10 border-r border-hairline-soft">
+              <th className="py-1.5 px-0.5 @[480px]/artifact:px-1 text-muted-soft font-medium text-[10px] @[480px]/artifact:text-[11px] w-8 @[480px]/artifact:w-10 border-r border-hairline-soft">
                 日期
               </th>
               {columnsData.map((col, idx) => (
                 <th
                   key={idx}
                   className={classNames(
-                    'py-1.5 px-0.5 text-muted font-medium text-[10px] sm:text-[11px] border-r border-hairline-soft last:border-r-0',
+                    'py-1.5 px-0.5 text-muted font-medium text-[10px] @[480px]/artifact:text-[11px] border-r border-hairline-soft last:border-r-0',
                     col.isHighlight && 'bg-chart-highlight',
                   )}
                 >
@@ -466,10 +471,10 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
               ))}
             </tr>
           </thead>
-          <tbody className="text-[11px] sm:text-xs">
+          <tbody className="text-[11px] @[480px]/artifact:text-xs">
             {/* 主星 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+              <td className="py-1 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft">
                 主星
               </td>
               {columnsData.map((col, idx) => (
@@ -493,14 +498,14 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             </tr>
             {/* 天干 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1.5 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+              <td className="py-1.5 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft">
                 天干
               </td>
               {columnsData.map((col, idx) => (
                 <td
                   key={idx}
                   className={classNames(
-                    `py-1.5 px-0.5 text-lg sm:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.stem)}`,
+                    `py-1.5 px-0.5 text-lg @[480px]/artifact:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.stem)}`,
                     col.isHighlight && 'bg-chart-highlight',
                   )}
                 >
@@ -510,14 +515,14 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             </tr>
             {/* 地支 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1.5 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+              <td className="py-1.5 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft">
                 地支
               </td>
               {columnsData.map((col, idx) => (
                 <td
                   key={idx}
                   className={classNames(
-                    `py-1.5 px-0.5 text-lg sm:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.branch)}`,
+                    `py-1.5 px-0.5 text-lg @[480px]/artifact:text-xl font-bold border-r border-hairline-soft last:border-r-0 ${wuxingColor(col.branch)}`,
                     col.isHighlight && 'bg-chart-highlight',
                   )}
                 >
@@ -528,7 +533,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                         <span
                           className={
                             CHART.mutedSoft +
-                            ' mt-1 text-[9px] sm:text-[10px] font-medium'
+                            ' mt-1 text-[9px] @[480px]/artifact:text-[10px] font-medium'
                           }
                         >
                           {col.branchTenStar}
@@ -543,7 +548,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             </tr>
             {/* 藏干 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft align-top">
+              <td className="py-1 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft align-top">
                 藏干
               </td>
               {columnsData.map((col, idx) => (
@@ -559,7 +564,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       {col.hiddenStems.map((h, hIdx) => (
                         <div
                           key={hIdx}
-                          className="flex items-center gap-[2px] text-[9px] sm:text-[10px] leading-none"
+                          className="flex items-center gap-[2px] text-[9px] @[480px]/artifact:text-[10px] leading-none"
                         >
                           <span
                             className={`${wuxingColor(h.stem)} font-medium`}
@@ -580,7 +585,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             </tr>
             {/* 星运 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+              <td className="py-1 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft">
                 星运
               </td>
               {columnsData.map((col, idx) => (
@@ -597,7 +602,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             </tr>
             {/* 自坐 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+              <td className="py-1 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft">
                 自坐
               </td>
               {columnsData.map((col, idx) => (
@@ -616,14 +621,14 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             </tr>
             {/* 纳音 */}
             <tr className="border-b border-hairline-soft">
-              <td className="py-1 text-muted-soft text-[10px] sm:text-[11px] bg-canvas border-r border-hairline-soft">
+              <td className="py-1 text-muted-soft text-[10px] @[480px]/artifact:text-[11px] bg-canvas border-r border-hairline-soft">
                 纳音
               </td>
               {columnsData.map((col, idx) => (
                 <td
                   key={idx}
                   className={classNames(
-                    'py-1 px-0.5 text-muted text-[9px] sm:text-[10px] leading-tight border-r border-hairline-soft last:border-r-0',
+                    'py-1 px-0.5 text-muted text-[9px] @[480px]/artifact:text-[10px] leading-tight border-r border-hairline-soft last:border-r-0',
                     col.isHighlight && 'bg-chart-highlight',
                   )}
                 >
@@ -639,7 +644,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       {(kongWang.length > 0 ||
         specialSigns?.ownSign ||
         specialSigns?.bodySign) && (
-        <div className="px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline-soft flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] sm:text-xs">
+        <div className="px-3 py-1.5 rounded-lg bg-surface-soft border border-hairline-soft flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] @[480px]/artifact:text-xs">
           {specialSigns?.ownSign && (
             <span>
               <span className={CHART.mutedSoft + ' mr-1.5'}>命宫</span>
@@ -671,7 +676,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
       {(decades.length > 0 || annuals.length > 0) && (
         <div className="bg-surface-card border border-hairline rounded-xl overflow-hidden shadow-sm mt-3">
           {visibleAnnualStartYear && visibleAnnualEndYear && (
-            <div className="flex items-center justify-between gap-2 border-b border-hairline-soft bg-surface-soft px-3 py-1.5 text-[10px] sm:text-[11px] text-muted">
+            <div className="flex items-center justify-between gap-2 border-b border-hairline-soft bg-surface-soft px-3 py-1.5 text-[10px] @[480px]/artifact:text-[11px] text-muted">
               <span className="font-medium text-body">大运流年</span>
               <span className="tabular-nums">
                 流年 {visibleAnnualStartYear}-{visibleAnnualEndYear} ·{' '}
@@ -693,7 +698,10 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                   大运
                 </span>
               </div>
-              <div className="-mb-px -mr-px flex flex-1 flex-wrap overflow-hidden">
+              <div
+                className="-mb-px -mr-px grid min-w-0 flex-1 overflow-hidden @[480px]/artifact:flex @[480px]/artifact:flex-wrap"
+                style={{ gridTemplateColumns: `repeat(${fortuneColumnCount(decades.length)}, minmax(0, 1fr))` }}
+              >
                 {decades.map((d, i) => {
                   const stem = d.heavenStem ?? d.sixtyCycle?.[0] ?? '';
                   const branch = d.earthBranch ?? d.sixtyCycle?.[1] ?? '';
@@ -706,7 +714,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       onClick={() => handleDecadeSelect(i)}
                       aria-pressed={isSelected}
                       className={classNames(
-                        'min-w-[clamp(1.95rem,11.5cqw,3rem)] flex-1 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors',
+                        'min-w-0 @[480px]/artifact:min-w-[clamp(1.95rem,11.5cqw,3rem)] flex-1 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.25rem,1.2cqw,0.5rem)] transition-colors',
                         isSelected
                           ? 'bg-surface-cream-strong'
                           : 'hover:bg-chart-highlight',
@@ -723,7 +731,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       >
                         {d.startAge}岁
                       </span>
-                      <div className="flex items-end gap-[1px] mt-[clamp(0.25rem,1.35cqw,0.375rem)]">
+                      <div className="flex flex-col items-center gap-0.5 @[480px]/artifact:flex-row @[480px]/artifact:items-end @[480px]/artifact:gap-[1px] mt-[clamp(0.25rem,1.35cqw,0.375rem)]">
                         <span
                           className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(stem)}`}
                         >
@@ -740,7 +748,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-end gap-[1px] mt-0.5">
+                      <div className="flex flex-col items-center gap-0.5 @[480px]/artifact:flex-row @[480px]/artifact:items-end @[480px]/artifact:gap-[1px] mt-0.5">
                         <span
                           className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(branch)}`}
                         >
@@ -777,7 +785,10 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                   流年
                 </span>
               </div>
-              <div className="-mb-px -mr-px flex flex-1 flex-wrap overflow-hidden">
+              <div
+                className="-mb-px -mr-px grid min-w-0 flex-1 overflow-hidden @[480px]/artifact:flex @[480px]/artifact:flex-wrap"
+                style={{ gridTemplateColumns: `repeat(${fortuneColumnCount(visibleAnnuals.length)}, minmax(0, 1fr))` }}
+              >
                 {visibleAnnuals.map((a, i) => {
                   const stem = a.heavenStem ?? a.sixtyCycle[0] ?? '';
                   const branch = a.earthBranch ?? a.sixtyCycle[1] ?? '';
@@ -790,7 +801,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                       onClick={() => handleAnnualSelect(a.year)}
                       aria-pressed={isSelected}
                       className={classNames(
-                        'min-w-[clamp(2.15rem,13.5cqw,3.55rem)] flex-1 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.35rem,1.8cqw,0.5rem)] transition-colors',
+                        'min-w-0 @[480px]/artifact:min-w-[clamp(2.15rem,13.5cqw,3.55rem)] flex-1 flex flex-col items-center border-b border-r border-hairline-soft py-[clamp(0.25rem,1.2cqw,0.5rem)] transition-colors',
                         isSelected
                           ? 'bg-surface-cream-strong'
                           : 'hover:bg-chart-highlight',
@@ -809,7 +820,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                           {a.age}岁
                         </span>
                       )}
-                      <div className="flex items-end gap-[1px] mt-[clamp(0.25rem,1.35cqw,0.375rem)]">
+                      <div className="flex flex-col items-center gap-0.5 @[480px]/artifact:flex-row @[480px]/artifact:items-end @[480px]/artifact:gap-[1px] mt-[clamp(0.25rem,1.35cqw,0.375rem)]">
                         <span
                           className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(stem)}`}
                         >
@@ -826,7 +837,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-end gap-[1px] mt-0.5">
+                      <div className="flex flex-col items-center gap-0.5 @[480px]/artifact:flex-row @[480px]/artifact:items-end @[480px]/artifact:gap-[1px] mt-0.5">
                         <span
                           className={`text-[clamp(12px,4.2cqw,16px)] font-bold leading-none ${wuxingColor(branch)}`}
                         >
@@ -881,7 +892,7 @@ export default function BaziChart({ data }: { data: BaziArtifactData }) {
             )}
           </div>
           {data.pattern?.description && (
-            <p className="text-muted leading-relaxed text-[11px] sm:text-xs">
+            <p className="text-muted leading-relaxed text-[11px] @[480px]/artifact:text-xs">
               {data.pattern.description}
             </p>
           )}

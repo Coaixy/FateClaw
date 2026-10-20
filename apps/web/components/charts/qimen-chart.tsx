@@ -415,25 +415,25 @@ export default function QimenChart({ data }: { data: QimenData }) {
   return (
     <div className="w-full bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden font-sans text-ink">
       {/* 顶部信息 */}
-      <div className="p-1.5 sm:p-2.5 border-b border-hairline bg-surface-soft">
+      <div className="p-1.5 @[480px]/artifact:p-2.5 border-b border-hairline bg-surface-soft">
         {/* 四柱 */}
-        <div className="flex gap-1 sm:gap-2">
+        <div className="flex gap-1 @[480px]/artifact:gap-2">
           {(['年柱', '月柱', '日柱', '时柱'] as const).map((label, idx) => (
             <div
               key={idx}
               className="flex-1 min-w-0 py-1 bg-canvas border border-hairline rounded flex flex-col items-center shadow-sm"
             >
-              <div className="text-[8px] sm:text-[10px] text-chart-earth leading-none mb-0.5">
+              <div className="text-[8px] @[480px]/artifact:text-[10px] text-chart-earth leading-none mb-0.5">
                 {label}
               </div>
-              <div className="text-[11px] sm:text-sm font-semibold text-ink tracking-tight">
+              <div className="text-[11px] @[480px]/artifact:text-sm font-semibold text-ink tracking-tight">
                 {sizhu[idx] || '-'}
               </div>
             </div>
           ))}
         </div>
         {/* 局数/旬首/值符/值使 */}
-        <div className="mt-1 sm:mt-1.5 grid grid-cols-2 gap-1 sm:gap-1.5 text-[10px] sm:text-xs">
+        <div className="mt-1 @[480px]/artifact:mt-1.5 grid grid-cols-2 gap-1 @[480px]/artifact:gap-1.5 text-[10px] @[480px]/artifact:text-xs">
           <div className="flex items-center justify-between bg-canvas border border-hairline-soft px-1.5 py-1 rounded">
             <span className={cn('font-medium shrink-0', CHART.muted)}>排局</span>
             <span className="text-ink font-semibold ml-1 truncate">{data.排局 ?? '-'}</span>
@@ -458,8 +458,8 @@ export default function QimenChart({ data }: { data: QimenData }) {
       </div>
 
       {/* 3x3 九宫格 */}
-      <div className="p-1 sm:p-2">
-        <div className="grid grid-cols-3 gap-1 sm:gap-2">
+      <div className="p-1 @[480px]/artifact:p-2">
+        <div className="grid grid-cols-3 gap-1 @[480px]/artifact:gap-2">
           {LUOSHU_ORDER.map((gua) => (
             <PalaceCell
               key={gua}
@@ -479,7 +479,7 @@ export default function QimenChart({ data }: { data: QimenData }) {
       </div>
 
       {/* 图例 */}
-      <div className="px-2 sm:px-3 py-1 border-t border-hairline-soft bg-surface-soft flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] sm:text-[10px] text-muted">
+      <div className="px-2 @[480px]/artifact:px-3 py-1 border-t border-hairline-soft bg-surface-soft flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] @[480px]/artifact:text-[10px] text-muted">
         <span>
           <span className="underline decoration-error decoration-2 underline-offset-2">值符</span>
         </span>

@@ -147,6 +147,12 @@ export const enMessages = {
     },
   },
   artifact: {
+    expand: 'Full screen',
+    viewTitle: '{title} chart',
+    fit: 'Fit chart',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    close: 'Close chart',
     copyText: 'Copy board text',
     copied: 'Board text copied to clipboard',
     copyEmpty: 'No board text available to copy',

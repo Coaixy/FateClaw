@@ -55,7 +55,7 @@ export function ModelSelector({
         }}
       >
         <summary
-          className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full px-3 text-ink hover:bg-surface-soft [&::-webkit-details-marker]:hidden"
+          className="flex min-h-6 cursor-pointer list-none items-center gap-1 rounded-full px-1 text-[11px] text-muted hover:bg-surface-soft [&::-webkit-details-marker]:hidden"
           aria-label={t('modelChoice.switch', { model: label })}
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : null}

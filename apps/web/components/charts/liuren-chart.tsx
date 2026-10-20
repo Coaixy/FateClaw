@@ -187,7 +187,7 @@ function ShenShaLines({ items }: { items?: LiurenData['shenSha'] }) {
   if (visibleItems.length === 0) return null;
 
   return (
-    <div className="mx-auto mt-2.5 flex max-w-[46rem] flex-wrap justify-center gap-x-2.5 gap-y-1 text-[11px] font-semibold leading-4 sm:text-[12px]">
+    <div className="mx-auto mt-2.5 flex max-w-[46rem] flex-wrap justify-center gap-x-2.5 gap-y-1 text-[11px] font-semibold leading-4 @[480px]/artifact:text-[12px]">
       {visibleItems.map((item) => (
         <span key={`${item.name}-${item.value}`} className="whitespace-nowrap text-muted">
           {item.name}
@@ -209,7 +209,7 @@ function PassageTable({ data }: { data: LiurenData }) {
   return (
     <div className="mx-auto grid w-full max-w-[34rem] grid-cols-[repeat(5,minmax(3.1rem,1fr))] items-center gap-x-3 gap-y-1.5 text-center">
       {['昼将', '夜将', '六亲', '遁干', '三传'].map((label) => (
-        <div key={label} className="text-[12px] font-semibold text-muted sm:text-[13px]">
+        <div key={label} className="text-[12px] font-semibold text-muted @[480px]/artifact:text-[13px]">
           {label}
         </div>
       ))}
@@ -230,7 +230,7 @@ function PassageTable({ data }: { data: LiurenData }) {
           <div
             key={`passage-${rowIndex}-${columnIndex}`}
             className={cn(
-              'text-[17px] font-bold leading-none sm:text-[19px]',
+              'text-[17px] font-bold leading-none @[480px]/artifact:text-[19px]',
               columnIndex === 0 || columnIndex === 1 || columnIndex === 2
                 ? CHART.ink
                 : valueColor(value),
@@ -290,14 +290,14 @@ function CourseTable({ data }: { data: LiurenData }) {
       <div className="grid grid-cols-[3rem_repeat(4,minmax(3.7rem,1fr))] gap-x-3 gap-y-1.5 text-center">
         {rows.map((row) => (
           <Fragment key={row.label}>
-            <div className="text-left text-[12px] font-semibold text-muted sm:text-[13px]">
+            <div className="text-left text-[12px] font-semibold text-muted @[480px]/artifact:text-[13px]">
               {row.label}
             </div>
             {row.values.map((value, index) => (
               <div
                 key={`${row.label}-${index}`}
                 className={cn(
-                  'text-[17px] font-bold leading-none sm:text-[19px]',
+                  'text-[17px] font-bold leading-none @[480px]/artifact:text-[19px]',
                   row.muted ? CHART.ink : valueColor(value),
                 )}
               >
@@ -307,17 +307,17 @@ function CourseTable({ data }: { data: LiurenData }) {
           </Fragment>
         ))}
 
-        <div className="text-left text-[12px] font-semibold text-muted sm:text-[13px]">
+        <div className="text-left text-[12px] font-semibold text-muted @[480px]/artifact:text-[13px]">
           四课
         </div>
         {courses.map((course, index) => {
           const [top, bottom] = coursePair(course);
           return (
             <div key={`course-${index}`} className="grid justify-items-center gap-0.5">
-              <div className="text-[19px] font-bold leading-none sm:text-[22px]">
+              <div className="text-[19px] font-bold leading-none @[480px]/artifact:text-[22px]">
                 <ColoredText value={top} />
               </div>
-              <div className="text-[19px] font-bold leading-none sm:text-[22px]">
+              <div className="text-[19px] font-bold leading-none @[480px]/artifact:text-[22px]">
                 <ColoredText value={bottom} />
               </div>
             </div>
@@ -339,14 +339,14 @@ function PlateRow({
 }) {
   return (
     <>
-      <div className="text-left text-[10px] font-semibold text-muted sm:text-[12px]">
+      <div className="text-left text-[10px] font-semibold text-muted @[480px]/artifact:text-[12px]">
         {label}
       </div>
       {values.map((value, index) => (
         <div
           key={`${label}-${index}`}
           className={cn(
-            'min-w-0 text-[13px] font-bold leading-none sm:text-[16px]',
+            'min-w-0 text-[13px] font-bold leading-none @[480px]/artifact:text-[16px]',
             muted ? CHART.body : valueColor(value),
           )}
         >
@@ -392,7 +392,7 @@ function PlateTable({ data }: { data: LiurenData }) {
 
   return (
     <div className="mt-5 pb-1">
-      <div className="mx-auto grid w-full max-w-[52rem] grid-cols-[2.55rem_repeat(12,minmax(0,1fr))] gap-x-1.5 gap-y-2 text-center sm:grid-cols-[3.7rem_repeat(12,minmax(0,1fr))] sm:gap-x-3">
+      <div className="mx-auto grid w-full max-w-[52rem] grid-cols-[2rem_repeat(12,minmax(0,1fr))] gap-x-[clamp(1px,0.5cqw,3px)] gap-y-2 text-center @[480px]/artifact:grid-cols-[3.7rem_repeat(12,minmax(0,1fr))] @[480px]/artifact:gap-x-3">
         {rows.map((row) => (
           <PlateRow
             key={row.label}
@@ -417,15 +417,15 @@ export default function LiurenChart({ data }: { data: LiurenData }) {
   const [yearPillar, monthPillar, dayPillar, hourPillar] = bazi;
 
   return (
-    <div className="w-full rounded-xl border border-hairline bg-surface-card px-2.5 py-3 font-serif text-body shadow-sm sm:px-4 sm:py-4">
+    <div className="w-full rounded-xl border border-hairline bg-surface-card px-2.5 py-3 font-serif text-body shadow-sm @[480px]/artifact:px-4 @[480px]/artifact:py-4">
       <header className="text-center">
-        <div className="flex flex-wrap items-baseline justify-center gap-x-2.5 gap-y-0.5 text-[20px] font-bold leading-tight sm:text-[24px]">
+        <div className="flex flex-wrap items-baseline justify-center gap-x-2.5 gap-y-0.5 text-[20px] font-bold leading-tight @[480px]/artifact:text-[24px]">
           {bazi.map((pillar, index) => (
             <span key={`${pillar}-${index}`}>
               <ColoredText value={pillar} />
             </span>
           ))}
-          <span className="text-[15px] text-muted sm:text-[17px]">
+          <span className="text-[15px] text-muted @[480px]/artifact:text-[17px]">
             ({displayMode(data.input?.mode)})
           </span>
           <span className="text-chart-water">
@@ -433,7 +433,7 @@ export default function LiurenChart({ data }: { data: LiurenData }) {
           </span>
         </div>
 
-        <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[13px] font-semibold leading-5 sm:text-[15px]">
+        <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[13px] font-semibold leading-5 @[480px]/artifact:text-[15px]">
           <span>{data.dateInfo?.xun || '○'}</span>
           <span>
             {data.dateInfo?.kong?.join('') || '○'}空
@@ -456,11 +456,11 @@ export default function LiurenChart({ data }: { data: LiurenData }) {
       </header>
 
       <main>
-        <section className="mt-8 sm:mt-9">
+        <section className="mt-8 @[480px]/artifact:mt-9">
           <PassageTable data={data} />
         </section>
 
-        <section className="mt-7 sm:mt-8">
+        <section className="mt-7 @[480px]/artifact:mt-8">
           <CourseTable data={data} />
         </section>
 

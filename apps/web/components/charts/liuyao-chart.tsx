@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useMemo } from 'react';
 import { cn } from '@/utils/chart/cn';
 import {
   getShiYingLabel,
@@ -9,6 +8,7 @@ import {
   type IchingYao,
 } from '@/utils/chart/iching-utils';
 import { CHART } from './chart-theme';
+import { ChartDetails } from './chart-details';
 
 interface GanZhi {
   tian?: string;
@@ -45,10 +45,8 @@ interface FuShenDisplay {
 
 const YAO_BOARD_GRID_CLASS =
   'grid grid-cols-[clamp(1.75rem,4.8cqw,3.25rem)_clamp(3.5rem,11cqw,6.75rem)_minmax(0,1fr)_clamp(0.85rem,2.2cqw,1.75rem)_minmax(0,1fr)] gap-x-[clamp(0.15rem,0.7cqw,0.42rem)]';
-const YAO_TEXT_CLASS =
-  'text-[clamp(11px,2.2cqw,14px)]';
-const YAO_SUB_TEXT_CLASS =
-  'text-[clamp(9px,1.8cqw,12px)]';
+const YAO_TEXT_CLASS = 'text-[clamp(11px,2.2cqw,14px)]';
+const YAO_SUB_TEXT_CLASS = 'text-[clamp(9px,1.8cqw,12px)]';
 
 const METHOD_LABEL: Record<string, string> = {
   dayan: '大衍筮法',
@@ -75,11 +73,7 @@ function resolveFuShenHostIndex(
   fu: NonNullable<IchingGua['fuShen']>[number],
 ): number | null {
   const hostPosition = Number(fu.hostPosition);
-  if (
-    !Number.isInteger(hostPosition) ||
-    hostPosition < 1 ||
-    hostPosition > 6
-  ) {
+  if (!Number.isInteger(hostPosition) || hostPosition < 1 || hostPosition > 6) {
     return null;
   }
   return hostPosition - 1;
@@ -126,15 +120,15 @@ function formatShenShaItems(shenSha?: ShenShaData) {
       const target = value?.filter(Boolean).join('·') ?? '';
       return target ? { name, target } : null;
     })
-    .filter((item): item is { name: string; target: string } =>
-      Boolean(item),
-    );
+    .filter((item): item is { name: string; target: string } => Boolean(item));
 }
 
 function YaoBar({ isYang: yang }: { isYang: boolean }) {
   const base = CHART.line;
-  const h = 'h-[clamp(0.45rem,1.35cqw,0.75rem)] max-[380px]:h-[0.36rem]';
-  const w = 'w-[clamp(1.7rem,6.6cqw,3.75rem)] max-[380px]:w-[1.45rem]';
+  const h =
+    'h-[clamp(0.45rem,1.35cqw,0.75rem)] @max-[380px]/artifact:h-[0.36rem]';
+  const w =
+    'w-[clamp(1.7rem,6.6cqw,3.75rem)] @max-[380px]/artifact:w-[1.45rem]';
   if (yang) {
     return <div className={`${w} ${h} ${base} rounded-[2px]`} />;
   }
@@ -153,10 +147,7 @@ function formatSuiXian(yao: IchingYao): string | null {
 
 function formatYaoExtra(yao: IchingYao): string | null {
   // 星宿 / 锁泊在盘面上只展示值，保持每爻信息紧凑。
-  const items = [
-    yao.xingXiu,
-    yao.suoBo,
-  ].filter(Boolean);
+  const items = [yao.xingXiu, yao.suoBo].filter(Boolean);
   return items.length > 0 ? items.join(' · ') : null;
 }
 
@@ -276,12 +267,16 @@ function GuaYaoCell({
 
   return (
     <div className={cn('min-w-0', dimmed && 'opacity-[0.55]')} title={title}>
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 sm:gap-x-2">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1 @[480px]/artifact:gap-x-2">
         <div
           className={cn(
-            compact ? 'text-[12px] max-[380px]:text-[10.5px]' : YAO_TEXT_CLASS,
-            'min-w-0 break-all font-semibold leading-tight max-[380px]:leading-[1.08] lg:break-normal',
-            inlineSubLine ? 'lg:whitespace-normal' : 'lg:whitespace-nowrap',
+            compact
+              ? 'text-[12px] @max-[380px]/artifact:text-[10.5px]'
+              : YAO_TEXT_CLASS,
+            'min-w-0 break-all font-semibold leading-tight @max-[380px]/artifact:leading-[1.08] @[640px]/artifact:break-normal',
+            inlineSubLine
+              ? '@[640px]/artifact:whitespace-normal'
+              : '@[640px]/artifact:whitespace-nowrap',
             CHART.ink,
           )}
         >
@@ -306,15 +301,20 @@ function GuaYaoCell({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-x-0.5 max-[380px]:gap-x-[2px] sm:gap-x-1">
+        <div className="flex shrink-0 items-center gap-x-0.5 @max-[380px]/artifact:gap-x-[2px] @[480px]/artifact:gap-x-1">
           {movingLabel && (
-            <span className={cn('text-[13px] font-bold leading-none max-[380px]:text-[11px]', CHART.ink)}>
+            <span
+              className={cn(
+                'text-[13px] font-bold leading-none @max-[380px]/artifact:text-[11px]',
+                CHART.ink,
+              )}
+            >
               {movingLabel}
             </span>
           )}
           <span
             className={cn(
-              'inline-flex w-[clamp(0.75rem,2.4cqw,1.2rem)] justify-center text-[clamp(10px,2.1cqw,15px)] font-bold leading-none max-[380px]:w-[0.75rem] max-[380px]:text-[10px]',
+              'inline-flex w-[clamp(0.75rem,2.4cqw,1.2rem)] justify-center text-[clamp(10px,2.1cqw,15px)] font-bold leading-none @max-[380px]/artifact:w-[0.75rem] @max-[380px]/artifact:text-[10px]',
               shiYingLabel ? CHART.ink : CHART.body,
             )}
           >
@@ -326,8 +326,10 @@ function GuaYaoCell({
       {!inlineSubLine && (
         <div
           className={cn(
-            compact ? 'text-[10px] max-[380px]:text-[8.5px]' : YAO_SUB_TEXT_CLASS,
-            'mt-0.5 min-h-[1em] whitespace-normal break-keep leading-tight max-[380px]:hidden max-[380px]:mt-0 max-[380px]:min-h-0 max-[380px]:leading-[1.05]',
+            compact
+              ? 'text-[10px] @max-[380px]/artifact:text-[8.5px]'
+              : YAO_SUB_TEXT_CLASS,
+            'mt-0.5 min-h-[1em] whitespace-normal break-keep leading-tight',
             CHART.body,
           )}
         >
@@ -412,9 +414,9 @@ function MobileYaoRow({
   const mainFuShenRows = fuShenRows.filter((item) => item.kind === '伏');
 
   return (
-    <div className="border-b border-hairline-soft px-1.5 py-1 last:border-0 max-[380px]:px-1 max-[380px]:py-0.5">
-      <div className="grid min-w-0 grid-cols-2 gap-1.5 max-[380px]:gap-1">
-        <div className="min-w-0 rounded-md border border-hairline-soft bg-canvas/60 px-1.5 py-1 max-[380px]:rounded-[4px] max-[380px]:px-1 max-[380px]:py-0.5">
+    <div className="border-b border-hairline-soft px-1.5 py-1 last:border-0 @max-[380px]/artifact:px-1 @max-[380px]/artifact:py-0.5">
+      <div className="grid min-w-0 grid-cols-2 gap-1.5 @max-[380px]/artifact:gap-1">
+        <div className="min-w-0 rounded-md border border-hairline-soft bg-canvas/60 px-1.5 py-1 @max-[380px]/artifact:rounded-[4px] @max-[380px]/artifact:px-1 @max-[380px]/artifact:py-0.5">
           <GuaYaoCell
             yao={benYao}
             isYang={benIsYang}
@@ -423,7 +425,7 @@ function MobileYaoRow({
             movingLabel={mark}
           />
         </div>
-        <div className="min-w-0 rounded-md border border-hairline-soft bg-canvas/60 px-1.5 py-1 max-[380px]:rounded-[4px] max-[380px]:px-1 max-[380px]:py-0.5">
+        <div className="min-w-0 rounded-md border border-hairline-soft bg-canvas/60 px-1.5 py-1 @max-[380px]/artifact:rounded-[4px] @max-[380px]/artifact:px-1 @max-[380px]/artifact:py-0.5">
           <GuaYaoCell
             yao={bianYao}
             isYang={bianIsYang}
@@ -433,10 +435,7 @@ function MobileYaoRow({
         </div>
       </div>
       {fuShenRows.length > 0 && (
-        <MobileFuShenRow
-          pangRows={pangFuShenRows}
-          fuRows={mainFuShenRows}
-        />
+        <MobileFuShenRow pangRows={pangFuShenRows} fuRows={mainFuShenRows} />
       )}
     </div>
   );
@@ -455,17 +454,17 @@ function MobileFuShenRow({
   ].filter((group) => group.rows.length > 0);
 
   return (
-    <div className="mt-0.5 min-w-0 rounded-md border border-hairline-soft bg-surface-soft px-1.5 py-0.5 text-[10px] leading-tight max-[380px]:mt-0 max-[380px]:rounded-[4px] max-[380px]:border-0 max-[380px]:bg-transparent max-[380px]:px-0.5 max-[380px]:py-0 max-[380px]:text-[8.5px] max-[380px]:leading-[1.05]">
-      <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-0.5 max-[380px]:gap-x-1 max-[380px]:gap-y-0">
+    <div className="mt-0.5 min-w-0 rounded-md border border-hairline-soft bg-surface-soft px-1.5 py-0.5 text-[10px] leading-tight @max-[380px]/artifact:mt-0 @max-[380px]/artifact:rounded-[4px] @max-[380px]/artifact:border-0 @max-[380px]/artifact:bg-transparent @max-[380px]/artifact:px-0.5 @max-[380px]/artifact:py-0 @max-[380px]/artifact:text-[8.5px] @max-[380px]/artifact:leading-[1.05]">
+      <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-0.5 @max-[380px]/artifact:gap-x-1 @max-[380px]/artifact:gap-y-0">
         {groups.map((group) => (
           <div key={group.label} className="min-w-0 max-w-full">
-            <span className="mr-1 font-medium text-chart-earth max-[380px]:mr-0.5">
+            <span className="mr-1 font-medium text-chart-earth @max-[380px]/artifact:mr-0.5">
               {group.label}
             </span>
             {group.rows.map((item, index) => (
               <span
                 key={`${item.kind}-${index}-${item.naJiaWuXing}`}
-                className="mr-2 inline-block min-w-0 max-w-full max-[380px]:mr-1"
+                className="mr-2 inline-block min-w-0 max-w-full @max-[380px]/artifact:mr-1"
                 title={formatFuShenMobileDetail(item)}
               >
                 <span className="font-semibold text-ink">
@@ -473,7 +472,7 @@ function MobileFuShenRow({
                   {item.naJiaWuXing}
                 </span>
                 {item.naYin && (
-                  <span className="ml-1 text-body max-[380px]:ml-0.5">
+                  <span className="ml-1 text-body @max-[380px]/artifact:ml-0.5">
                     {item.naYin}
                   </span>
                 )}
@@ -514,9 +513,9 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
     shenSha,
   } = data;
 
-  const [scriptureOpen, setScriptureOpen] = useState(false);
   const hasMovingGua = useMemo(
-    () => (benGua?.yaoList && zhiGua?.yaoList ? hasMovingYao(benGua, zhiGua) : false),
+    () =>
+      benGua?.yaoList && zhiGua?.yaoList ? hasMovingYao(benGua, zhiGua) : false,
     [benGua, zhiGua],
   );
   const hasScripture = !!(
@@ -553,11 +552,14 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
   const dimStaticZhiGua = !hasMovingGua;
 
   return (
-    <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans max-[380px]:rounded-md">
+    <div className="w-full min-w-0 [container-type:inline-size] bg-surface-card border border-hairline rounded-lg shadow-sm overflow-hidden text-ink font-sans @max-[380px]/artifact:rounded-md">
       {/* 起卦副信息 */}
-      {(method || solarTerm || monthJian || typeof dongYaoCount === 'number') && (
-        <div className="border-b border-hairline bg-surface-soft px-1.5 py-1 max-[380px]:px-1 max-[380px]:py-0.5 sm:px-3 sm:py-1.5">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] max-[380px]:gap-x-1.5 max-[380px]:text-[9px] sm:gap-x-3 sm:gap-y-1 sm:text-[clamp(10px,1.7cqw,12px)]">
+      {(method ||
+        solarTerm ||
+        monthJian ||
+        typeof dongYaoCount === 'number') && (
+        <div className="border-b border-hairline bg-surface-soft px-1.5 py-1 @max-[380px]/artifact:px-1 @max-[380px]/artifact:py-0.5 @[480px]/artifact:px-3 @[480px]/artifact:py-1.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] @max-[380px]/artifact:gap-x-1.5 @max-[380px]/artifact:text-[9px] @[480px]/artifact:gap-x-3 @[480px]/artifact:gap-y-1 @[480px]/artifact:text-[clamp(10px,1.7cqw,12px)]">
             {methodDisplay && (
               <div className="flex items-baseline gap-1 whitespace-nowrap">
                 <span className="text-chart-earth font-medium">起卦</span>
@@ -589,37 +591,43 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       {/* 1. 干支 / 空亡 / 神煞 表 */}
       {hasSizhu && (
         <div className="border-b border-hairline">
-          <div className="flex divide-x divide-hairline border-b border-hairline text-center text-[10px] max-[380px]:text-[9px] sm:text-[clamp(11px,2cqw,14px)]">
-            <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth max-[380px]:w-7 max-[380px]:py-0.5 sm:w-11">
+          <div className="flex divide-x divide-hairline border-b border-hairline text-center text-[10px] @max-[380px]/artifact:text-[9px] @[480px]/artifact:text-[clamp(11px,2cqw,14px)]">
+            <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth @max-[380px]/artifact:w-7 @max-[380px]/artifact:py-0.5 @[480px]/artifact:w-11">
               干支
             </div>
             {sizhu.map((bz, i) => (
-              <div key={i} className="flex-1 bg-canvas py-1 font-bold text-ink max-[380px]:py-0.5">
+              <div
+                key={i}
+                className="flex-1 bg-canvas py-1 font-bold text-ink @max-[380px]/artifact:py-0.5"
+              >
                 {bz || '-'}
               </div>
             ))}
           </div>
-          <div className="flex divide-x divide-hairline bg-canvas text-center text-[10px] max-[380px]:text-[9px] sm:text-[clamp(11px,2cqw,14px)]">
-            <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth max-[380px]:w-7 max-[380px]:py-0.5 sm:w-11">
+          <div className="flex divide-x divide-hairline bg-canvas text-center text-[10px] @max-[380px]/artifact:text-[9px] @[480px]/artifact:text-[clamp(11px,2cqw,14px)]">
+            <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth @max-[380px]/artifact:w-7 @max-[380px]/artifact:py-0.5 @[480px]/artifact:w-11">
               空亡
             </div>
             {kongCell.map((v, i) => (
-              <div key={i} className="flex-1 py-1 text-muted max-[380px]:py-0.5">
+              <div
+                key={i}
+                className="flex-1 py-1 text-muted @max-[380px]/artifact:py-0.5"
+              >
                 {v || '-'}
               </div>
             ))}
           </div>
           {shenShaItems.length > 0 && (
-            <div className="flex divide-x divide-hairline border-t border-hairline bg-canvas text-[10px] max-[380px]:text-[9px] sm:text-[clamp(11px,2cqw,14px)]">
-              <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth max-[380px]:w-7 max-[380px]:py-0.5 sm:w-11">
+            <div className="flex divide-x divide-hairline border-t border-hairline bg-canvas text-[10px] @max-[380px]/artifact:text-[9px] @[480px]/artifact:text-[clamp(11px,2cqw,14px)]">
+              <div className="flex w-8 shrink-0 items-center justify-center bg-surface-soft py-1 font-medium text-chart-earth @max-[380px]/artifact:w-7 @max-[380px]/artifact:py-0.5 @[480px]/artifact:w-11">
                 神煞
               </div>
-              <div className="flex-1 px-1 py-1 max-[380px]:overflow-x-auto max-[380px]:py-0.5 sm:px-1.5">
-                <div className="flex flex-wrap items-center gap-0.5 text-[10px] max-[380px]:flex-nowrap max-[380px]:text-[9px] sm:gap-1 sm:text-[clamp(10px,1.7cqw,12px)]">
+              <div className="min-w-0 flex-1 px-1 py-1 @max-[380px]/artifact:py-0.5 @[480px]/artifact:px-1.5">
+                <div className="flex flex-wrap items-center gap-0.5 text-[10px] @max-[380px]/artifact:text-[9px] @[480px]/artifact:gap-1 @[480px]/artifact:text-[clamp(10px,1.7cqw,12px)]">
                   {shenShaItems.map((item) => (
                     <span
                       key={item.name}
-                      className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 rounded border border-hairline-soft bg-surface-soft px-1 py-0.5 max-[380px]:shrink-0 max-[380px]:py-0 sm:px-1.5"
+                      className="inline-flex max-w-full flex-wrap items-baseline gap-x-1 rounded border border-hairline-soft bg-surface-soft px-1 py-0.5 @max-[380px]/artifact:py-0 @[480px]/artifact:px-1.5"
                     >
                       <span className="text-chart-earth font-medium">
                         {item.name}
@@ -640,7 +648,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       <div
         className={cn(
           YAO_BOARD_GRID_CLASS,
-          'hidden w-full items-start border-b border-hairline-soft bg-canvas px-[clamp(0.45rem,2.1cqw,1rem)] py-[clamp(0.45rem,1.15cqw,0.58rem)] lg:grid',
+          'hidden w-full items-start border-b border-hairline-soft bg-canvas px-[clamp(0.45rem,2.1cqw,1rem)] py-[clamp(0.45rem,1.15cqw,0.58rem)] @[640px]/artifact:grid',
         )}
       >
         <div
@@ -690,21 +698,26 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       </div>
 
       {/* 移动端改为分块布局，避免五列表格在窄屏挤压本卦、变卦和伏神文本。 */}
-      <div className="grid grid-cols-2 gap-2 border-b border-hairline-soft bg-canvas px-2 py-1.5 max-[380px]:gap-1 max-[380px]:px-1 max-[380px]:py-1 lg:hidden">
+      <div className="grid grid-cols-2 gap-2 border-b border-hairline-soft bg-canvas px-2 py-1.5 @max-[380px]/artifact:gap-1 @max-[380px]/artifact:px-1 @max-[380px]/artifact:py-1 @[640px]/artifact:hidden">
         <div className="min-w-0 text-center">
-          <div className="break-keep text-[13px] font-bold leading-tight text-ink max-[380px]:text-[11px]">
+          <div className="break-keep text-[13px] font-bold leading-tight text-ink @max-[380px]/artifact:text-[11px]">
             {guaHeaderLabel(benGua, '本卦')}
           </div>
         </div>
-        <div className={cn('min-w-0 text-center', dimStaticZhiGua && 'opacity-[0.55]')}>
-          <div className="break-keep text-[13px] font-bold leading-tight text-ink max-[380px]:text-[11px]">
+        <div
+          className={cn(
+            'min-w-0 text-center',
+            dimStaticZhiGua && 'opacity-[0.55]',
+          )}
+        >
+          <div className="break-keep text-[13px] font-bold leading-tight text-ink @max-[380px]/artifact:text-[11px]">
             {guaHeaderLabel(zhiGua, '变卦')}
           </div>
         </div>
       </div>
 
       {/* 3. 六爻主体 */}
-      <div className="hidden w-full pb-2 lg:block">
+      <div className="hidden w-full pb-2 @[640px]/artifact:block">
         <div className="w-full px-[clamp(0.45rem,2.1cqw,1rem)]">
           {indexOrder.map((i) => {
             const benYao = benGua.yaoList[i];
@@ -723,7 +736,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           })}
         </div>
       </div>
-      <div className="w-full pb-2 max-[380px]:pb-1 lg:hidden">
+      <div className="w-full pb-2 @max-[380px]/artifact:pb-1 @[640px]/artifact:hidden">
         {indexOrder.map((i) => {
           const benYao = benGua.yaoList[i];
           const bianYao = zhiGua.yaoList[i];
@@ -744,7 +757,7 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
       <div
         className={cn(
           YAO_BOARD_GRID_CLASS,
-          'hidden w-full items-center border-t border-hairline-soft bg-canvas px-[clamp(0.45rem,2.1cqw,1rem)] py-[clamp(0.3rem,0.9cqw,0.42rem)] text-[clamp(9px,1.55cqw,12px)] font-bold text-ink lg:grid',
+          'hidden w-full items-center border-t border-hairline-soft bg-canvas px-[clamp(0.45rem,2.1cqw,1rem)] py-[clamp(0.3rem,0.9cqw,0.42rem)] text-[clamp(9px,1.55cqw,12px)] font-bold text-ink @[640px]/artifact:grid',
         )}
       >
         <div aria-hidden="true" />
@@ -755,7 +768,12 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
           </span>
         </div>
         <div aria-hidden="true" />
-        <div className={cn('min-w-0 text-center', dimStaticZhiGua && 'opacity-[0.55]')}>
+        <div
+          className={cn(
+            'min-w-0 text-center',
+            dimStaticZhiGua && 'opacity-[0.55]',
+          )}
+        >
           <span className="text-ink">
             变卦 {zhiGua.palace ? `(${zhiGua.palace}宫)` : ''}
           </span>
@@ -764,33 +782,25 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
 
       {/* 5. 互卦 */}
       {huGua?.guaName && (
-        <div className="px-2 py-1.5 border-t border-hairline flex items-center gap-2 text-xs sm:px-3 sm:py-1 sm:text-[12px] bg-canvas">
+        <div className="px-2 py-1.5 border-t border-hairline flex items-center gap-2 text-xs @[480px]/artifact:px-3 @[480px]/artifact:py-1 @[480px]/artifact:text-[12px] bg-canvas">
           <span className="text-muted shrink-0">互卦</span>
           <span className="text-ink font-medium">{huGua.guaName}</span>
-          {huGua.palace && <span className="text-muted-soft">({huGua.palace}宫)</span>}
+          {huGua.palace && (
+            <span className="text-muted-soft">({huGua.palace}宫)</span>
+          )}
         </div>
       )}
 
       {/* 6. 经文（爻辞 / 彖辞）可折叠 */}
       {hasScripture && (
-        <div className="border-t border-hairline bg-canvas">
-          <button
-            type="button"
-            onClick={() => setScriptureOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-2 sm:px-5 py-1.5 text-xs sm:text-sm text-chart-earth hover:bg-chart-highlight transition-colors"
-          >
-            <span className="font-medium">卦爻辞 · 彖辞</span>
-            {scriptureOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-          {scriptureOpen && (
-            <div className="px-2 sm:px-5 pb-2.5 pt-0 space-y-2 text-[11px] sm:text-[12px] text-body leading-relaxed">
-              <ScriptureBlock label="本卦" gua={benGua} />
-              {zhiGua.guaName && zhiGua.guaName !== benGua.guaName && (
-                <ScriptureBlock label="变卦" gua={zhiGua} />
-              )}
-            </div>
-          )}
-        </div>
+        <ChartDetails title="卦爻辞 · 彖辞">
+          <div className="px-2 @[480px]/artifact:px-5 pb-2.5 pt-0 space-y-2 text-[11px] @[480px]/artifact:text-[12px] text-body leading-relaxed">
+            <ScriptureBlock label="本卦" gua={benGua} />
+            {zhiGua.guaName && zhiGua.guaName !== benGua.guaName && (
+              <ScriptureBlock label="变卦" gua={zhiGua} />
+            )}
+          </div>
+        </ChartDetails>
       )}
     </div>
   );
@@ -798,19 +808,24 @@ export default function LiuyaoChart({ data }: { data: LiuyaoData }) {
 
 function ScriptureBlock({ label, gua }: { label: string; gua: IchingGua }) {
   const movingSet = useMemo(
-    () => new Set((gua.yaoList ?? []).filter((y) => y.isMoving).map((y) => y.position)),
+    () =>
+      new Set(
+        (gua.yaoList ?? []).filter((y) => y.isMoving).map((y) => y.position),
+      ),
     [gua.yaoList],
   );
 
   return (
     <div className="space-y-2">
       <div className="flex items-baseline gap-1.5 pt-1 border-t border-hairline-soft">
-        <span className="text-[10px] sm:text-xs text-chart-earth font-medium whitespace-nowrap">
+        <span className="text-[10px] @[480px]/artifact:text-xs text-chart-earth font-medium whitespace-nowrap">
           {label}
         </span>
         <span className="text-ink font-semibold">{gua.guaName ?? '-'}</span>
         {gua.palace && (
-          <span className="text-[10px] sm:text-xs text-muted-soft">({gua.palace}宫)</span>
+          <span className="text-[10px] @[480px]/artifact:text-xs text-muted-soft">
+            ({gua.palace}宫)
+          </span>
         )}
       </div>
 
@@ -832,7 +847,9 @@ function ScriptureBlock({ label, gua }: { label: string; gua: IchingGua }) {
                 className={`flex gap-1.5 ${isMoving ? 'text-ink font-medium' : 'text-body'}`}
               >
                 {isMoving && (
-                  <span className="shrink-0 text-[10px] sm:text-xs text-ink mt-[1px]">●</span>
+                  <span className="shrink-0 text-[10px] @[480px]/artifact:text-xs text-ink mt-[1px]">
+                    ●
+                  </span>
                 )}
                 <span className="flex-1">{line}</span>
               </li>
@@ -843,7 +860,9 @@ function ScriptureBlock({ label, gua }: { label: string; gua: IchingGua }) {
 
       {gua.tuanCi && (
         <div>
-          <div className="text-[10px] sm:text-xs text-muted mb-0.5">彖辞</div>
+          <div className="text-[10px] @[480px]/artifact:text-xs text-muted mb-0.5">
+            彖辞
+          </div>
           <p className="text-body leading-relaxed">{gua.tuanCi}</p>
         </div>
       )}

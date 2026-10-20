@@ -60,6 +60,7 @@ export interface BottomSheetProps {
   'aria-label'?: string;
   hideCloseButton?: boolean;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  fillHeight?: boolean;
   children: ReactNode;
 }
 
@@ -75,6 +76,7 @@ export function BottomSheet({
   zIndex = 100,
   hideCloseButton = false,
   initialFocusRef,
+  fillHeight = false,
   children,
   ...rest
 }: BottomSheetProps) {
@@ -170,7 +172,9 @@ export function BottomSheet({
   // 移动端：贴底 + dvh（软键盘弹起容器自动收缩）
   // 桌面端：居中 + max-w 按 size 切换
   const containerHeightClass = isFullscreen
-    ? 'h-[100dvh] sm:h-auto sm:max-h-[90dvh]'
+    ? fillHeight
+      ? 'h-[100dvh] sm:h-[90dvh]'
+      : 'h-[100dvh] sm:h-auto sm:max-h-[90dvh]'
     : 'max-h-[92dvh] sm:max-h-[85dvh]';
   const panelRadiusClass = isFullscreen
     ? 'rounded-none sm:rounded-3xl'
@@ -237,7 +241,7 @@ export function BottomSheet({
         )}
 
         {/* 内容区（flex-1 + 滚动，高度由外层 dvh 托管） */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div data-artifact-viewport className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {children}
         </div>
 

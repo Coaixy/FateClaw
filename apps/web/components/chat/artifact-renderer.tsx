@@ -1,14 +1,10 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-import { Copy } from 'lucide-react';
+import { Copy, Maximize2 } from 'lucide-react';
 
 import type { SkillContextEntry } from '@/features/chat/api';
 import { ChartErrorBoundary } from '@/components/charts/chart-error-boundary';
@@ -16,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 import { cn } from '@/utils/chart/cn';
+import { ArtifactViewer } from './artifact-viewer';
+import { ResponsiveArtifactFrame } from './responsive-artifact-frame';
 
 const BaziChart = dynamic(() => import('@/components/charts/bazi-chart'), {
   ssr: false,
@@ -42,199 +40,37 @@ const JingzhanChart = dynamic(
 
 interface ArtifactRendererProps {
   entries: SkillContextEntry[];
-  /**
-   * 是否按当前视口剩余高度等比缩放盘面。
-   *
-   * 聊天流里的盘面会随着新消息插入被推到视口下方，如果按当前位置计算剩余高度，
-   * 旧盘面会被误判成空间不足而持续缩小；只有弹层预览这类固定视窗才需要开启。
-   */
+  /** Deduct content above the chart only inside a bounded preview. */
   fitViewportHeight?: boolean;
 }
 
-interface ArtifactFitState {
-  width: number;
-  height: number;
-  scale: number;
-}
-
-/**
- * 图表保持较大的横向阅读面积；高度压缩交给各图表内部的行高和比例控制。
- */
-const CHART_SHELL_CLASSNAME: Partial<Record<SkillContextEntry['skill'], string>> = {
-  'qimen-paipan':
-    'lg:max-w-[min(27rem,calc(100vh-20rem))] xl:max-w-[min(29rem,calc(100vh-21rem))]',
-  'ziwei-paipan':
-    'lg:max-w-[40rem] xl:max-w-[42rem]',
-  'jingzhan-paipan':
-    'lg:max-w-[min(29rem,calc(100vh-18rem))] xl:max-w-[min(31rem,calc(100vh-19rem))]',
-  'meihua-paipan': 'lg:max-w-[900px] xl:max-w-[960px]',
-  'liuren-paipan': 'lg:max-w-[960px] xl:max-w-[1020px]',
-  'iching-paipan': 'md:max-w-[960px] lg:max-w-[1040px] xl:max-w-[1120px]',
-  'bazi-paipan': 'lg:max-w-[880px] xl:max-w-[940px]',
+const CHART_PRESENTATION: Partial<
+  Record<
+    SkillContextEntry['skill'],
+    {
+      shellClassName: string;
+      layoutAspectRatio?: number;
+      minContentWidth?: number;
+    }
+  >
+> = {
+  'qimen-paipan': {
+    shellClassName: 'max-w-[35rem]',
+    // Keep the star name and stem-state columns intact before fitting narrow screens.
+    minContentWidth: 320,
+  },
+  'ziwei-paipan': {
+    shellClassName: 'max-w-[44rem]',
+    layoutAspectRatio: 2 / 3,
+    // Each palace needs an 80px layout column before uniform scaling preserves its contents.
+    minContentWidth: 320,
+  },
+  'jingzhan-paipan': { shellClassName: 'max-w-[36rem]' },
+  'meihua-paipan': { shellClassName: 'max-w-[50rem]' },
+  'liuren-paipan': { shellClassName: 'max-w-[44rem]' },
+  'iching-paipan': { shellClassName: 'max-w-[52rem]' },
+  'bazi-paipan': { shellClassName: 'max-w-[55rem]' },
 };
-
-// 这些盘面在移动端聊天流里更适合固定高度内完整预览。
-const FIT_MOBILE_CHAT_HEIGHT_SKILLS = new Set<SkillContextEntry['skill']>([
-  'bazi-paipan',
-  'iching-paipan',
-  'qimen-paipan',
-  'liuren-paipan',
-  'meihua-paipan',
-  'jingzhan-paipan',
-]);
-
-/**
- * 盘面自适应外壳默认只按容器宽度缩放；固定视窗场景可额外按可用高度缩放。
- *
- * @param props.children 实际盘面节点。
- * @param props.fitViewportHeight 是否把当前视口剩余高度纳入缩放计算。
- * @param props.fitMobileChatHeight 移动端聊天流是否允许按固定高度上限等比缩放。
- * @returns 自动适配展示区域的盘面容器。
- */
-function ResponsiveArtifactFrame({
-  children,
-  fitViewportHeight = false,
-  fitMobileChatHeight = true,
-}: {
-  children: ReactNode;
-  fitViewportHeight?: boolean;
-  fitMobileChatHeight?: boolean;
-}) {
-  const shellRef = useRef<HTMLDivElement>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
-  const heightProbeRef = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState<ArtifactFitState>({
-    width: 0,
-    height: 0,
-    scale: 1,
-  });
-
-  useEffect(() => {
-    const updateFit = () => {
-      const shell = shellRef.current;
-      const board = boardRef.current;
-      if (!shell || !board) return;
-
-      const shellWidth = shell.clientWidth;
-      const naturalWidth = Math.max(shellWidth, board.scrollWidth);
-      const naturalHeight = board.scrollHeight;
-      const widthScale =
-        naturalWidth > 0 ? Math.min(1, shellWidth / naturalWidth) : 1;
-      let heightScale = 1;
-
-      // 小屏弹层本身可纵向滚动，强行按高度缩放会让六爻等信息密集盘面变得难读。
-      const shouldFitHeight =
-        fitViewportHeight &&
-        (typeof window === 'undefined' ||
-          window.matchMedia('(min-width: 640px)').matches);
-      const shouldFitMobileChatHeight =
-        !fitViewportHeight &&
-        fitMobileChatHeight &&
-        typeof window !== 'undefined' &&
-        window.matchMedia('(max-width: 639px)').matches;
-
-      if (shouldFitHeight) {
-        const probeHeight =
-          heightProbeRef.current?.getBoundingClientRect().height ?? 0;
-        const shellTop = shell.getBoundingClientRect().top;
-        // 弹层内的盘面需要考虑底部固定操作区；聊天流禁用该逻辑，避免滚动位置影响盘面尺寸。
-        const viewportRemainingHeight =
-          typeof window === 'undefined'
-            ? probeHeight
-            : window.innerHeight - shellTop - 136;
-        const availableHeight = Math.max(
-          320,
-          Math.min(
-            probeHeight || viewportRemainingHeight,
-            viewportRemainingHeight,
-          ),
-        );
-        heightScale =
-          naturalHeight > 0
-            ? Math.min(1, availableHeight / naturalHeight)
-            : 1;
-      } else if (shouldFitMobileChatHeight) {
-        // 聊天流移动端不按滚动位置计算，只给高密度盘面一个固定上限，方便一屏查看完整盘面。
-        const mobileChartMaxHeight = window.innerHeight * 0.64;
-        heightScale =
-          naturalHeight > 0
-            ? Math.min(1, mobileChartMaxHeight / naturalHeight)
-            : 1;
-      }
-
-      const nextScale = Math.min(widthScale, heightScale);
-      const nextFit = {
-        width: naturalWidth,
-        height: naturalHeight,
-        scale: nextScale,
-      };
-
-      setFit((previous) => {
-        const stable =
-          Math.abs(previous.width - nextFit.width) < 0.5 &&
-          Math.abs(previous.height - nextFit.height) < 0.5 &&
-          Math.abs(previous.scale - nextFit.scale) < 0.001;
-        return stable ? previous : nextFit;
-      });
-    };
-
-    updateFit();
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateFit);
-      return () => window.removeEventListener('resize', updateFit);
-    }
-
-    const resizeObserver = new ResizeObserver(updateFit);
-    if (shellRef.current) resizeObserver.observe(shellRef.current);
-    if (boardRef.current) resizeObserver.observe(boardRef.current);
-    if (heightProbeRef.current) {
-      resizeObserver.observe(heightProbeRef.current);
-    }
-    window.addEventListener('resize', updateFit);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', updateFit);
-    };
-  }, [fitMobileChatHeight, fitViewportHeight]);
-
-  const contentWidth = fit.width || undefined;
-  const visualWidth = fit.width ? fit.width * fit.scale : undefined;
-  const visualHeight = fit.height ? fit.height * fit.scale : undefined;
-
-  return (
-    <div ref={shellRef} className="relative w-full min-w-0">
-      <div
-        ref={heightProbeRef}
-        aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 h-[var(--artifact-fit-max-height,calc(100dvh-11rem))] w-0 opacity-0"
-      />
-      <div
-        className="mx-auto overflow-visible"
-        style={{
-          width: visualWidth ? `${visualWidth}px` : undefined,
-          maxWidth: '100%',
-          height: visualHeight ? `${visualHeight}px` : undefined,
-        }}
-      >
-        <div
-          ref={boardRef}
-          className="min-w-0"
-          style={{
-            width: contentWidth ? `${contentWidth}px` : '100%',
-            maxWidth: contentWidth ? undefined : '100%',
-            transform:
-              fit.scale === 1 ? undefined : `scale(${fit.scale})`,
-            transformOrigin: 'top left',
-          }}
-        >
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function resolveChart(entry: SkillContextEntry) {
   const data = entry.artifactData as never;
@@ -258,24 +94,46 @@ function resolveChart(entry: SkillContextEntry) {
   }
 }
 
+function ArtifactChartMount({
+  host,
+  active = true,
+}: {
+  host: HTMLDivElement | null;
+  active?: boolean;
+}) {
+  const slotRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!slot || !host || !active) return;
+    // Reparent the portal container, preserving the chart's React state and event ownership.
+    slot.appendChild(host);
+    return () => {
+      if (host.parentNode === slot) slot.removeChild(host);
+    };
+  }, [active, host]);
+  return <div ref={slotRef} className="w-full min-w-0" />;
+}
+
 function ArtifactBlock({
   entry,
-  index,
   fitViewportHeight,
 }: {
   entry: SkillContextEntry;
-  index: number;
   fitViewportHeight: boolean;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
+  const [expanded, setExpanded] = useState(false);
+  const [chartHost, setChartHost] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    setChartHost(document.createElement('div'));
+  }, []);
   const chart = resolveChart(entry);
   if (!chart || entry.artifactData == null) return null;
 
   const title = entry.artifactTitle ?? entry.skill;
-  const shellClassName =
-    CHART_SHELL_CLASSNAME[entry.skill] ?? 'lg:max-w-[880px] xl:max-w-[940px]';
-  const fitMobileChatHeight = FIT_MOBILE_CHAT_HEIGHT_SKILLS.has(entry.skill);
+  const { shellClassName, layoutAspectRatio, minContentWidth } =
+    CHART_PRESENTATION[entry.skill] ?? { shellClassName: 'max-w-[55rem]' };
 
   // entry.output 是后端为盘面生成的 formatter 文本（已分小节、预标回头生克/进退神），
   // 给卦师一个「复制盘面文本」入口，方便拿去复盘或归档。导出内容即 formatter 正文原文。
@@ -301,27 +159,28 @@ function ArtifactBlock({
   return (
     <div className="mt-1">
       <ChartErrorBoundary fallbackTitle={`${title} 渲染失败`}>
-        <div
-          key={index}
-          className={cn(
-            'w-full min-w-0 mx-auto',
-            shellClassName,
-          )}
-        >
-          {/* Ziwei reflows at container width; height scaling makes palace text unreadable. */}
-          {entry.skill === 'ziwei-paipan' ? chart : (
-            <ResponsiveArtifactFrame
-              fitMobileChatHeight={fitMobileChatHeight}
-              fitViewportHeight={fitViewportHeight}
-            >
-              {chart}
-            </ResponsiveArtifactFrame>
-          )}
+        <div className={cn('w-full min-w-0 mx-auto', shellClassName)}>
+          <ResponsiveArtifactFrame
+            fitViewportHeight={fitViewportHeight}
+            minContentWidth={minContentWidth}
+            layoutAspectRatio={layoutAspectRatio}
+          >
+            <ArtifactChartMount host={chartHost} active={!expanded} />
+          </ResponsiveArtifactFrame>
         </div>
       </ChartErrorBoundary>
-      {/* 复制按钮放在错误边界外：即便盘面图渲染失败，formatter 文本仍可导出。 */}
-      {exportText ? (
-        <div className={cn('mx-auto mt-1.5 flex justify-end', shellClassName)}>
+      <div
+        className={cn('mx-auto mt-1.5 flex justify-end gap-1', shellClassName)}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<Maximize2 size={14} />}
+          onClick={() => setExpanded(true)}
+        >
+          {t('artifact.expand')}
+        </Button>
+        {exportText ? (
           <Button
             variant="ghost"
             size="sm"
@@ -330,18 +189,36 @@ function ArtifactBlock({
           >
             {t('artifact.copyText')}
           </Button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+      {chartHost &&
+        createPortal(
+          <ChartErrorBoundary fallbackTitle={`${title} 渲染失败`}>
+            {chart}
+          </ChartErrorBoundary>,
+          chartHost,
+        )}
+      {expanded && (
+        <ArtifactViewer
+          title={title}
+          chartClassName={shellClassName}
+          layoutAspectRatio={layoutAspectRatio}
+          minContentWidth={minContentWidth}
+          onClose={() => setExpanded(false)}
+        >
+          <ArtifactChartMount host={chartHost} />
+        </ArtifactViewer>
+      )}
     </div>
   );
 }
 
 /**
- * 渲染 Agent 工具产生的结构化盘面，并按使用场景选择尺寸适配策略。
+ * Render structured chart artifacts inside their measured presentation boundary.
  *
- * @param props.entries 需要展示的工具上下文列表。
- * @param props.fitViewportHeight 是否按视口剩余高度缩放，聊天流默认关闭以保持可读尺寸。
- * @returns 可直接嵌入聊天消息或排盘弹层的盘面节点。
+ * @param props.entries Tool context entries containing chart data.
+ * @param props.fitViewportHeight Deduct the preview's preceding content from its height budget.
+ * @returns Charts and their reading and text-export actions.
  */
 export function ArtifactRenderer({
   entries,
@@ -354,7 +231,6 @@ export function ArtifactRenderer({
         <ArtifactBlock
           key={`${entry.skill}-${i}`}
           entry={entry}
-          index={i}
           fitViewportHeight={fitViewportHeight}
         />
       ))}

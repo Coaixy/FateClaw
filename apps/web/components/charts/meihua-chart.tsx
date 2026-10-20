@@ -136,20 +136,20 @@ function YaoLine({
 }) {
   const lineClassName = moving ? CHART.primaryBg : CHART.line;
   return (
-    <div className="relative flex h-5 items-center justify-center sm:h-6">
+    <div className="relative flex h-5 items-center justify-center @[480px]/artifact:h-6">
       {value === 'yang' ? (
         <span
-          className={`h-2 w-full rounded-[2px] sm:h-2.5 ${lineClassName}`}
+          className={`h-2 w-full rounded-[2px] @[480px]/artifact:h-2.5 ${lineClassName}`}
         />
       ) : (
         <span className="grid w-full grid-cols-[1fr_18%_1fr] items-center">
-          <span className={`h-2 rounded-[2px] sm:h-2.5 ${lineClassName}`} />
+          <span className={`h-2 rounded-[2px] @[480px]/artifact:h-2.5 ${lineClassName}`} />
           <span />
-          <span className={`h-2 rounded-[2px] sm:h-2.5 ${lineClassName}`} />
+          <span className={`h-2 rounded-[2px] @[480px]/artifact:h-2.5 ${lineClassName}`} />
         </span>
       )}
       {moving && (
-        <span className="absolute -right-3 h-1.5 w-1.5 rounded-full bg-primary sm:-right-4 sm:h-2 sm:w-2" />
+        <span className="absolute -right-3 h-1.5 w-1.5 rounded-full bg-primary @[480px]/artifact:-right-4 @[480px]/artifact:h-2 @[480px]/artifact:w-2" />
       )}
     </div>
   );
@@ -166,7 +166,7 @@ function HexagramDiagram({
   if (!lines || lines.length === 0) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[5.7rem] flex-col gap-1.5 sm:gap-2">
+    <div className="mx-auto flex w-full max-w-[5.7rem] flex-col gap-1.5 @[480px]/artifact:gap-2">
       {[...lines].reverse().map((line, displayIndex) => {
         const position = lines.length - displayIndex;
         return (
@@ -191,18 +191,18 @@ function HexagramColumn({
   movingLine?: number;
 }) {
   return (
-    <div className="grid min-w-0 grid-rows-[2.75rem_9.25rem_2rem] items-center justify-items-center gap-1 sm:grid-rows-[3rem_10.5rem_2rem]">
+    <div className="grid min-w-0 grid-rows-[2.75rem_9.25rem_2rem] items-center justify-items-center gap-1 @[480px]/artifact:grid-rows-[3rem_10.5rem_2rem]">
       <div className="flex min-w-0 flex-col items-center justify-end gap-1 text-center">
-        <div className="max-w-full text-[12px] font-semibold leading-tight text-ink sm:text-[14px]">
+        <div className="max-w-full text-[12px] font-semibold leading-tight text-ink @[480px]/artifact:text-[14px]">
           {hexagram?.fullName ?? hexagram?.name ?? '-'}
         </div>
-        <div className="text-[9px] leading-none text-muted sm:text-[10px]">
+        <div className="text-[9px] leading-none text-muted @[480px]/artifact:text-[10px]">
           {formatTrigram(hexagram?.upperTrigram)} /{' '}
           {formatTrigram(hexagram?.lowerTrigram)}
         </div>
       </div>
       <HexagramDiagram hexagram={hexagram} movingLine={movingLine} />
-      <div className="text-[11px] font-semibold text-ink sm:text-[12px]">
+      <div className="text-[11px] font-semibold text-ink @[480px]/artifact:text-[12px]">
         [{label}]
       </div>
     </div>
@@ -269,11 +269,11 @@ export default function MeihuaChart({ data }: { data: MeihuaData }) {
         </div>
       </div>
 
-      <div className="bg-canvas px-2 py-4 sm:px-4 sm:py-5">
-        <div className="grid grid-cols-[1.25rem_repeat(5,minmax(0,1fr))] gap-2 sm:grid-cols-[1.75rem_repeat(5,minmax(0,1fr))] sm:gap-4">
-          <div className="grid grid-rows-[2.75rem_9.25rem_2rem] items-center justify-items-center gap-1 sm:grid-rows-[3rem_10.5rem_2rem]">
+      <div className="bg-canvas px-2 py-4 @[480px]/artifact:px-4 @[480px]/artifact:py-5">
+        <div className="grid grid-cols-[1.25rem_repeat(5,minmax(0,1fr))] gap-2 @[480px]/artifact:grid-cols-[1.75rem_repeat(5,minmax(0,1fr))] @[480px]/artifact:gap-4">
+          <div className="grid grid-rows-[2.75rem_9.25rem_2rem] items-center justify-items-center gap-1 @[480px]/artifact:grid-rows-[3rem_10.5rem_2rem]">
             <span />
-            <div className="grid h-full grid-rows-2 items-center text-[18px] font-semibold text-ink sm:text-[20px]">
+            <div className="grid h-full grid-rows-2 items-center text-[18px] font-semibold text-ink @[480px]/artifact:text-[20px]">
               <span>{roleLabelForPosition(data, 'upper')}</span>
               <span>{roleLabelForPosition(data, 'lower')}</span>
             </div>
@@ -291,7 +291,7 @@ export default function MeihuaChart({ data }: { data: MeihuaData }) {
         </div>
       </div>
 
-      <div className="grid gap-2 border-t border-hairline bg-surface-soft px-3 py-3 text-[12px] text-body sm:grid-cols-2 sm:px-4">
+      <div className="grid gap-2 border-t border-hairline bg-surface-soft px-3 py-3 text-[12px] text-body @[480px]/artifact:grid-cols-2 @[480px]/artifact:px-4">
         <div className="rounded-lg border border-hairline bg-canvas/35 px-3 py-2">
           <span className="text-muted">体卦</span>
           <span className="ml-2 font-semibold text-ink">
@@ -311,7 +311,7 @@ export default function MeihuaChart({ data }: { data: MeihuaData }) {
           </span>
         </div>
         {(time?.solar?.text || time?.lunar?.text) && (
-          <div className="rounded-lg border border-hairline bg-canvas/35 px-3 py-2 sm:col-span-2">
+          <div className="rounded-lg border border-hairline bg-canvas/35 px-3 py-2 @[480px]/artifact:col-span-2">
             <span className="text-muted">时间</span>
             <span className="ml-2 text-ink">
               {[time?.solar?.text, time?.lunar?.text]

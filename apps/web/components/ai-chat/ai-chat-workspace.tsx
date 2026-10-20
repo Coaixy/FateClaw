@@ -942,6 +942,7 @@ function AiChatWorkspaceContent() {
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={chatMessages.scrollRef}
+          data-artifact-viewport
           className={`relative min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 lg:py-5 ${
             chatMessages.sending ? '' : 'scroll-smooth'
           }`}
@@ -1003,7 +1004,7 @@ function AiChatWorkspaceContent() {
               </p>
             )}
             {composer}
-            <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[10px] text-muted/50 select-none">
+            <p className="mt-1 flex items-center justify-center gap-1 text-center text-[10px] leading-3 text-muted/50 select-none">
               <Sparkles size={10} strokeWidth={1.8} aria-hidden="true" />
               <span>{t('aiChat.composer.aiDisclaimer')}</span>
             </p>

@@ -14,6 +14,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Change access or charging behavior | [Entitlements and billing](membership-entitlement-current.md) | Membership gates and reservation/settlement behavior |
 | Control new account registration | [Registration invitations](registration-invites.md) | Paid-user allowances, single-use codes, refund accounting and owner controls |
 | Check public AI availability | [Public service status](service-status.md) | Six-hour shared probes, public results and resource bounds |
+| Change chart or chat-input layout | [Web chart layout](web-chart-layout.md) | Container fitting, full-screen reading, chart details, and compact input |
 | Manage public feedback | [Issues](issues.md) | Anonymous discussion, private attribution, moderation and abuse limits |
 | Publish operational notices | [Popup announcements](announcements.md) | Admin publishing, versioned user dialogs and browser dismissal |
 | Configure model supply and failover | [Official model pool](official-model-pool.md) | Mixed-model nodes, weighted routing, circuit recovery and billing |

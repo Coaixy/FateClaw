@@ -137,6 +137,12 @@ export const zhTWMessages = {
     },
   },
   artifact: {
+    expand: '全螢幕查看',
+    viewTitle: '{title}盤面',
+    fit: '完整盤面',
+    zoomIn: '放大盤面',
+    zoomOut: '縮小盤面',
+    close: '關閉盤面',
     copyText: '複製盤面文字',
     copied: '盤面文字已複製到剪貼簿',
     copyEmpty: '此盤面暫無可複製的文字',
