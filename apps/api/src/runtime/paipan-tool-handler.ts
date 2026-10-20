@@ -7,7 +7,7 @@ import {
 
 import { getRedis } from '#infrastructure/redis';
 import { logger } from '#infrastructure/logger';
-import { InactivePaipanRequestError } from '#infrastructure/repositories/conversation-paipan-repository';
+import { InactiveConversationRequestError } from '#infrastructure/repositories/conversation-tool-repository';
 import { executeConversationPaipan } from '#modules/chat/conversation-paipan-service';
 import { DirectPaipanError } from '#modules/chat/paipan-runtime';
 import { publishAiChatStreamEvent } from './ai-chat-stream.js';
@@ -25,7 +25,7 @@ export async function processPaipanToolPayload(
   } catch (error) {
     if (error instanceof DirectPaipanError) {
       result = { ok: false, code: error.code, error: error.message };
-    } else if (error instanceof InactivePaipanRequestError) {
+    } else if (error instanceof InactiveConversationRequestError) {
       result = {
         ok: false,
         code: 'PAIPAN.REQUEST_INACTIVE',

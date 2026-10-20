@@ -6,6 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import { splitMarkdownBlocks } from './markdown-blocks';
+import { VisualizationReference } from './visualization-context';
 
 interface MarkdownContentProps {
   content: string;
@@ -15,7 +16,8 @@ interface MarkdownContentProps {
 
 const CodeBlockContext = createContext(false);
 const REMARK_PLUGINS = [remarkGfm];
-const HIGHLIGHT_PLUGINS = [rehypeHighlight];
+const HIGHLIGHT_PLUGINS: Parameters<typeof ReactMarkdown>[0]['rehypePlugins'] =
+  [[rehypeHighlight, { ignoreMissing: true, plainText: ['visualization'] }]];
 const NO_REHYPE_PLUGINS: [] = [];
 const DISALLOWED_ELEMENTS = ['script', 'iframe', 'object', 'embed', 'style'];
 
@@ -64,9 +66,7 @@ function createComponents(isBot: boolean): Components {
       </ol>
     ),
     li: ({ children }) => (
-      <li className="break-words pl-0.5 [&>p]:mb-0">
-        {children}
-      </li>
+      <li className="break-words pl-0.5 [&>p]:mb-0">{children}</li>
     ),
     code: function MarkdownCode({ children, className }) {
       const isBlock = useContext(CodeBlockContext);
@@ -81,13 +81,29 @@ function createComponents(isBot: boolean): Components {
         </code>
       );
     },
-    pre: ({ children }) => (
-      <pre
-        className={`${codeBg} ${borderColor} border rounded-lg px-4 py-3 mb-4 overflow-x-auto text-[13px] font-mono leading-relaxed`}
-      >
-        <CodeBlockContext value>{children}</CodeBlockContext>
-      </pre>
-    ),
+    pre: ({ children, node }) => {
+      const code = node?.children[0];
+      if (
+        isBot &&
+        code?.type === 'element' &&
+        code.tagName === 'code' &&
+        Array.isArray(code.properties.className) &&
+        code.properties.className.includes('language-visualization')
+      ) {
+        const artifactId = code.children
+          .map((child) => (child.type === 'text' ? child.value : ''))
+          .join('')
+          .trim();
+        return <VisualizationReference artifactId={artifactId} />;
+      }
+      return (
+        <pre
+          className={`${codeBg} ${borderColor} border rounded-lg px-4 py-3 mb-4 overflow-x-auto text-[13px] font-mono leading-relaxed`}
+        >
+          <CodeBlockContext value>{children}</CodeBlockContext>
+        </pre>
+      );
+    },
     blockquote: ({ children }) => (
       <blockquote
         className={`border-l-2 ${blockquoteBorder} pl-4 mb-4 ${textMuted}`}
@@ -112,7 +128,9 @@ function createComponents(isBot: boolean): Components {
     hr: () => <hr className={`${borderColor} border-t my-6`} />,
     table: ({ children }) => (
       <div className="max-w-full overflow-x-auto mb-4">
-        <table className={`w-full text-[14px] leading-7 border-collapse ${borderColor}`}>
+        <table
+          className={`w-full text-[14px] leading-7 border-collapse ${borderColor}`}
+        >
           {children}
         </table>
       </div>

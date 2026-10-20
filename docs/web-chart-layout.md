@@ -2,6 +2,16 @@
 
 `apps/web/components/chat/artifact-renderer.tsx` owns the presentation of all seven structured chart artifacts: Bazi, Ziwei, Liuyao, Jingzhan, Qimen, Liuren, and Meihua. Calculation results and formatter text remain authoritative; layout changes must preserve the supplied data and the copy-text action.
 
+It also presents versioned Mermaid and Vega-Lite visualizations. Their titles
+and text descriptions sit outside the measured figure. The same portal moves
+the figure into the viewer, retaining chart selections and filter controls.
+`VisualizationContext` resolves fenced `visualization` references from saved
+message artifacts, so `MarkdownContent` can place figures between paragraphs.
+Code examples inside an outer fence remain code. Loading, missing references
+and renderer failures are local to the figure and retain the surrounding text.
+See [Agent architecture](agent-architecture.md#conversation-visualizations) for
+the persistence contract and rendering limits.
+
 ## Fitted charts
 
 Every chart goes through `ResponsiveArtifactFrame`. Mark its bounded scroll region with `data-artifact-viewport`. The chat workspace, shared conversations, preview sheets, and full-screen viewer supply this boundary. Its height must be independent of the fitted chart's height. Preview results use `BottomSheet.fillHeight` to establish a definite desktop height as well as a definite mobile height.

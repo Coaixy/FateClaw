@@ -24,6 +24,9 @@ export const zhTWMessages = {
       tooling: '開發工具與間接依賴',
     },
     roles: {
+      diagrams: '流程圖、關係圖及時間軸的繪製。',
+      visualizations: '互動式資料圖表與運算式解譯執行。',
+      diagramValidation: '在隔離環境中為圖形語法驗證提供 DOM。',
       bazi: '八字排盤與命理資料計算。',
       ziwei: '紫微斗數星盤與相關計算。',
       qimen: '奇門遁甲排盤。',
@@ -90,7 +93,8 @@ export const zhTWMessages = {
     paid: '付費模型',
     freeReply: '免費額度 · 未扣點數',
     refunded: '免費次數已返還 · 未扣點數',
-    benefitDescription: '有效會員專享，享有每日免費額度，不扣點數，受每日次數與並行請求數限制。',
+    benefitDescription:
+      '有效會員專享，享有每日免費額度，不扣點數，受每日次數與並行請求數限制。',
     benefitSummary: '會員專享，每日免費額度，不扣點數。',
     membershipRequired: '免費模型僅限有效會員使用',
     unlock: '開通或續費會員',
@@ -135,6 +139,17 @@ export const zhTWMessages = {
       week: '近 7 天增長',
       dailyAverage: '近 7 天日均',
     },
+  },
+  visualization: {
+    viewTitle: '檢視{title}',
+    fit: '完整圖形',
+    zoomOut: '縮小圖形',
+    zoomIn: '放大圖形',
+    close: '關閉圖形',
+    copyDescription: '複製說明',
+    loading: '正在產生圖形…',
+    unavailable: '暫時無法載入這張圖形，請查看文字說明。',
+    failed: '這張圖形暫時無法繪製，文字說明仍可閱讀。',
   },
   artifact: {
     expand: '全螢幕查看',
@@ -731,7 +746,8 @@ export const zhTWMessages = {
       suspended: '邀請資格已暫停',
     },
     netRecharge: '累計淨儲值 {amount}',
-    policy: '邀請名額按累計淨儲值所在級別計算，各級總額不疊加。每個邀請碼有效 {days} 天，只能註冊一次。',
+    policy:
+      '邀請名額按累計淨儲值所在級別計算，各級總額不疊加。每個邀請碼有效 {days} 天，只能註冊一次。',
     tiers: '累計淨儲值與邀請總名額',
     tierThreshold: '淨儲值滿 {amount}',
     tierSlots: '累計 {count} 個名額',
@@ -740,9 +756,11 @@ export const zhTWMessages = {
     automaticAllowance: '目前儲值級別：累計 {count} 個名額',
     manualAdjustment: '管理員調整：{count} 個名額',
     rechargeProgress: '下一級邀請名額的儲值進度',
-    nextTierRemaining: '再儲值 {amount}，級別總名額可提升至 {slots} 個，已註冊和待使用的名額計入其中。',
+    nextTierRemaining:
+      '再儲值 {amount}，級別總名額可提升至 {slots} 個，已註冊和待使用的名額計入其中。',
     highestTierReached: '已達到最高儲值級別。',
-    rechargeBasis: '僅統計實付儲值並扣除已退款金額；已消費的餘額仍計入，贈送點數和後台補餘額不計入。',
+    rechargeBasis:
+      '僅統計實付儲值並扣除已退款金額；已消費的餘額仍計入，贈送點數和後台補餘額不計入。',
     goRecharge: '前往儲值',
     slots: '邀請名額',
     availableSlots: '可用名額',
@@ -750,8 +768,10 @@ export const zhTWMessages = {
     usedSlots: '已註冊',
     createdTitle: '邀請碼已產生',
     replayedTitle: '已找到上次產生的邀請碼',
-    oneTimeNotice: '完整邀請碼僅在本次顯示，請先複製儲存。重新整理或離開後只能查看尾碼。',
-    replayedNotice: '上次請求已產生邀請碼，沒有重複佔用名額。完整碼無法再次讀取，請撤銷後重新產生。',
+    oneTimeNotice:
+      '完整邀請碼僅在本次顯示，請先複製儲存。重新整理或離開後只能查看尾碼。',
+    replayedNotice:
+      '上次請求已產生邀請碼，沒有重複佔用名額。完整碼無法再次讀取，請撤銷後重新產生。',
     fullCode: '完整邀請碼',
     expiresAt: '{date} 到期',
     usedAt: '{date} 註冊成功',
@@ -773,7 +793,8 @@ export const zhTWMessages = {
       suspended: '已暫停',
     },
     revoke: '撤銷',
-    slotRules: '產生時預留名額，過期或撤銷後釋放；註冊成功後永久消耗。退款降級會收緊未用名額，超額的未用邀請碼從最新產生的開始撤銷，已註冊帳號保留；重新達標不會重置已用名額。',
+    slotRules:
+      '產生時預留名額，過期或撤銷後釋放；註冊成功後永久消耗。退款降級會收緊未用名額，超額的未用邀請碼從最新產生的開始撤銷，已註冊帳號保留；重新達標不會重置已用名額。',
   },
   login: {
     authModes: {
@@ -787,7 +808,8 @@ export const zhTWMessages = {
     smsSendFailed: '簡訊發送失敗',
     enterSmsCaptcha: '請輸入簡訊驗證碼',
     operationFailed: '操作失敗',
-    newUserHint: '新使用者需持有效邀請碼註冊中國大陸手機號帳戶。已有帳戶直接登入。',
+    newUserHint:
+      '新使用者需持有效邀請碼註冊中國大陸手機號帳戶。已有帳戶直接登入。',
     createPhoneAccount: '建立手機號帳戶',
     phoneLogin: '手機號登入',
     registerSubtitle: '憑邀請碼開通你的 AI 斷卦副駕',
@@ -909,6 +931,7 @@ export const zhTWMessages = {
         get_current_time: '當前時間',
         get_session_board: '盤面',
         create_paipan: '起盤',
+        render_visualization: '產生圖形',
       },
       toolTrace: '工具軌跡',
       processTrace: '思考與執行過程',
@@ -1216,7 +1239,8 @@ export const zhTWMessages = {
         threeNumbers: '三個數字',
         numberList: '數字列表',
         threeNumbersDescription: '依序填寫 3 個數字，每個框內填寫一個整數。',
-        numberListDescription: '每個框內填寫一個整數，至少填寫 2 個，可新增或移除數字框。',
+        numberListDescription:
+          '每個框內填寫一個整數，至少填寫 2 個，可新增或移除數字框。',
         numberSlot: '第 {index} 個數字',
         addNumber: '新增數字',
         removeNumber: '移除第 {index} 個數字',

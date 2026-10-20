@@ -292,6 +292,7 @@ describe('Redis IPC listener lifecycle', () => {
     expect(consumer.brpop).toHaveBeenCalledWith(
       queue,
       `ipc:${accountId}:paipan`,
+      `ipc:${accountId}:visualization`,
       1,
     );
     expect(processOutboxPayload).toHaveBeenCalledWith(

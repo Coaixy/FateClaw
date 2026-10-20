@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeRuntimeIpc } from '#runtime/ipc-security';
 
+// Unit tests must not depend on a workspace credential file.
+vi.mock('#infrastructure/env', () => ({ readEnvFile: () => ({}) }));
+
 const {
   mockInterruption,
   mockTransaction,

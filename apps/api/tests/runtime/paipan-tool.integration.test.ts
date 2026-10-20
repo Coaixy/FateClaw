@@ -14,6 +14,7 @@ import {
   paipanRequestQueue,
   type PaipanIpcRequest,
 } from '@fateclaw/contracts/agent/paipan';
+import { visualizationRequestQueue } from '@fateclaw/contracts/agent/visualization';
 
 const { broker, mockWarn } = vi.hoisted(() => ({
   broker: { host: null as Redis | null, runtime: null as Redis | null },
@@ -38,13 +39,15 @@ vi.mock('#infrastructure/db', async () => ({
 
 import { closeDbPool, getDbPool, initDbPool } from '#infrastructure/db-pool';
 import { getSessionMessagesWithToolContext } from '#infrastructure/repositories/chat-repository';
-import { InactivePaipanRequestError } from '#infrastructure/repositories/conversation-paipan-repository';
+import { InactiveConversationRequestError } from '#infrastructure/repositories/conversation-tool-repository';
 import { buildSessionBoardContexts } from '#modules/chat/active-board-context';
 import { listPaipanRegistry } from '#modules/chat/paipan-registry';
 import { executeConversationPaipan } from '#modules/chat/conversation-paipan-service';
 import { processPaipanToolPayload } from '#runtime/paipan-tool-handler';
+import { processVisualizationToolPayload } from '#runtime/visualization-tool-handler';
 import { decodeRuntimeIpc } from '#runtime/ipc-security';
 import { createPaipanCaller } from '../../../agent-runtime/src/paipan-client';
+import { createHostToolCaller } from '../../../agent-runtime/src/host-tool-client';
 import { createPiCustomTools } from '../../../agent-runtime/src/pi-runtime/tools';
 import { createRequestScope } from '../../../agent-runtime/src/request-scope';
 
@@ -111,12 +114,21 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       );
       serve = (async () => {
         while (!stopped) {
-          const entry = await consumer.brpop(paipanRequestQueue(accountId), 1);
-          if (entry)
-            await processPaipanToolPayload(
+          const entry = await consumer.brpop(
+            paipanRequestQueue(accountId),
+            visualizationRequestQueue(accountId),
+            1,
+          );
+          if (entry) {
+            const process =
+              entry[0] === visualizationRequestQueue(accountId)
+                ? processVisualizationToolPayload
+                : processPaipanToolPayload;
+            await process(
               JSON.parse(decodeRuntimeIpc(accountId, entry[0], entry[1])),
               accountId,
             );
+          }
         }
       })();
     });
@@ -146,6 +158,61 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       );
       await closeDbPool();
       vi.unstubAllEnvs();
+    });
+
+    it('saves a visualization through authenticated IPC even when the stream notification fails', async () => {
+      vi.spyOn(broker.host!, 'publish').mockRejectedValueOnce(
+        new Error('Synthetic stream outage'),
+      );
+      const tools = createPiCustomTools({
+        requestScope: createRequestScope(),
+        accountId,
+        soulStore: { read: vi.fn(), canEdit: vi.fn(), update: vi.fn() },
+        recordExecution: vi.fn(),
+        visualization: createHostToolCaller('visualization', {
+          accountId,
+          requestId,
+          executionId,
+        }),
+      });
+      const tool = tools.find((item) => item.name === 'render_visualization')!;
+      const result = await tool.execute(
+        'visual-1',
+        {
+          type: 'vega-lite',
+          title: '示例数量',
+          summary: '虚构测试数据。',
+          spec: {
+            data: { values: [{ element: '木', count: 2 }] },
+            mark: 'bar',
+            encoding: {
+              x: { field: 'element', type: 'nominal' },
+              y: { field: 'count', type: 'quantitative' },
+            },
+          },
+        },
+        undefined,
+        undefined,
+        undefined as never,
+      );
+      expect(result.details).toMatchObject({
+        isError: false,
+        saved: true,
+        reference: expect.stringContaining('```visualization'),
+      });
+      const stored = await getDbPool().query(
+        'SELECT tool_context, metadata FROM messages',
+      );
+      expect(stored.rowCount).toBe(1);
+      expect(stored.rows[0].metadata.kind).toBe('visualization_result');
+      expect(
+        JSON.parse(stored.rows[0].tool_context)[0].artifactData.spec.data
+          .values,
+      ).toEqual([{ element: '木', count: 2 }]);
+      expect(mockWarn).toHaveBeenCalledWith(
+        expect.any(Object),
+        'Saved visualization stream notification failed',
+      );
     });
 
     it('runs discovery, calculation, durable card and same-turn reading through authenticated IPC', async () => {
@@ -264,7 +331,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       await getDbPool().query(sql);
       await expect(
         executeConversationPaipan(accountId, request()),
-      ).rejects.toBeInstanceOf(InactivePaipanRequestError);
+      ).rejects.toBeInstanceOf(InactiveConversationRequestError);
       expect(
         (await getDbPool().query('SELECT id FROM messages')).rowCount,
       ).toBe(0);

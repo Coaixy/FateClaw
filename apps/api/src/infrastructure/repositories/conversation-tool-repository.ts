@@ -2,21 +2,21 @@ import type { PoolClient } from 'pg';
 
 import { getDbPool } from '#infrastructure/db-pool';
 
-export class InactivePaipanRequestError extends Error {
+export class InactiveConversationRequestError extends Error {
   constructor() {
-    super('起盘请求已结束、已取消，或不属于当前会话');
+    super('工具请求已结束、已取消，或不属于当前会话');
   }
 }
 
-export interface PaipanRequestOwner {
+export interface ConversationRequestOwner {
   userId: string;
   sessionId: string;
   clientId: string | null;
 }
 
-export async function withActivePaipanRequest<T>(
+export async function withActiveConversationRequest<T>(
   identity: { accountId: string; requestId: string; executionId: string },
-  run: (owner: PaipanRequestOwner, db: PoolClient) => Promise<T>,
+  run: (owner: ConversationRequestOwner, db: PoolClient) => Promise<T>,
 ): Promise<T> {
   const db = await getDbPool().connect();
   let discard = false;
@@ -25,7 +25,7 @@ export async function withActivePaipanRequest<T>(
     await db.query("SET LOCAL lock_timeout = '5s'");
     await db.query("SET LOCAL statement_timeout = '10s'");
     // The admitted request supplies identity; the model cannot select a user or session.
-    // Its row lock also serializes retries before a random chart is generated.
+    // Its row lock serializes retries before any durable tool result is created.
     const { rows } = await db.query<{
       owner_user_id: string;
       session_id: string;
@@ -41,7 +41,7 @@ export async function withActivePaipanRequest<T>(
       [identity.requestId, identity.accountId, identity.executionId],
     );
     const owner = rows[0];
-    if (!owner) throw new InactivePaipanRequestError();
+    if (!owner) throw new InactiveConversationRequestError();
     const result = await run(
       {
         userId: owner.owner_user_id,

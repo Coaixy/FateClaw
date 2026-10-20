@@ -43,6 +43,7 @@ import type { SkillContextEntry } from '#agent/types';
 import { getRequestId } from '#agent/request-scope';
 import { installModelPool } from './model-pool.js';
 import { createPaipanCaller } from '#agent/paipan-client';
+import { createHostToolCaller } from '#agent/host-tool-client';
 import {
   CancelledAgentRequestError,
   ModelCallError,
@@ -141,6 +142,17 @@ export async function runPiSession(args: {
           executionId: args.containerInput.executionId,
         })
       : undefined;
+  const visualization =
+    requestId &&
+    args.containerInput.executionId &&
+    args.containerInput.sessionId &&
+    args.containerInput.accountId.startsWith('web:')
+      ? createHostToolCaller('visualization', {
+          accountId: args.containerInput.accountId,
+          requestId,
+          executionId: args.containerInput.executionId,
+        })
+      : undefined;
   const contextPromise = args.runtime.deps.soulStore
     .canEdit(args.containerInput.accountId)
     .then(async (soulEditEnabled) => ({
@@ -200,6 +212,7 @@ export async function runPiSession(args: {
       readableSkills,
       sessionBoards: buildVisibleSessionBoardContexts(args.containerInput),
       paipan,
+      visualization,
       accountId: args.containerInput.accountId,
       soulStore: args.runtime.deps.soulStore,
       soulEditEnabled,

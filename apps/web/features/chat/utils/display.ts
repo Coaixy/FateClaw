@@ -330,6 +330,7 @@ export function canHostToolTraceFooter(message: Message): boolean {
     Boolean(message.is_bot_message) &&
     !isProgressMessage(message) &&
     !isThinkingMessage(message) &&
+    message.metadata?.kind !== 'visualization_result' &&
     message.metadata?.kind !== 'reconnecting'
   );
 }

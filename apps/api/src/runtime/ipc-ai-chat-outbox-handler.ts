@@ -5,6 +5,7 @@ import {
 import { createHash } from 'node:crypto';
 import type pg from 'pg';
 import { settleBenefitTurn } from '#infrastructure/repositories/benefit-repository';
+import { resolveMessageVisualizations } from '#modules/chat/conversation-visualization-service';
 import {
   withAgentInterruptionDelivery,
   withAgentResultDelivery,
@@ -536,6 +537,16 @@ async function storeAiChatFinalResponseMessages(args: {
     if (isFinalReply) {
       finalReplyMessageId = messageId;
     }
+    const visualizationContext = await resolveMessageVisualizations(
+      args.accountId,
+      sessionId,
+      args.assistantMessages[index],
+      args.db,
+    );
+    const messageContext = [
+      ...(isFinalReply ? (args.payload.skillContext ?? []) : []),
+      ...visualizationContext,
+    ];
     await storeMessage(
       {
         id: messageId,
@@ -548,12 +559,9 @@ async function storeAiChatFinalResponseMessages(args: {
         is_from_me: true,
         is_bot_message: true,
         session_id: sessionId,
-        tool_context:
-          isFinalReply &&
-          args.payload.skillContext &&
-          args.payload.skillContext.length > 0
-            ? JSON.stringify(args.payload.skillContext)
-            : null,
+        tool_context: messageContext.length
+          ? JSON.stringify(messageContext)
+          : null,
         metadata: isFinalReply
           ? args.finalMetadata
           : {

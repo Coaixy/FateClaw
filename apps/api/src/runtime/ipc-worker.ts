@@ -3,6 +3,8 @@ import { decodeRuntimeIpc, encodeRuntimeIpc } from './ipc-security.js';
 import { InvalidRuntimeIpcError } from '@fateclaw/contracts/runtime-ipc';
 import { paipanRequestQueue } from '@fateclaw/contracts/agent/paipan';
 import { processPaipanToolPayload } from './paipan-tool-handler.js';
+import { visualizationRequestQueue } from '@fateclaw/contracts/agent/visualization';
+import { processVisualizationToolPayload } from './visualization-tool-handler.js';
 import {
   acquireAgentExecution,
   releaseGlobalAgentSlot,
@@ -492,7 +494,12 @@ async function listenForAccount(accountId: string): Promise<void> {
           ? aiRaw === null
             ? null
             : [queueName, aiRaw]
-          : await redis.brpop(queueName, paipanRequestQueue(accountId), 1);
+          : await redis.brpop(
+              queueName,
+              paipanRequestQueue(accountId),
+              visualizationRequestQueue(accountId),
+              1,
+            );
 
         if (!result) {
           // 空闲回收：非 pinned 监听器长时间没有任何消息、且账号名下无在途请求时
@@ -522,6 +529,8 @@ async function listenForAccount(accountId: string): Promise<void> {
           ) as unknown;
           if (queue === paipanRequestQueue(accountId)) {
             await processPaipanToolPayload(payload, accountId);
+          } else if (queue === visualizationRequestQueue(accountId)) {
+            await processVisualizationToolPayload(payload, accountId);
           } else if (queue.endsWith(':ai-chat:outbox')) {
             // AI Chat 专属队列：永远不发微信
             await processAiChatOutboxPayload(

@@ -119,9 +119,9 @@ export const creditGroups: readonly CreditGroup[] = [
         role: 'logging',
       },
       {
-        name: 'Zod · TypeBox',
+        name: 'Zod · TypeBox · Ajv',
         href: 'https://github.com/colinhacks/zod',
-        version: '4.3.6 / 1.3.23',
+        version: '4.3.6 / 1.3.23 / 8.20.0',
         license: 'MIT',
         licenseHref: 'https://spdx.org/licenses/MIT.html',
         role: 'validation',
@@ -181,6 +181,23 @@ export const creditGroups: readonly CreditGroup[] = [
   {
     id: 'interface',
     projects: [
+      {
+        name: 'Mermaid',
+        href: 'https://mermaid.js.org/',
+        version: '12.2.0',
+        license: 'MIT',
+        licenseHref:
+          'https://github.com/mermaid-js/mermaid/blob/v12.2.0/LICENSE',
+        role: 'diagrams',
+      },
+      {
+        name: 'Vega-Lite · Vega · vega-interpreter',
+        href: 'https://vega.github.io/vega-lite/',
+        version: '6.5.0 / 6.4.0 / 2.3.2',
+        license: 'BSD-3-Clause',
+        licenseHref: 'https://github.com/vega/vega-lite/blob/v6.5.0/LICENSE',
+        role: 'visualizations',
+      },
       {
         name: 'Next.js',
         href: 'https://nextjs.org/',
@@ -282,6 +299,14 @@ export const creditGroups: readonly CreditGroup[] = [
   {
     id: 'tooling',
     projects: [
+      {
+        name: 'jsdom',
+        href: 'https://github.com/jsdom/jsdom',
+        version: '27.4.0',
+        license: 'MIT',
+        licenseHref: 'https://spdx.org/licenses/MIT.html',
+        role: 'diagramValidation',
+      },
       {
         name: 'Node.js · pnpm',
         href: 'https://nodejs.org/',

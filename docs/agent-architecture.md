@@ -1,6 +1,6 @@
 # Agent architecture
 
-Last checked: 2026-10-18.
+Last checked: 2026-10-20.
 
 This document describes the agent runtime architecture in the current code. In the main flow, the host process calls an account-level agent-runtime through Redis IPC. For each request, agent-runtime creates a Pi SDK Runtime, which handles the model loop, user knowledge reads, and final reply. System chart calculation runs in deterministic packages on the Web/API side.
 
@@ -70,10 +70,10 @@ Local deployments no longer require Docker to run agent-runtime. The host uses `
 
 Only user Text Skill Bundles are currently exposed to the model as Pi Skills. System chart calculation is a controlled, deterministic business resource on the Web/API side:
 
-| Type | File source | Exposure | Database storage |
-| --- | --- | --- | --- |
-| System chart runner | `apps/api/src/modules/chat/paipan-registry.ts` + `paipan-runners/*.ts` | Manual `/api/paipan/*` requests and the conversation `create_paipan` tool call the same API-owned runners | `skill_global_config` controls enabled chart types; results are saved in message `tool_context` |
-| User Text Skill Bundle | Rebuildable process-owned snapshots in `.fateclaw/text-skills/cache-v1/` | Authorized per request through ResourceLoader | Immutable `skill_content_revisions`, a current revision pointer, metadata, and permissions |
+| Type                   | File source                                                              | Exposure                                                                                                  | Database storage                                                                                |
+| ---------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| System chart runner    | `apps/api/src/modules/chat/paipan-registry.ts` + `paipan-runners/*.ts`   | Manual `/api/paipan/*` requests and the conversation `create_paipan` tool call the same API-owned runners | `skill_global_config` controls enabled chart types; results are saved in message `tool_context` |
+| User Text Skill Bundle | Rebuildable process-owned snapshots in `.fateclaw/text-skills/cache-v1/` | Authorized per request through ResourceLoader                                                             | Immutable `skill_content_revisions`, a current revision pointer, metadata, and permissions      |
 
 PostgreSQL owns user skill content. API saves atomically insert an immutable revision and update its skill pointer after checking the editor's base revision. Agent-runtime authorizes and fixes a revision for each request, then restores it with the shared content protocol and process-owned local cache. Active snapshot leases are released when session creation or execution finishes or fails. Cache retention never deletes active snapshots. Legacy filesystem reads are confined to the API's independent import module; ordinary skill reads use PostgreSQL. See [Skill content architecture](skill-content-architecture.md).
 
@@ -160,6 +160,54 @@ authorized Markdown, Soul, calendar and session-board access. Chart creation is
 available only when the host supplies a durable execution ID, request ID and
 session. Other callers retain the existing instruction to use the dedicated chart
 entry point.
+
+### Conversation visualizations
+
+Web requests with an admitted request ID, execution ID and session expose
+`render_visualization({ type, title, summary, spec })`. Mermaid source describes
+flows, sequences, state diagrams, mind maps and timelines. Vega-Lite JSON
+describes charts with inline data, layers and selection or input parameters.
+The model must distinguish calculated facts from illustrative data in `summary`;
+visualization does not calculate or replace authoritative chart facts.
+
+The tool uses account-encrypted `ipc:{accountId}:visualization` requests and the
+existing account listener. Both chart and visualization writes use
+`withActiveConversationRequest`: the admitted request supplies ownership, and
+its PostgreSQL row lock serializes retries. A request/tool-call-derived ID
+identifies an immutable `visualization_result` message. Identical retries reuse
+the artifact; changed arguments fail. Persistence commits before the best-effort
+stream notification and successful tool reply. Cancelling interpretation does
+not remove an already committed visualization. RPC and queue lifetimes match
+conversation chart creation below.
+
+`packages/contracts/src/visualization/` owns the versioned rendering contract.
+Mermaid source is bounded to 16,000 characters and disallows HTML, links,
+directives and custom styles. Syntax validation runs in a disposable worker with
+an empty environment, a private DOM and a four-second deadline. Vega-Lite uses
+the pinned schema, compiler and expression parser; the contract bounds data to 1,000 rows, 12
+layers, 64,000 bytes and 24 levels of nesting. Data field names are treated as
+data, separately from renderer configuration. External resources, DOM selectors,
+custom event streams and multiple views are unavailable. Expressions permit
+field/parameter arithmetic and comparisons, without function calls. Transforms
+are limited to filtering, calculations, aggregation, binning and time units
+(up to 20 steps); callers must prepare data that would require row expansion.
+
+The successful tool result contains a small ID, title, summary and a fenced
+`visualization` reference. The model inserts that reference between paragraphs;
+the full specification is stored outside truncated tool previews. Final reply
+persistence resolves references only within the same account and session and
+attaches the full artifacts to each referencing assistant message. Thus a
+paginated answer or shared conversation retains everything needed to render.
+The web client renders references in place and hides a standalone result once
+the answer references it; unreferenced results remain readable after interrupted
+turns. Unknown references and individual rendering failures preserve the text.
+Copying an answer substitutes each figure's title and summary for its reference.
+
+Browser renderers load on demand. Mermaid uses host-controlled strict settings.
+Vega uses its AST interpreter without `unsafe-eval` and a loader that refuses
+external resources and links. Figure interaction and full-screen reading reuse
+the existing artifact portal and viewer. WeChat requests do not expose this
+browser capability.
 
 ### Conversation chart creation
 

@@ -6,7 +6,7 @@ import type {
 import type { SkillContextEntryDto } from '@fateclaw/contracts/chat';
 import type { SessionBoardContext } from '@fateclaw/contracts/agent';
 
-import { withActivePaipanRequest } from '#infrastructure/repositories/conversation-paipan-repository';
+import { withActiveConversationRequest } from '#infrastructure/repositories/conversation-tool-repository';
 import { storeMessage } from '#infrastructure/repositories/chat-repository';
 import { applyClientProfilePrefill } from './client-profile-service.js';
 import {
@@ -48,7 +48,7 @@ export async function executeConversationPaipan(
   accountId: string,
   request: PaipanIpcRequest,
 ): Promise<PaipanResult> {
-  return withActivePaipanRequest(
+  return withActiveConversationRequest(
     {
       accountId,
       requestId: request.requestId,

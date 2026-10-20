@@ -1,7 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -39,6 +47,15 @@ import {
 } from '@/features/chat/utils/display';
 import { parseToolContext } from '@/features/chat/utils/tool-context';
 import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
+import {
+  parseVisualizationArtifact,
+  replaceVisualizationReferences,
+  visualizationReferences,
+} from '@fateclaw/contracts/visualization';
+import {
+  VisualizationContext,
+  VisualizationPlaceholder,
+} from '@/components/chat/visualization-context';
 
 export const AiChatMessageList = memo(function AiChatMessageList({
   messages,
@@ -80,6 +97,37 @@ export const AiChatMessageList = memo(function AiChatMessageList({
 }) {
   const { t } = useI18n();
   const latestMessageNoticeRef = useRef<HTMLDivElement | null>(null);
+  const visualizationContexts = JSON.stringify(
+    messages
+      .filter((message) => message.is_bot_message && message.tool_context)
+      .map((message) => message.tool_context),
+  );
+  const visualizationEntries = useMemo(() => {
+    const entries = new Map<
+      string,
+      ReturnType<typeof parseToolContext>[number]
+    >();
+    for (const raw of JSON.parse(visualizationContexts) as string[]) {
+      for (const entry of parseToolContext(raw)) {
+        if (entry.artifactType !== 'visualization') continue;
+        const artifact = parseVisualizationArtifact(entry.artifactData);
+        if (artifact) entries.set(artifact.id, entry);
+      }
+    }
+    return entries;
+  }, [visualizationContexts]);
+  const visualizationContext = useMemo(
+    () => ({ entries: visualizationEntries, pending: sending }),
+    [visualizationEntries, sending],
+  );
+  const generatingVisualization =
+    sending &&
+    messages.some(
+      (message) =>
+        message.metadata?.kind === 'tool_trace' &&
+        message.metadata.tool_name === 'render_visualization' &&
+        message.metadata.tool_status === 'running',
+    );
   const {
     rows,
     pendingTrajectory,
@@ -169,45 +217,54 @@ export const AiChatMessageList = memo(function AiChatMessageList({
     (pendingTrajectory.length > 0 || !hasThinkingMessage);
 
   return (
-    <div className="space-y-6 pb-4 sm:space-y-8">
-      {loadingOlder && (
-        <div className="flex justify-center py-1.5">
-          <Loader2 size={15} className="animate-spin text-muted" />
-        </div>
-      )}
-      {rows.map((row, index) =>
-        row.trajectoryOnly ? (
-          <div
-            key={row.message.id}
-            className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in"
-          >
-            <div className="flex min-w-0 w-full flex-col items-start">
-              <TrajectoryTimeline blocks={row.trajectory} completed />
-            </div>
+    <VisualizationContext value={visualizationContext}>
+      <div className="space-y-6 pb-4 sm:space-y-8">
+        {loadingOlder && (
+          <div className="flex justify-center py-1.5">
+            <Loader2 size={15} className="animate-spin text-muted" />
           </div>
-        ) : (
-          <AiChatMessageRow
-            key={row.message.id}
-            message={row.message}
-            trajectory={row.trajectory}
-            animationIndex={Math.min(index, 4)}
+        )}
+        {rows.map((row, index) =>
+          row.trajectoryOnly ? (
+            <div
+              key={row.message.id}
+              className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in"
+            >
+              <div className="flex min-w-0 w-full flex-col items-start">
+                <TrajectoryTimeline blocks={row.trajectory} completed />
+              </div>
+            </div>
+          ) : (
+            <AiChatMessageRow
+              key={row.message.id}
+              message={row.message}
+              trajectory={row.trajectory}
+              animationIndex={Math.min(index, 4)}
+            />
+          ),
+        )}
+
+        {rows.length > 0 && latestMessageNotice && (
+          <LatestMessageBillingNotice containerRef={latestMessageNoticeRef} />
+        )}
+
+        {showStreamingTrajectory && (
+          <StreamingTrajectory
+            progressLabel={progressLabel}
+            pendingTrajectory={pendingTrajectory}
           />
-        ),
-      )}
+        )}
 
-      {rows.length > 0 && latestMessageNotice && (
-        <LatestMessageBillingNotice containerRef={latestMessageNoticeRef} />
-      )}
-
-      {showStreamingTrajectory && (
-        <StreamingTrajectory
-          progressLabel={progressLabel}
-          pendingTrajectory={pendingTrajectory}
-        />
-      )}
-
-      {sending && replySlow && onRetry && <ReplySlowNotice onRetry={onRetry} />}
-    </div>
+        {generatingVisualization && (
+          <div className="mx-auto w-full max-w-3xl px-2.5 sm:px-3">
+            <VisualizationPlaceholder loading />
+          </div>
+        )}
+        {sending && replySlow && onRetry && (
+          <ReplySlowNotice onRetry={onRetry} />
+        )}
+      </div>
+    </VisualizationContext>
   );
 });
 
@@ -220,6 +277,11 @@ type DisplayRow = {
 /** Keep process messages with the next reply so streaming updates share one disclosure. */
 function buildDisplayRows(messages: Message[]) {
   const rows: DisplayRow[] = [];
+  const referenced = new Set(
+    messages
+      .filter((message) => message.is_bot_message)
+      .flatMap((message) => visualizationReferences(message.content)),
+  );
   let pending: Message[] = [];
 
   // 极少数情况下过程块后面直接来了用户消息（没有回答），单独成一行避免丢失。
@@ -234,6 +296,11 @@ function buildDisplayRows(messages: Message[]) {
   };
 
   for (const message of messages) {
+    if (
+      message.metadata?.kind === 'visualization_result' &&
+      referenced.has(message.id)
+    )
+      continue;
     if (message.is_bot_message && isTrajectoryBlockMessage(message)) {
       pending.push(message);
       continue;
@@ -378,7 +445,10 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
     ? 'w-full items-start'
     : 'max-w-[88%] items-end sm:max-w-[74%]';
 
-  if (hasChart && !isFinalMessage) {
+  if (
+    (hasChart || messageMetadata?.kind === 'visualization_result') &&
+    !isFinalMessage
+  ) {
     return (
       <div
         className="w-full max-w-6xl mx-auto px-2.5 sm:px-3 animate-message-in"
@@ -406,7 +476,9 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
       <div className={`flex min-w-0 flex-col ${messageColumnClass}`}>
         {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
 
-        <div className={`group relative min-w-0 max-w-full ${isBot ? 'w-full' : ''}`}>
+        <div
+          className={`group relative min-w-0 max-w-full ${isBot ? 'w-full' : ''}`}
+        >
           <div
             role={isErrorMessage ? 'alert' : undefined}
             className={`min-w-0 [overflow-wrap:anywhere] ${
@@ -438,7 +510,11 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
 
         {isBot && !isFinalMessage && toolContext.length > 0 && (
           <div className="w-full max-w-full sm:max-w-[90%] mt-1">
-            <ArtifactRenderer entries={toolContext} />
+            <ArtifactRenderer
+              entries={toolContext.filter(
+                (entry) => entry.artifactType !== 'visualization',
+              )}
+            />
             <ArtifactDebug entries={toolContext} />
           </div>
         )}
@@ -458,6 +534,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
 
 function CopyAnswerButton({ content }: { content: string }) {
   const { t } = useI18n();
+  const { entries } = useContext(VisualizationContext);
   const [state, setState] = useState<'idle' | 'copying' | 'copied' | 'failed'>(
     'idle',
   );
@@ -467,7 +544,14 @@ function CopyAnswerButton({ content }: { content: string }) {
   const copyAnswer = async () => {
     setState('copying');
     try {
-      await navigator.clipboard.writeText(content);
+      await navigator.clipboard.writeText(
+        replaceVisualizationReferences(content, (id) => {
+          const entry = entries.get(id);
+          return entry
+            ? `${entry.artifactTitle}\n${entry.output}`
+            : t('visualization.unavailable');
+        }),
+      );
       setState('copied');
     } catch {
       setState('failed');

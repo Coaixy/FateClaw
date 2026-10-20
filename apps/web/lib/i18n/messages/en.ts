@@ -24,6 +24,9 @@ export const enMessages = {
       tooling: 'Development and transitive dependencies',
     },
     roles: {
+      diagrams: 'Flowcharts, relationship diagrams, and timelines.',
+      visualizations: 'Interactive data charts and expression interpretation.',
+      diagramValidation: 'An isolated DOM for diagram syntax validation.',
       bazi: 'Bazi charts and related calculations.',
       ziwei: 'Ziwei astrology charts and calculations.',
       qimen: 'Qimen Dunjia charts.',
@@ -145,6 +148,19 @@ export const enMessages = {
       week: 'Added in 7 days',
       dailyAverage: '7-day daily average',
     },
+  },
+  visualization: {
+    viewTitle: 'View {title}',
+    fit: 'Fit figure',
+    zoomOut: 'Zoom out',
+    zoomIn: 'Zoom in',
+    close: 'Close figure',
+    copyDescription: 'Copy description',
+    loading: 'Preparing visualization…',
+    unavailable:
+      'This visualization is unavailable. The explanation is still available.',
+    failed:
+      'This visualization could not be drawn. The explanation is still available.',
   },
   artifact: {
     expand: 'Full screen',
@@ -762,7 +778,8 @@ export const enMessages = {
       suspended: 'Invitations suspended',
     },
     netRecharge: 'Net recharge: {amount}',
-    policy: 'Your net recharge tier determines the cumulative allowance. Tier totals are not added together. Each code expires in {days} days and allows one registration.',
+    policy:
+      'Your net recharge tier determines the cumulative allowance. Tier totals are not added together. Each code expires in {days} days and allows one registration.',
     tiers: 'Net recharge tiers and total invitation allowance',
     tierThreshold: 'Net recharge of {amount}',
     tierSlots: '{count} total slots',
@@ -771,9 +788,11 @@ export const enMessages = {
     automaticAllowance: 'Current recharge tier: {count} total slots',
     manualAdjustment: 'Administrator adjustment: {count} slots',
     rechargeProgress: 'Recharge progress toward the next invitation tier',
-    nextTierRemaining: 'Recharge {amount} more to reach a tier total of {slots} slots, including registered and reserved slots.',
+    nextTierRemaining:
+      'Recharge {amount} more to reach a tier total of {slots} slots, including registered and reserved slots.',
     highestTierReached: 'You have reached the highest recharge tier.',
-    rechargeBasis: 'Includes paid recharges less completed refunds. Spending credit does not reduce the total; bonus credit and administrative adjustments do not count.',
+    rechargeBasis:
+      'Includes paid recharges less completed refunds. Spending credit does not reduce the total; bonus credit and administrative adjustments do not count.',
     goRecharge: 'Go to recharge',
     slots: 'Invitation slots',
     availableSlots: 'Available',
@@ -781,8 +800,10 @@ export const enMessages = {
     usedSlots: 'Registered',
     createdTitle: 'Invitation created',
     replayedTitle: 'Your previous invitation was found',
-    oneTimeNotice: 'The full code is shown only now. Copy and save it before refreshing or leaving; only its suffix is available later.',
-    replayedNotice: 'Your previous request already created an invitation; no additional slot was reserved. The full code cannot be recovered. Revoke it and create a new one.',
+    oneTimeNotice:
+      'The full code is shown only now. Copy and save it before refreshing or leaving; only its suffix is available later.',
+    replayedNotice:
+      'Your previous request already created an invitation; no additional slot was reserved. The full code cannot be recovered. Revoke it and create a new one.',
     fullCode: 'Full invitation code',
     expiresAt: 'Expires {date}',
     usedAt: 'Registered {date}',
@@ -792,7 +813,8 @@ export const enMessages = {
     dismiss: 'Dismiss',
     revokeAndRelease: 'Revoke and release slot',
     listTitle: 'My invitations',
-    totalSlots: 'Current cumulative total: {count} slots, including registered and reserved slots, with no monthly reset',
+    totalSlots:
+      'Current cumulative total: {count} slots, including registered and reserved slots, with no monthly reset',
     generate: 'Create invitation',
     retryCreate: 'Retry creation request',
     empty: 'No invitations yet. You can create one when eligible.',
@@ -804,7 +826,8 @@ export const enMessages = {
       suspended: 'Suspended',
     },
     revoke: 'Revoke',
-    slotRules: 'Creating a code reserves a slot. Expiration or revocation releases it; successful registration uses it permanently. A refund downgrade reduces unused capacity and revokes the newest excess codes. Registered accounts stay; requalifying never resets used slots.',
+    slotRules:
+      'Creating a code reserves a slot. Expiration or revocation releases it; successful registration uses it permanently. A refund downgrade reduces unused capacity and revokes the newest excess codes. Registered accounts stay; requalifying never resets used slots.',
   },
   login: {
     authModes: {
@@ -822,14 +845,17 @@ export const enMessages = {
       'New users need a valid invitation code and a mainland China phone number. Existing users can log in directly.',
     createPhoneAccount: 'Create a phone account',
     phoneLogin: 'Phone login',
-    registerSubtitle: 'Use your invitation to activate your AI divination copilot',
+    registerSubtitle:
+      'Use your invitation to activate your AI divination copilot',
     loginSubtitle: 'Sign in to your divination workspace',
     phone: 'Mainland China phone',
     inviteCode: 'Invitation code',
     invitePlaceholder: 'Enter the code shared by a friend',
-    inviteHint: 'Registration requires a valid invitation. Each code can be used once.',
+    inviteHint:
+      'Registration requires a valid invitation. Each code can be used once.',
     enterInviteCode: 'Enter your invitation code',
-    inviteInvalid: 'This invitation is unavailable. Check the code or contact your inviter.',
+    inviteInvalid:
+      'This invitation is unavailable. Check the code or contact your inviter.',
     inviteValid: 'Valid invitation. Expires {expiresAt}.',
     password: 'Password',
     passwordPlaceholder: 'At least 8 characters',
@@ -945,6 +971,7 @@ export const enMessages = {
         get_current_time: 'Current time',
         get_session_board: 'Board',
         create_paipan: 'Create chart',
+        render_visualization: 'Create visualization',
       },
       toolTrace: 'Tool trace',
       processTrace: 'Reasoning and actions',
@@ -1068,7 +1095,8 @@ export const enMessages = {
         invalidManualYao:
           'Manual divination needs 6 yao values, for example 789678',
         invalidThreeNumbers: 'Fill all 3 boxes with one integer each',
-        invalidNumberArray: 'Fill every number box with an integer; at least 2 are required',
+        invalidNumberArray:
+          'Fill every number box with an integer; at least 2 are required',
         missingUpper: 'Enter the upper trigram number first',
         missingLower: 'Enter the lower trigram number first',
         invalidMoving: 'Moving-line number must be an integer',
@@ -1278,8 +1306,10 @@ export const enMessages = {
           'Only needed for number methods or manual / virtual coin toss.',
         threeNumbers: 'Three numbers',
         numberList: 'Number list',
-        threeNumbersDescription: 'Enter 3 numbers in order, one integer per box.',
-        numberListDescription: 'Enter one integer per box, at least 2 in total. Add or remove boxes as needed.',
+        threeNumbersDescription:
+          'Enter 3 numbers in order, one integer per box.',
+        numberListDescription:
+          'Enter one integer per box, at least 2 in total. Add or remove boxes as needed.',
         numberSlot: 'Number {index}',
         addNumber: 'Add number',
         removeNumber: 'Remove number {index}',

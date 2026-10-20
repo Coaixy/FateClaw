@@ -6,6 +6,8 @@ import {
 import { createPiCurrentTimeTool } from '#agent/pi-runtime/tools/current-time-tool';
 import type { PaipanCaller } from '@fateclaw/contracts/agent/paipan';
 import { createPiPaipanTool } from '#agent/pi-runtime/tools/paipan-tool';
+import type { VisualizationCaller } from '@fateclaw/contracts/agent/visualization';
+import { createPiVisualizationTool } from '#agent/pi-runtime/tools/visualization-tool';
 import { createPiGanzhiByDatetimeTool } from '#agent/pi-runtime/tools/ganzhi-by-datetime-tool';
 import { createPiGanzhiReverseTool } from '#agent/pi-runtime/tools/ganzhi-reverse-tool';
 import { createPiSessionBoardTool } from '#agent/pi-runtime/tools/session-board-tool';
@@ -42,6 +44,7 @@ export interface CreatePiToolsOptions {
   readableSkills?: Skill[];
   sessionBoards?: SessionBoardContext[];
   paipan?: PaipanCaller;
+  visualization?: VisualizationCaller;
   accountId: string;
   soulStore: SoulStore;
   soulEditEnabled?: boolean;
@@ -108,6 +111,15 @@ export function createPiCustomTools(
         requestScope: options.requestScope,
         readableSkills: options.readableSkills,
         recordExecution: options.recordExecution,
+      }),
+    );
+  }
+  if (options.visualization) {
+    tools.push(
+      createPiVisualizationTool({
+        requestScope: options.requestScope,
+        recordExecution: options.recordExecution,
+        visualization: options.visualization,
       }),
     );
   }

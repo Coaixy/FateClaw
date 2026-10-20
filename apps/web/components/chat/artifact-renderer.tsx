@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { Copy, Maximize2 } from 'lucide-react';
@@ -14,6 +14,11 @@ import { useToast } from '@/lib/use-toast';
 import { cn } from '@/utils/chart/cn';
 import { ArtifactViewer } from './artifact-viewer';
 import { ResponsiveArtifactFrame } from './responsive-artifact-frame';
+import { parseVisualizationArtifact } from '@fateclaw/contracts/visualization';
+
+const VisualizationCanvas = dynamic(() => import('./visualization-canvas'), {
+  ssr: false,
+});
 
 const BaziChart = dynamic(() => import('@/components/charts/bazi-chart'), {
   ssr: false,
@@ -73,6 +78,10 @@ const CHART_PRESENTATION: Partial<
 };
 
 function resolveChart(entry: SkillContextEntry) {
+  if (entry.artifactType === 'visualization') {
+    const artifact = parseVisualizationArtifact(entry.artifactData);
+    return artifact ? <VisualizationCanvas artifact={artifact} /> : null;
+  }
   const data = entry.artifactData as never;
   switch (entry.skill) {
     case 'bazi-paipan':
@@ -128,10 +137,14 @@ function ArtifactBlock({
   useLayoutEffect(() => {
     setChartHost(document.createElement('div'));
   }, []);
-  const chart = resolveChart(entry);
+  const chart = useMemo(() => resolveChart(entry), [entry]);
   if (!chart || entry.artifactData == null) return null;
 
-  const title = entry.artifactTitle ?? entry.skill;
+  const visualization =
+    entry.artifactType === 'visualization'
+      ? parseVisualizationArtifact(entry.artifactData)
+      : null;
+  const title = visualization?.title ?? entry.artifactTitle ?? entry.skill;
   const { shellClassName, layoutAspectRatio, minContentWidth } =
     CHART_PRESENTATION[entry.skill] ?? { shellClassName: 'max-w-[55rem]' };
 
@@ -141,7 +154,8 @@ function ArtifactBlock({
   // 可能把它写成 null 或非字符串，render 期直接 .trim() 会抛 TypeError 触发整页报错，
   // 这里收紧为安全取值（非字符串按空文本处理，复制入口随之自然隐藏）。
   const exportText =
-    typeof entry.output === 'string' ? entry.output.trim() : '';
+    visualization?.summary ??
+    (typeof entry.output === 'string' ? entry.output.trim() : '');
   const handleCopyBoardText = async () => {
     if (!exportText) {
       toast('error', t('artifact.copyEmpty'));
@@ -157,7 +171,21 @@ function ArtifactBlock({
   };
 
   return (
-    <div className="mt-1">
+    <div
+      className={
+        entry.artifactType === 'visualization'
+          ? 'my-4 rounded-xl border border-hairline bg-surface-soft/40 px-3 py-3 sm:px-4'
+          : 'mt-1'
+      }
+    >
+      {entry.artifactType === 'visualization' && (
+        <div className="mb-3">
+          <p className="text-sm font-medium text-ink">{title}</p>
+          <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6 text-muted">
+            {exportText}
+          </p>
+        </div>
+      )}
       <ChartErrorBoundary fallbackTitle={`${title} 渲染失败`}>
         <div className={cn('w-full min-w-0 mx-auto', shellClassName)}>
           <ResponsiveArtifactFrame
@@ -187,7 +215,11 @@ function ArtifactBlock({
             icon={<Copy size={14} />}
             onClick={() => void handleCopyBoardText()}
           >
-            {t('artifact.copyText')}
+            {t(
+              entry.artifactType === 'visualization'
+                ? 'visualization.copyDescription'
+                : 'artifact.copyText',
+            )}
           </Button>
         ) : null}
       </div>
@@ -201,6 +233,7 @@ function ArtifactBlock({
       {expanded && (
         <ArtifactViewer
           title={title}
+          visualization={entry.artifactType === 'visualization'}
           chartClassName={shellClassName}
           layoutAspectRatio={layoutAspectRatio}
           minContentWidth={minContentWidth}

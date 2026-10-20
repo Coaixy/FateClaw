@@ -24,6 +24,9 @@ export const zhCNMessages = {
       tooling: '开发工具与间接依赖',
     },
     roles: {
+      diagrams: '流程图、关系图及时间线的绘制。',
+      visualizations: '交互式数据图表和表达式解释执行。',
+      diagramValidation: '在隔离环境中为图形语法校验提供 DOM。',
       bazi: '八字排盘与命理数据计算。',
       ziwei: '紫微斗数星盘与相关计算。',
       qimen: '奇门遁甲排盘。',
@@ -90,7 +93,8 @@ export const zhCNMessages = {
     paid: '付费模型',
     freeReply: '免费额度 · 未扣积分',
     refunded: '免费次数已返还 · 未扣积分',
-    benefitDescription: '有效会员专享，享有每日免费额度，不扣积分，受每日次数与并发限制。',
+    benefitDescription:
+      '有效会员专享，享有每日免费额度，不扣积分，受每日次数与并发限制。',
     benefitSummary: '会员专享，每日免费额度，不扣积分。',
     membershipRequired: '免费模型仅限有效会员使用',
     unlock: '开通或续费会员',
@@ -135,6 +139,17 @@ export const zhCNMessages = {
       week: '近 7 天增长',
       dailyAverage: '近 7 天日均',
     },
+  },
+  visualization: {
+    viewTitle: '查看{title}',
+    fit: '完整图形',
+    zoomOut: '缩小图形',
+    zoomIn: '放大图形',
+    close: '关闭图形',
+    copyDescription: '复制说明',
+    loading: '正在生成图形…',
+    unavailable: '暂时无法加载这张图形，请查看文字说明。',
+    failed: '这张图形暂时无法绘制，文字说明仍可阅读。',
   },
   artifact: {
     expand: '全屏查看',
@@ -731,7 +746,8 @@ export const zhCNMessages = {
       suspended: '邀请资格已暂停',
     },
     netRecharge: '累计净充值 {amount}',
-    policy: '邀请名额按累计净充值所在档位计算，各档总额不叠加。每个邀请码有效 {days} 天，只能注册一次。',
+    policy:
+      '邀请名额按累计净充值所在档位计算，各档总额不叠加。每个邀请码有效 {days} 天，只能注册一次。',
     tiers: '累计净充值与邀请总名额',
     tierThreshold: '净充值满 {amount}',
     tierSlots: '累计 {count} 个名额',
@@ -740,9 +756,11 @@ export const zhCNMessages = {
     automaticAllowance: '当前充值档位：累计 {count} 个名额',
     manualAdjustment: '管理员调整：{count} 个名额',
     rechargeProgress: '下一档邀请名额的充值进度',
-    nextTierRemaining: '再充值 {amount}，档位总名额可提升至 {slots} 个，已注册和待使用的名额计入其中。',
+    nextTierRemaining:
+      '再充值 {amount}，档位总名额可提升至 {slots} 个，已注册和待使用的名额计入其中。',
     highestTierReached: '已达到最高充值档位。',
-    rechargeBasis: '仅统计实付充值并扣除已退款金额；已消费的余额仍计入，赠送积分和后台补余额不计入。',
+    rechargeBasis:
+      '仅统计实付充值并扣除已退款金额；已消费的余额仍计入，赠送积分和后台补余额不计入。',
     goRecharge: '前往充值',
     slots: '邀请名额',
     availableSlots: '可用名额',
@@ -750,8 +768,10 @@ export const zhCNMessages = {
     usedSlots: '已注册',
     createdTitle: '邀请码已生成',
     replayedTitle: '已找到上次生成的邀请码',
-    oneTimeNotice: '完整邀请码仅在本次显示，请先复制保存。刷新或离开后只能查看尾号。',
-    replayedNotice: '上次请求已经生成了邀请码，没有重复占用名额。完整码无法再次读取，请撤销后重新生成。',
+    oneTimeNotice:
+      '完整邀请码仅在本次显示，请先复制保存。刷新或离开后只能查看尾号。',
+    replayedNotice:
+      '上次请求已经生成了邀请码，没有重复占用名额。完整码无法再次读取，请撤销后重新生成。',
     fullCode: '完整邀请码',
     expiresAt: '{date} 到期',
     usedAt: '{date} 注册成功',
@@ -773,7 +793,8 @@ export const zhCNMessages = {
       suspended: '已暂停',
     },
     revoke: '撤销',
-    slotRules: '生成时预留名额，过期或撤销后释放；注册成功后永久消耗。退款降档会收紧未用名额，超额的未用邀请码从最新生成的开始撤销，已注册账号保留；重新达标不会重置已用名额。',
+    slotRules:
+      '生成时预留名额，过期或撤销后释放；注册成功后永久消耗。退款降档会收紧未用名额，超额的未用邀请码从最新生成的开始撤销，已注册账号保留；重新达标不会重置已用名额。',
   },
   login: {
     authModes: {
@@ -787,7 +808,8 @@ export const zhCNMessages = {
     smsSendFailed: '短信发送失败',
     enterSmsCaptcha: '请输入短信验证码',
     operationFailed: '操作失败',
-    newUserHint: '新用户需持有效邀请码注册中国大陆手机号账号。已有账号直接登录。',
+    newUserHint:
+      '新用户需持有效邀请码注册中国大陆手机号账号。已有账号直接登录。',
     createPhoneAccount: '创建手机号账号',
     phoneLogin: '手机号登录',
     registerSubtitle: '凭邀请码开通你的 AI 断卦副驾',
@@ -909,6 +931,7 @@ export const zhCNMessages = {
         get_current_time: '当前时间',
         get_session_board: '盘面',
         create_paipan: '起盘',
+        render_visualization: '生成图形',
       },
       toolTrace: '工具轨迹',
       processTrace: '思考与执行过程',
@@ -1238,7 +1261,8 @@ export const zhCNMessages = {
         threeNumbers: '三个数字',
         numberList: '数字列表',
         threeNumbersDescription: '依次填写 3 个数字，每个框内填写一个整数。',
-        numberListDescription: '每个框内填写一个整数，至少填写 2 个，可添加或移除数字框。',
+        numberListDescription:
+          '每个框内填写一个整数，至少填写 2 个，可添加或移除数字框。',
         numberSlot: '第 {index} 个数字',
         addNumber: '添加数字',
         removeNumber: '移除第 {index} 个数字',
