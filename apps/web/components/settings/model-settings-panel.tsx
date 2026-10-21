@@ -131,7 +131,7 @@ export function ModelSettingsContent({
       <div
         role="group"
         aria-label={t('modelChoice.title')}
-        className="grid grid-cols-2 gap-3"
+        className="grid grid-cols-1 gap-3"
       >
         {(['official', 'benefit'] as const).map((key) => {
           const free = key === 'benefit';
