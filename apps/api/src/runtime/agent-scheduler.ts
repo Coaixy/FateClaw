@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getRedis } from '#infrastructure/redis';
-import { logger } from '#infrastructure/logger';
+
 import { getAgentConcurrencyLimit } from '#modules/system/system-config';
 import { MAX_REQUEST_TIMEOUT_MS } from '#shared/timeout-chain';
 import {
@@ -10,10 +10,6 @@ import {
 } from './local-runner.js';
 import { capacityChanged, CAPACITY_CHANNEL } from './capacity-signal.js';
 
-const DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT = Math.max(
-  1,
-  parseInt(process.env.AGENT_CONCURRENCY_LIMIT || '10', 10) || 10,
-);
 const GLOBAL_AGENT_CONCURRENCY_KEY = 'agent:concurrency:active';
 const GLOBAL_AGENT_MEMBER_WAIT_QUEUE = 'agent:concurrency:waitq:member';
 const GLOBAL_AGENT_NORMAL_WAIT_QUEUE = 'agent:concurrency:waitq:normal';
@@ -32,17 +28,12 @@ async function resolveGlobalAgentConcurrencyLimit(): Promise<number> {
   ) {
     return cachedGlobalAgentConcurrencyLimit.value;
   }
-  try {
-    const value = await getAgentConcurrencyLimit();
-    cachedGlobalAgentConcurrencyLimit = {
-      value,
-      expiresAtMs: Date.now() + GLOBAL_AGENT_LIMIT_CACHE_MS,
-    };
-    return value;
-  } catch (err) {
-    logger.warn({ err }, '读取后台 agent 并发上限失败，使用环境变量默认值');
-    return DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT;
-  }
+  const value = await getAgentConcurrencyLimit();
+  cachedGlobalAgentConcurrencyLimit = {
+    value,
+    expiresAtMs: Date.now() + GLOBAL_AGENT_LIMIT_CACHE_MS,
+  };
+  return value;
 }
 
 async function enqueueGlobalAgentWaiter(
@@ -346,11 +337,11 @@ export function resetAgentScheduler(): void {
 
 export const stopAgentScheduler = () => capacityChanged.reset();
 
-export function getAgentConcurrencyKeys() {
+export async function getAgentConcurrencyKeys() {
   return {
     activeKey: GLOBAL_AGENT_CONCURRENCY_KEY,
     memberQueue: GLOBAL_AGENT_MEMBER_WAIT_QUEUE,
     normalQueue: GLOBAL_AGENT_NORMAL_WAIT_QUEUE,
-    limit: DEFAULT_GLOBAL_AGENT_CONCURRENCY_LIMIT,
+    limit: await resolveGlobalAgentConcurrencyLimit(),
   };
 }

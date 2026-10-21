@@ -3,6 +3,8 @@ import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
 import type {
   AdminModelSettingsOverviewDto,
   AdminModelSettingsUpdateDto,
+  RuntimeConfigDto,
+  RuntimeConfigUpdateDto,
 } from '@fateclaw/contracts/model-settings';
 import type {
   ChatSessionDto,
@@ -121,11 +123,7 @@ export type AdminScope =
   | 'users:read'
   | 'users:create'
   | 'messages:read';
-export type AdminHomePath =
-  | '/admin/overview'
-  | '/admin/users'
-  | '/overview'
-  | '/users';
+export type AdminHomePath = '/overview' | '/users';
 
 export interface AdminSession {
   success: boolean;
@@ -686,6 +684,13 @@ export const admin = {
     }),
   systemConfig: () =>
     adminRequest<AdminSystemConfigOverview>('/api/admin/system-config'),
+  runtimeConfig: () =>
+    adminRequest<RuntimeConfigDto>('/api/admin/system-config/runtime'),
+  updateRuntimeConfig: (data: RuntimeConfigUpdateDto) =>
+    adminRequest<RuntimeConfigDto>('/api/admin/system-config/runtime', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   benefitModelSettings: () =>
     adminRequest<AdminSystemConfigOverview>('/api/admin/system-config/benefit'),
   updateBenefitModelSettings: (data: AdminModelSettingsUpdate) =>

@@ -1,5 +1,12 @@
 /** The platform owns model configuration for every client. */
 
+export {
+  RUNTIME_CONFIG_LIMITS,
+  type RuntimeConfigValues,
+  type RuntimeConfigDto,
+  type RuntimeConfigUpdateDto,
+} from './runtime.js';
+
 export { modelPoolCooldown, type ModelPoolCooldown } from './cooldown.js';
 export {
   classifyModelFailure,

@@ -2,14 +2,12 @@ import {
   expireUserBonusBalanceBefore,
   getMembershipOverview,
   getUserById,
+  getRuntimeConfig,
 } from '#infrastructure/db';
 import {
   calculateAvailableSpendableCoins,
   isSpendableBalanceInArrears,
 } from '#shared/balance-coins';
-
-/** Central switch for the currently disabled WeChat integration. */
-const WECHAT_CLAW_FEATURE_ENABLED = false;
 
 /** Request-level capabilities consumed directly by runtime and business services. */
 export interface RuntimeEntitlementSnapshot {
@@ -31,9 +29,10 @@ export async function getRuntimeEntitlementSnapshot(
   userId: string,
 ): Promise<RuntimeEntitlementSnapshot> {
   await expireUserBonusBalanceBefore(userId, new Date().toISOString());
-  const [membership, user] = await Promise.all([
+  const [membership, user, config] = await Promise.all([
     getMembershipOverview(userId),
     getUserById(userId),
+    getRuntimeConfig(),
   ]);
   const walletState = {
     purchased_coins: user?.purchased_coins ?? 0,
@@ -46,7 +45,7 @@ export async function getRuntimeEntitlementSnapshot(
     membershipActive: membership.active,
     // Active membership provides access to the priority queue.
     hasPriorityQueue: membership.active,
-    canUseWechatClaw: WECHAT_CLAW_FEATURE_ENABLED && membership.active,
+    canUseWechatClaw: config.wechat_claw_enabled && membership.active,
     wallet: {
       purchasedCoins: walletState.purchased_coins,
       bonusCoins: walletState.bonus_coins,

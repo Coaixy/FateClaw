@@ -10,8 +10,9 @@ import { logger } from '#infrastructure/logger';
 import { cleanupPiSessionFilesForAdmin } from '#modules/admin/admin-service';
 import { getPiSessionHealthPolicy } from '#modules/system/system-config';
 
-/** Pi session 健康任务固定运行间隔：每 24 小时检查一次后台配置。 */
+/** Successful maintenance runs are spaced one day apart. */
 const PI_SESSION_HEALTH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PI_SESSION_POLICY_POLL_MS = 60 * 1000;
 /** 进程启动后延迟首次检查，避免启动期 DB/IO 压力叠加。 */
 const PI_SESSION_HEALTH_INITIAL_DELAY_MS = 60 * 1000;
 /** 每种 cleanup mode 单轮最多处理的 session 数。 */
@@ -23,6 +24,7 @@ const PI_SESSION_HEALTH_LOCK_KEY = 'pi-session-health:worker-lock';
 let intervalTimer: NodeJS.Timeout | null = null;
 let initialTimer: NodeJS.Timeout | null = null;
 let running = false;
+let lastCompletedAt = 0;
 
 /**
  * 执行一轮 Pi session 健康维护。
@@ -46,6 +48,11 @@ export async function runPiSessionHealthOnce(): Promise<void> {
       );
       return;
     }
+    if (
+      lastCompletedAt &&
+      Date.now() - lastCompletedAt < PI_SESSION_HEALTH_INTERVAL_MS
+    )
+      return;
 
     const lock = await acquireRedisWorkerLock(
       PI_SESSION_HEALTH_LOCK_KEY,
@@ -75,6 +82,7 @@ export async function runPiSessionHealthOnce(): Promise<void> {
         },
         'Pi session 健康维护完成',
       );
+      lastCompletedAt = Date.now();
     } finally {
       await lock.release();
     }
@@ -88,7 +96,7 @@ export async function runPiSessionHealthOnce(): Promise<void> {
 /**
  * 启动 Pi session 健康维护后台任务。
  *
- * @remarks 任务会固定每天检查一次后台配置；未启用时不会执行 cleanup。
+ * @remarks Admin policy is checked every minute; enabled cleanup runs at most daily.
  */
 export function startPiSessionHealthWorker(): void {
   if (intervalTimer || initialTimer) {
@@ -102,7 +110,7 @@ export function startPiSessionHealthWorker(): void {
       initialDelayMs: PI_SESSION_HEALTH_INITIAL_DELAY_MS,
       batchLimit: PI_SESSION_HEALTH_BATCH_LIMIT,
     },
-    '启动 Pi session 健康维护后台任务',
+    '启动 Pi session 维护配置巡检',
   );
 
   initialTimer = setTimeout(() => {
@@ -117,12 +125,13 @@ export function startPiSessionHealthWorker(): void {
     runPiSessionHealthOnce().catch(() => {
       /* 同上 */
     });
-  }, PI_SESSION_HEALTH_INTERVAL_MS);
+  }, PI_SESSION_POLICY_POLL_MS);
   intervalTimer.unref?.();
 }
 
 /** 停止 Pi session 健康维护任务，用于测试或优雅关闭。 */
 export function stopPiSessionHealthWorker(): void {
+  lastCompletedAt = 0;
   if (initialTimer) {
     clearTimeout(initialTimer);
     initialTimer = null;

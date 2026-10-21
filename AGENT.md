@@ -30,7 +30,7 @@ All paths below are relative to the repository root.
 - Chat submission returns acceptance and a request ID. The final reply is persisted by the AI Chat outbox handler and delivered through the stream; an accepted POST is not proof of completion.
 - Model configuration is a request-level `llmRuntime` snapshot. Runtime process environment construction belongs to `apps/api/src/runtime/agent-env.ts`; do not introduce a second model configuration path.
 - Chart runners produce structured artifacts in the API. PostgreSQL owns immutable Skill content revisions and access rules; `.fateclaw/text-skills/` contains rebuildable process-owned snapshots. Runtime resources remain scoped to the authorized request.
-- WeChat availability is gated by `apps/api/src/modules/billing/entitlements.ts`. Consult the [integration guide](docs/openclaw-integration.md) and current callers before changing that path.
+- Runtime policies are owned by PostgreSQL `runtime_config` and the admin `/system/runtime` page; see [Runtime configuration](docs/runtime-configuration.md). WeChat availability combines that policy with membership in `apps/api/src/modules/billing/entitlements.ts`. Consult the [integration guide](docs/openclaw-integration.md) and current callers before changing that path.
 
 ## Validate a change
 

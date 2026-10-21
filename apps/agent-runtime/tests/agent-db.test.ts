@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockQuery,
@@ -32,6 +32,7 @@ vi.mock('pg', () => ({
 
 import {
   closeAgentDb,
+  getAgentAccountConcurrency,
   queryEffectiveUserSkills,
   querySkillContentRevision,
   updateSoulContentDb,
@@ -171,5 +172,28 @@ describe('atomic Soul updates', () => {
       updateSoulContentDb('web:user-1', 'new', hash('old')),
     ).rejects.toBe(failure);
     expect(mockRelease).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('live account concurrency policy', () => {
+  beforeEach(async () => {
+    await closeAgentDb();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    process.env.DATABASE_URL = 'postgres://synthetic/test';
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('refreshes the persisted account limit without restarting the daemon', async () => {
+    mockQuery.mockResolvedValue({ rows: [{ agent_account_concurrency: 3 }] });
+    expect(await getAgentAccountConcurrency()).toBe(3);
+    mockQuery.mockResolvedValue({ rows: [{ agent_account_concurrency: 1 }] });
+    await vi.advanceTimersByTimeAsync(2001);
+    expect(await getAgentAccountConcurrency()).toBe(1);
+    mockQuery.mockRejectedValue(new Error('policy unavailable'));
+    await vi.advanceTimersByTimeAsync(2001);
+    await expect(getAgentAccountConcurrency()).rejects.toThrow(
+      'policy unavailable',
+    );
   });
 });

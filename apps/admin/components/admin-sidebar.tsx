@@ -23,6 +23,7 @@ import {
   ReceiptText,
   WalletCards,
   Ticket,
+  Settings2,
   LogOut,
   Menu,
   X,
@@ -83,6 +84,12 @@ const navItems = [
     href: '/system/models',
     label: '付费模型',
     icon: Bot,
+    requiredScopes: ['admin:*'],
+  },
+  {
+    href: '/system/runtime',
+    label: '运行配置',
+    icon: Settings2,
     requiredScopes: ['admin:*'],
   },
   {

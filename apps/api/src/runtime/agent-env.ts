@@ -34,6 +34,8 @@ export interface AgentEnv {
   FATECLAW_TIMEZONE: string;
   /** Pi session 本地文件目录；传给本地 agent-runtime 以保持宿主清理路径一致。 */
   FATECLAW_PI_SESSION_DIR?: string;
+  /** Shared cache root used by legacy imports and process-owned Skill snapshots. */
+  FATECLAW_TEXT_SKILLS_DIR?: string;
   /** 标记本进程是宿主拉起的本地 agent-runtime，供孤儿清理精确识别。 */
   FATECLAW_LOCAL_AGENT_RUNTIME: '1';
   /** 宿主 API 进程 PID，非优雅重启后用于识别孤儿 agent-runtime。 */
@@ -89,6 +91,7 @@ export async function buildAgentEnv(accountId: string): Promise<AgentEnv> {
     TZ: TIMEZONE,
     FATECLAW_TIMEZONE: TIMEZONE,
     FATECLAW_PI_SESSION_DIR: process.env.FATECLAW_PI_SESSION_DIR || undefined,
+    FATECLAW_TEXT_SKILLS_DIR: process.env.FATECLAW_TEXT_SKILLS_DIR || undefined,
     FATECLAW_LOCAL_AGENT_RUNTIME: '1',
     FATECLAW_AGENT_PARENT_PID: String(process.pid),
     FATECLAW_PROJECT_ROOT: resolveProjectRoot(),

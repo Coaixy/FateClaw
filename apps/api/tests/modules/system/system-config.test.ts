@@ -14,6 +14,7 @@ vi.mock('#infrastructure/repositories/benefit-repository', () => ({
 }));
 
 const db = vi.hoisted(() => ({
+  getRuntimeConfig: vi.fn(),
   getPlatformModelSettings: vi.fn(),
   getPlatformModelRuntimeSettings: vi.fn(),
   getSystemSecret: vi.fn(),
@@ -404,25 +405,47 @@ describe('pool updates', () => {
   });
 });
 
-describe('runtime defaults', () => {
-  it('uses fixed service limits without exposing runtime configuration', async () => {
-    expect(await getAgentConcurrencyLimit()).toBe(10);
+describe('admin runtime policies', () => {
+  it('uses persisted policies for every runtime and Skill limit', async () => {
+    db.getRuntimeConfig.mockResolvedValue({
+      agent_concurrency_limit: 3,
+      local_agent_max_processes: 2,
+      local_agent_idle_ttl_ms: 120_000,
+      pi_session_health_enabled: true,
+      pi_session_inactive_cleanup_days: 45,
+      pi_session_orphan_grace_days: 60,
+      user_skill_max_count: 12,
+      skill_bundle_max_files: 20,
+      skill_bundle_max_file_chars: 2000,
+      skill_bundle_max_total_chars: 8000,
+      skill_bundle_max_zip_bytes: 4096,
+    });
+    expect(await getAgentConcurrencyLimit()).toBe(3);
     expect(await getLocalAgentRuntimePolicy()).toEqual({
-      maxProcesses: 4,
-      idleTtlMs: 600_000,
+      maxProcesses: 2,
+      idleTtlMs: 120_000,
     });
     expect(await getPiSessionHealthPolicy()).toEqual({
-      enabled: false,
-      inactiveCleanupDays: 30,
-      orphanGraceDays: 30,
+      enabled: true,
+      inactiveCleanupDays: 45,
+      orphanGraceDays: 60,
     });
-    expect(await getUserSkillLimitPolicy()).toBe(30);
+    expect(await getUserSkillLimitPolicy()).toBe(12);
     expect(await getSkillBundleLimitsPolicy()).toEqual({
-      max_files: 50,
-      max_file_chars: 100_000,
-      max_total_chars: 500_000,
-      max_zip_bytes: 8 * 1024 * 1024,
+      max_files: 20,
+      max_file_chars: 2000,
+      max_total_chars: 8000,
+      max_zip_bytes: 4096,
     });
-    expect(db.getPlatformModelSettings).not.toHaveBeenCalled();
+  });
+
+  it('propagates an unavailable policy instead of substituting fixed limits', async () => {
+    db.getRuntimeConfig.mockRejectedValue(new Error('policy unavailable'));
+    await expect(getAgentConcurrencyLimit()).rejects.toThrow(
+      'policy unavailable',
+    );
+    await expect(getLocalAgentRuntimePolicy()).rejects.toThrow(
+      'policy unavailable',
+    );
   });
 });

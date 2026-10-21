@@ -87,20 +87,8 @@ export function AdminActiveFilters({
         </button>
       ) : null}
       {actions ? (
-        <span className="ml-auto flex items-center gap-2">
-          {actions}
-        </span>
+        <span className="ml-auto flex items-center gap-2">{actions}</span>
       ) : null}
     </div>
   );
-}
-
-/**
- * 便捷工具：把"label + 当前值"拼成统一展示文案。
- *
- * 多数下拉型筛选的 chip 文案是「维度名：值」格式（如「订单状态：已支付」），
- * 抽出来避免每个调用方各写一遍模板字符串。
- */
-export function formatChipLabel(dimLabel: string, valueLabel: string) {
-  return `${dimLabel}：${valueLabel}`;
 }

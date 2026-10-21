@@ -1,9 +1,4 @@
-import type {
-  AdminHomePath,
-  AdminRole,
-  AdminScope,
-  AdminSession,
-} from '@/lib/admin-api';
+import type { AdminScope, AdminSession } from '@/lib/admin-api';
 
 function splitHref(href: string): { pathname: string; search: string } {
   const [pathname, ...rest] = href.split('?');
@@ -13,26 +8,10 @@ function splitHref(href: string): { pathname: string; search: string } {
   };
 }
 
-// 后端历史上会返回 /admin/* 作为管理后台 home path；独立 admin 站点以根路径承载，
-// 所以导航层统一把旧路径转换成本站路径，避免牵动后端契约。
-function toLocalAdminPathname(pathname: string): string {
-  const normalized =
-    pathname.length > 1 && pathname.endsWith('/')
-      ? pathname.slice(0, -1)
-      : pathname;
-
-  if (normalized === '/admin') return '/';
-  if (normalized.startsWith('/admin/')) {
-    return normalized.slice('/admin'.length) || '/';
-  }
-  return normalized || '/';
-}
-
-/**
- * 将后端历史 `/admin/*` 路径转换成独立 admin 站点本地路径。
- */
 export function normalizeAdminPathname(pathname: string): string {
-  return toLocalAdminPathname(pathname);
+  return pathname.length > 1 && pathname.endsWith('/')
+    ? pathname.slice(0, -1)
+    : pathname || '/';
 }
 
 /**
@@ -40,7 +19,7 @@ export function normalizeAdminPathname(pathname: string): string {
  */
 export function toAdminDocumentHref(href: string): string {
   const { pathname, search } = splitHref(href);
-  const localPathname = toLocalAdminPathname(pathname);
+  const localPathname = normalizeAdminPathname(pathname);
   const normalizedPathname =
     localPathname === '/'
       ? '/'
@@ -55,18 +34,6 @@ export function toAdminDocumentHref(href: string): string {
  */
 export function replaceAdminDocument(href: string) {
   window.location.replace(toAdminDocumentHref(href));
-}
-
-const ADMIN_ROLE_HOME_PATH: Record<AdminRole, AdminHomePath> = {
-  owner: '/overview',
-  user_manager: '/users',
-};
-
-/**
- * 按管理员身份返回默认首页；优先使用后端 session.home_path。
- */
-export function getAdminHomePathForRole(role: AdminRole): AdminHomePath {
-  return ADMIN_ROLE_HOME_PATH[role];
 }
 
 /**

@@ -29,15 +29,6 @@ type SendSMSCaptchaArgs =
       inviteCode?: string,
     ];
 
-/**
- * 清理当前用户信息的 in-flight 请求缓存。
- *
- * @returns 无返回值。
- */
-export function clearAuthCache() {
-  meRequestCache.clear();
-}
-
 export const authApi = {
   captcha: () => requestJson<CaptchaChallenge>('/api/auth/captcha'),
   sendSMSCaptcha: (

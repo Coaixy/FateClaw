@@ -25,14 +25,13 @@ The admin site's login page is at the domain root:
 - `/messages`: Messages
 - `/skills`: Skills
 - `/issues`: issue management and private account attribution
-- `/workflows`: Workflow
 - `/logs`: Logs
+- `/system/runtime`: owner-only runtime policies and WeChat availability
 - `/system/models`: Model configuration
 - `/system/rewards`: RMB credit configuration
 - `/system/registration-invites`: owner-only invitation policy, allowances, operational codes and completed-refund records
 
-The backend `/api/admin/verify` endpoint may still return legacy paths such as `/admin/overview` or `/admin/users`.
-`apps/admin/lib/admin-navigation.ts` converts those paths to this site's root-relative routes. Do not duplicate compatibility logic in pages.
+The backend `/api/admin/verify` endpoint returns `/overview` or `/users` for this independent app. `apps/admin/lib/admin-navigation.ts` handles trailing slashes and static document navigation. Keep these root-relative paths consistent with the backend principal contract.
 
 ## Development and production differences
 
@@ -50,3 +49,7 @@ The admin app is a static export; frontend pages are not a security boundary. Pr
 3. The API's `ALLOWED_ORIGINS` must include the admin site's origin.
 4. Admin keys must be entered by administrators; do not compile them into frontend environment variables or static files.
 5. Enforce HTTPS to prevent plaintext transmission of admin keys.
+
+## Runtime policies
+
+The owner-only `/system/runtime` page reads and saves `/api/admin/system-config/runtime`. PostgreSQL owns the values; saves require the current revision and reject concurrent edits with 409. UI validation uses the shared numeric bounds. See [Runtime configuration](../../docs/runtime-configuration.md) for fields, defaults and application timing.

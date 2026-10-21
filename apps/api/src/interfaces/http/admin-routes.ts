@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { adminIssueRoutes } from './issues-routes.js';
 import { adminAnnouncementRoutes } from './announcements-routes.js';
 import { adminRegistrationInviteRoutes } from './registration-invite-routes.js';
+import { runtimeConfigRoutes } from './runtime-config-routes.js';
 
 import {
   BILLING_RESERVATION_STALE_MS,
@@ -82,7 +83,7 @@ import { collectRuntimeStatus } from '#runtime/runtime-status';
 
 type AdminRole = 'owner' | 'user_manager';
 type AdminScope = 'admin:*' | 'users:read' | 'users:create' | 'messages:read';
-type AdminHomePath = '/admin/overview' | '/admin/users';
+type AdminHomePath = '/overview' | '/users';
 
 interface AdminPrincipal {
   role: AdminRole;
@@ -93,13 +94,13 @@ interface AdminPrincipal {
 const OWNER_ADMIN_PRINCIPAL: AdminPrincipal = {
   role: 'owner',
   scopes: ['admin:*'],
-  home_path: '/admin/overview',
+  home_path: '/overview',
 };
 
 const USER_MANAGER_ADMIN_PRINCIPAL: AdminPrincipal = {
   role: 'user_manager',
   scopes: ['users:read', 'users:create', 'messages:read'],
-  home_path: '/admin/users',
+  home_path: '/users',
 };
 
 const USER_MANAGER_ALLOWED_ROUTES = new Map<string, AdminScope>([
@@ -573,6 +574,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/admin/status — 管理后台完整运行状态统计
   app.get('/status', async () => getAdminStatusOverview());
 
+  app.register(runtimeConfigRoutes);
   app.get('/system-config', async () => getSystemConfigOverview());
   app.get('/system-config/benefit', async () =>
     getSystemConfigOverview('benefit'),

@@ -99,8 +99,11 @@ export async function requestJson<T>(
   path: string,
   options: RequestJsonOptions = {},
 ): Promise<T> {
-  const { exposeServerErrorMessage = false, timeoutMs, ...fetchOptions } =
-    options;
+  const {
+    exposeServerErrorMessage = false,
+    timeoutMs,
+    ...fetchOptions
+  } = options;
   const token =
     typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
@@ -169,11 +172,4 @@ export async function requestJson<T>(
   }
 
   return body as T;
-}
-
-export async function apiRequest<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  return requestJson<T>(path, options);
 }

@@ -17,11 +17,7 @@ import { sendOpsAlert } from '#infrastructure/alerts';
 import { logger } from '#infrastructure/logger';
 import { getRedis } from '#infrastructure/redis';
 import { resolveProjectRoot } from '#infrastructure/project-root';
-import {
-  DEFAULT_LOCAL_AGENT_IDLE_TTL_MS,
-  DEFAULT_LOCAL_AGENT_MAX_PROCESSES,
-  getLocalAgentRuntimePolicy,
-} from '#modules/system/system-config';
+import { getLocalAgentRuntimePolicy } from '#modules/system/system-config';
 
 const LOCAL_AGENT_POLICY_CACHE_MS = 2_000;
 const LOCAL_AGENT_FORCE_KILL_DELAY_MS = 10_000;
@@ -161,27 +157,6 @@ function isChildAlive(child: ChildProcess): boolean {
   return child.exitCode === null && child.signalCode === null && !child.killed;
 }
 
-function normalizeLocalAgentPolicy(
-  value: Partial<LocalAgentRuntimePolicy> | null | undefined,
-): LocalAgentRuntimePolicy {
-  return {
-    maxProcesses: Math.min(
-      100,
-      Math.max(
-        1,
-        Math.floor(value?.maxProcesses ?? DEFAULT_LOCAL_AGENT_MAX_PROCESSES),
-      ),
-    ),
-    idleTtlMs: Math.min(
-      86_400_000,
-      Math.max(
-        30_000,
-        Math.floor(value?.idleTtlMs ?? DEFAULT_LOCAL_AGENT_IDLE_TTL_MS),
-      ),
-    ),
-  };
-}
-
 async function resolveLocalAgentPolicy(): Promise<LocalAgentRuntimePolicy> {
   if (
     cachedLocalAgentPolicy &&
@@ -189,23 +164,12 @@ async function resolveLocalAgentPolicy(): Promise<LocalAgentRuntimePolicy> {
   ) {
     return cachedLocalAgentPolicy.value;
   }
-
-  try {
-    const value = normalizeLocalAgentPolicy(await getLocalAgentRuntimePolicy());
-    cachedLocalAgentPolicy = {
-      value,
-      expiresAtMs: Date.now() + LOCAL_AGENT_POLICY_CACHE_MS,
-    };
-    return value;
-  } catch (err) {
-    const fallback = normalizeLocalAgentPolicy(null);
-    cachedLocalAgentPolicy = {
-      value: fallback,
-      expiresAtMs: Date.now() + LOCAL_AGENT_POLICY_CACHE_MS,
-    };
-    logger.warn({ err, fallback }, '读取本地 agent 运行时策略失败，使用默认值');
-    return fallback;
-  }
+  const value = await getLocalAgentRuntimePolicy();
+  cachedLocalAgentPolicy = {
+    value,
+    expiresAtMs: Date.now() + LOCAL_AGENT_POLICY_CACHE_MS,
+  };
+  return value;
 }
 
 function clearIdleTimer(record: LocalAgentRecord): void {

@@ -26,7 +26,7 @@ The API prefixes currently registered in Fastify:
 
 ## Execution modes at a glance
 
-The stable primary flows are AI Chat, manual chart calculation, and Text Skill Bundle knowledge libraries. WeChat OpenClaw/iLink is fully and reversibly disabled (`WECHAT_CLAW_FEATURE_ENABLED=false` + migration 0057). `canUseWechatClaw` is always `false`, so QR-code binding, polling, and delivery are unavailable.
+The stable primary flows are AI Chat, manual chart calculation, and Text Skill Bundle knowledge libraries. WeChat OpenClaw/iLink defaults to disabled. The owner controls `wechat_claw_enabled` at `/system/runtime`; enabled accounts also require an owner with active membership. See [WeChat integration](openclaw-integration.md).
 
 - For AI Chat, the API persists the user message, resolves the request-level `llmRuntime`, acquires the session busy lock, and dispatches through Redis IPC to the local agent-runtime for `web:{userId}`.
 - `POST /api/chat-sessions/s/:sessionId/messages` usually indicates only that the request was queued. The `ipc:{runtimeId}:ai-chat:outbox` handler asynchronously persists the final assistant message, settles billing, and pushes it through WebSocket.
@@ -237,7 +237,7 @@ Send an SMS verification code. Use `type = 1` for registration and `type = 0` fo
 
 ## Account management
 
-All account-management endpoints require authentication. WeChat OpenClaw/iLink is fully and reversibly disabled (`WECHAT_CLAW_FEATURE_ENABLED=false` + migration 0057). `canUseWechatClaw` is always `false`, so QR-code binding, status polling, and delivery are unavailable. The endpoints below remain registered, but the disabled feature switch prevents them from taking effect.
+All account-management endpoints require authentication. QR-code binding and account activation require the owner-enabled `wechat_claw_enabled` policy and active membership. The switch defaults to false. Existing disabled accounts require authorized rebinding before activation; enabling the global switch alone does not enable them.
 
 ### GET /api/account
 
@@ -948,7 +948,7 @@ Verify an admin key and return the current admin identity.
   "success": true,
   "role": "owner",
   "scopes": ["admin:*"],
-  "home_path": "/admin/overview"
+  "home_path": "/overview"
 }
 ```
 
@@ -1125,4 +1125,4 @@ All error responses use a consistent format:
 | `LOG_PRETTY` | Enabled by default outside production | `1` forces pino-pretty on; `0` forces it off |
 
 Model providers are primarily configured in the database through admin `/api/admin/system-config`. AI requests consume the host-supplied `llmRuntime` and do not rely on process-level model keys.
-Agent concurrency slots, the resident runtime limit, and idle-reclamation timeout are written to `runtime_config` through the admin app.
+Owner-only `GET` and `PUT /api/admin/system-config/runtime` manage the persisted runtime policy. `PUT` requires all current policy fields and `revision`; stale edits return 409. See [Runtime configuration](runtime-configuration.md) for the complete field contract and application timing.

@@ -62,11 +62,6 @@ export function isYang(value: number): boolean {
   return value === 7 || value === 9;
 }
 
-// 动爻：6（老阴）或 9（老阳）
-export function isDongByValue(value: number): boolean {
-  return value === 6 || value === 9;
-}
-
 // 世应判断：shiYing 字段为 '世' / '應'（繁体） 或其他位置名
 export function isShi(shiYing: string | undefined): boolean {
   return shiYing === '世';
@@ -78,32 +73,4 @@ export function getShiYingLabel(shiYing: string | undefined): '世' | '应' | ''
   if (isShi(shiYing)) return '世';
   if (isYing(shiYing)) return '应';
   return '';
-}
-
-// 六兽着色
-const LIUSHOU_COLOR: Record<string, string> = {
-  青龙: 'text-emerald-400',
-  朱雀: 'text-rose-400',
-  勾陈: 'text-amber-700',
-  腾蛇: 'text-amber-300',
-  螣蛇: 'text-amber-300',
-  白虎: 'text-slate-300',
-  玄武: 'text-blue-400',
-};
-
-export function getLiuShouColor(liushou: string): string {
-  return LIUSHOU_COLOR[liushou] ?? 'text-muted';
-}
-
-// 六亲着色
-const LIUQIN_COLOR: Record<string, string> = {
-  子孙: 'text-emerald-400',
-  妻财: 'text-yellow-400',
-  官鬼: 'text-rose-400',
-  父母: 'text-blue-400',
-  兄弟: 'text-yellow-400',
-};
-
-export function getLiuQinColor(liuqin: string): string {
-  return LIUQIN_COLOR[liuqin] ?? 'text-ink';
 }

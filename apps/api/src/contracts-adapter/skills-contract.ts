@@ -118,12 +118,6 @@ export function toSubscribedSkillDto(
   };
 }
 
-export function toSubscribedSkillDtos(
-  skills: SubscribedSkillSource[],
-): SubscribedSkillDto[] {
-  return skills.map(toSubscribedSkillDto);
-}
-
 type SharedBundlePreviewSource = {
   bundle: SkillBundle;
   skills: SharedBundlePreviewDto['skills'];

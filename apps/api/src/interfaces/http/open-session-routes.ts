@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import type { SessionBoardContext } from '#shared/token-budget';
+import type { SessionBoardContext } from '@fateclaw/contracts/agent';
 import { dispatchAiChatPrompt } from '#runtime/resident-agent';
 import {
   claimOrRefreshSessionProcessingLock,

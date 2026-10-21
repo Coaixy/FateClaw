@@ -74,6 +74,7 @@ const {
 }));
 
 vi.mock('#infrastructure/db', () => ({
+  getRuntimeConfig: vi.fn(async () => ({ wechat_claw_enabled: false })),
   archiveChatSession: mockArchiveChatSession,
   expireUserBonusBalanceBefore: vi.fn(async () => ({
     expired: 0,

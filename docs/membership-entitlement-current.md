@@ -20,7 +20,7 @@ Deploy the API and both web clients together: old identifiers are rejected by cu
 
 - `membershipActive`: whether the user has an active membership.
 - `hasPriorityQueue`: equals `membershipActive`.
-- `canUseWechatClaw`: always false while the centralized feature switch is disabled.
+- `canUseWechatClaw`: requires both active membership and the administrator-owned `wechat_claw_enabled` policy, which defaults to false. See [Runtime configuration](runtime-configuration.md).
 - `wallet`: purchased, bonus, reserved and available coins, plus the arrears flag.
 
 | Capability | Non-member | Active member |
@@ -31,7 +31,7 @@ Deploy the API and both web clients together: old identifiers are rejected by cu
 | Global execution queue | Standard queue | Priority queue |
 | Create an Open API key | Forbidden | Allowed |
 | Use an existing valid Open API key | Allowed while not in arrears; AI uses non-member pricing | Allowed while not in arrears; AI uses member pricing |
-| WeChat Claw | Disabled | Disabled |
+| WeChat Claw | Forbidden | Available when enabled by the owner; requires an enabled, owned account |
 
 Membership unlocks the separate [daily free service](benefit-model-pool.md) when
 enabled, subject to the administrator's existing daily-turn and concurrency settings.

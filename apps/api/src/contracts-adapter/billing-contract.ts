@@ -110,7 +110,7 @@ export function toMembershipPlanDto(
  * 将计费概览内部结构转换为 contract DTO。
  *
  * @param data 内部计费、钱包、会员摘要。
- * @returns 对外计费概览 DTO，并在兼容期同步输出旧字段。
+ * @returns Current billing, wallet and membership fields.
  */
 export function toBillingStatusDto(data: {
   billing: MonthlyMeteredBillingSummary;

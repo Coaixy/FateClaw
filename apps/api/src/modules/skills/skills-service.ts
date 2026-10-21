@@ -8,12 +8,6 @@
 import crypto from 'crypto';
 
 import {
-  MAX_SKILL_BUNDLE_FILE_LENGTH,
-  MAX_SKILL_BUNDLE_FILES,
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
-  MAX_USER_SKILLS,
-} from '@fateclaw/contracts/skills';
-import {
   getSkillBundleLimitsPolicy,
   getUserSkillLimitPolicy,
 } from '#modules/system/system-config';
@@ -101,14 +95,7 @@ export {
   updateUserCustomSkill,
 };
 
-export {
-  getSkillBundleLimitsPolicy,
-  getUserSkillLimitPolicy,
-  MAX_SKILL_BUNDLE_FILE_LENGTH,
-  MAX_SKILL_BUNDLE_FILES,
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
-  MAX_USER_SKILLS,
-};
+export { getSkillBundleLimitsPolicy, getUserSkillLimitPolicy };
 
 /**
  * 将技能名称转换为稳定目录名，避免路由层重复实现。

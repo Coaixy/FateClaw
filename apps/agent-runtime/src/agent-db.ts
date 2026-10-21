@@ -13,6 +13,23 @@ const { Pool } = pg;
 const WEB_CHAT_RUNTIME_PREFIX = 'web:';
 
 let pool: pg.Pool | null = null;
+let concurrencyPolicy: { value: number; expiresAt: number } | null = null;
+
+/** Live admin policy; an unavailable database must not silently raise execution capacity. */
+export async function getAgentAccountConcurrency(): Promise<number> {
+  if (concurrencyPolicy && concurrencyPolicy.expiresAt > Date.now())
+    return concurrencyPolicy.value;
+  const { rows } = await getAgentDbPool().query<{
+    agent_account_concurrency: number;
+  }>("SELECT agent_account_concurrency FROM runtime_config WHERE id='default'");
+  const value = rows[0]?.agent_account_concurrency;
+  if (!Number.isInteger(value) || value < 1 || value > 100)
+    throw new Error(
+      'Agent account concurrency configuration is missing or invalid',
+    );
+  concurrencyPolicy = { value, expiresAt: Date.now() + 2000 };
+  return value;
+}
 
 export function getAgentDbPool(): pg.Pool {
   if (!pool) {
@@ -43,6 +60,7 @@ function getUserIdFromWebChatRuntimeId(value: string): string | null {
 
 /** 关闭连接池（进程退出时调用） */
 export async function closeAgentDb(): Promise<void> {
+  concurrencyPolicy = null;
   if (pool) {
     await pool.end();
     pool = null;

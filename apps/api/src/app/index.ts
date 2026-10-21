@@ -18,17 +18,17 @@ import {
 import { pathToFileURL } from 'url';
 
 import { startApiServer } from '#interfaces/http/server';
-import {
-  initDatabase,
-  closeDatabase,
-  getEnabledAccounts,
-} from '#infrastructure/db';
+import { initDatabase, closeDatabase } from '#infrastructure/db';
 import {
   cleanupStaleLocalAgentsOnStartup,
   stopAllLocalAgents,
 } from '#runtime/local-runner';
-import { addAccountListener, startIpcWorker } from '#runtime/ipc-worker';
-import { startAccountPolling } from '#runtime/poller';
+import { startIpcWorker } from '#runtime/ipc-worker';
+import {
+  startWechatRuntimeWorker,
+  stopWechatRuntimeWorker,
+} from '#runtime/wechat-runtime';
+import { runRuntimeUpgrades } from '#runtime/runtime-upgrades';
 import { connectRedis, disconnectRedis } from '#infrastructure/redis';
 import { startRetentionWorker, stopRetentionWorker } from '#runtime/retention';
 import {
@@ -49,7 +49,6 @@ import {
   stopServiceStatusWorker,
 } from '#runtime/service-status-worker';
 import { seedOfficialSkillsFromRegistry } from '#infrastructure/paths';
-import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 
 // Re-export for CLI and external consumers
 export {
@@ -57,18 +56,6 @@ export {
   removeAccount,
   listAccounts,
 } from '#modules/account/account-service';
-
-/**
- * 热激活新账号入口。
- * 会员微信 Claw 账号绑定后，立即启动轮询和 IPC 监听。
- */
-export async function activateAccount(
-  account: import('#shared/types').Account,
-): Promise<void> {
-  // 微信 Claw 账号监听常驻（pinned），不参与站内监听的空闲回收。
-  addAccountListener(account.id, { pinned: true });
-  await startAccountPolling(account);
-}
 
 export async function main(): Promise<void> {
   logger.info('FateClaw 启动中...');
@@ -82,22 +69,9 @@ export async function main(): Promise<void> {
   await connectRedis();
   logger.info('Redis 已连接');
 
-  const enabledAccounts = await getEnabledAccounts();
-  const memberAccounts: string[] = [];
-  for (const account of enabledAccounts) {
-    if (!account.owner_id) continue;
-    const entitlement = await getRuntimeEntitlementSnapshot(account.owner_id);
-    if (!entitlement.canUseWechatClaw) continue;
-    memberAccounts.push(account.id);
-    void startAccountPolling(account).catch((err) => {
-      logger.error({ accountId: account.id, err }, '微信 Claw 轮询启动失败');
-    });
-  }
-  startIpcWorker(memberAccounts);
-  logger.info(
-    { accounts: memberAccounts.length },
-    '会员微信 Claw listener 已启动',
-  );
+  await runRuntimeUpgrades();
+  startIpcWorker([]);
+  await startWechatRuntimeWorker();
 
   // 启动数据保留策略后台任务（定时清理过期 trace_events）
   startRetentionWorker();
@@ -124,6 +98,7 @@ export async function main(): Promise<void> {
       // 再断开 Redis/DB——否则子进程排空中的响应会因连接先被关闭而丢失。
       await stopAgentRequestRecovery();
       await stopServiceStatusWorker();
+      await stopWechatRuntimeWorker();
       await stopAllLocalAgents();
       stopRetentionWorker();
       stopBillingSweepWorker();

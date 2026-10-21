@@ -1,6 +1,5 @@
 'use client';
 
-import type { ButtonHTMLAttributes } from 'react';
 import {
   AlertTriangle,
   ChevronLeft,
@@ -52,9 +51,7 @@ export function AdminPageHeader({
           {meta}
         </div>
         {description ? (
-          <p className="mt-1 text-[12px] leading-5 text-muted">
-            {description}
-          </p>
+          <p className="mt-1 text-[12px] leading-5 text-muted">{description}</p>
         ) : null}
       </div>
       {action}
@@ -188,28 +185,5 @@ export function AdminFilterSection({
       </div>
       {children}
     </section>
-  );
-}
-
-/**
- * 管理后台危险操作按钮，统一删除、清理和修复类操作的视觉状态。
- */
-export function AdminDangerButton({
-  icon: Icon = AlertTriangle,
-  children,
-  className = '',
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  icon?: LucideIcon;
-}) {
-  return (
-    <button
-      type="button"
-      className={`inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-error px-3 text-[13px] font-medium text-error transition-colors hover:bg-error hover:text-white disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
-      {...props}
-    >
-      <Icon size={13} />
-      {children}
-    </button>
   );
 }

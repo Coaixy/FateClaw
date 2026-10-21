@@ -123,3 +123,7 @@ pnpm test apps/api/tests/infrastructure/migrations-postgres.integration.test.ts
 For the second command, provide `FATECLAW_TEST_MIGRATIONS_DATABASE_URL` to the consuming test process. It must point to a disposable PostgreSQL server with `CREATE DATABASE` permission. The suite creates and drops only its own databases and never falls back to the application's `DATABASE_URL`.
 
 These paths were verified on disposable PostgreSQL 18.4. Deployment and writes against an existing configured database were not exercised (unverified).
+
+## Administrator runtime policy
+
+Migration `0098_runtime_config` preserves existing execution and Skill limits, adds revision fencing and the default-off WeChat switch, and removes obsolete model-selection and request-timeout columns after their historical consumers have run. Runtime policy saves and their audit records commit together. The separate `runtime_upgrade_tasks` receipt makes retired Redis LIST queue cleanup retryable and prevents repeating the deletion on every startup. See [Runtime configuration](runtime-configuration.md).

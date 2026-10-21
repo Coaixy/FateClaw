@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockGetUserByAccountId, mockGetUserById } = vi.hoisted(() => ({
   mockGetUserByAccountId: vi.fn(),
@@ -17,6 +17,7 @@ vi.mock('#modules/chat/web-chat-runtime', () => ({
 import { agentEnvToRecord, buildAgentEnv } from '#runtime/agent-env';
 
 describe('buildAgentEnv', () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUserByAccountId.mockResolvedValue({ id: 'user-1' });
@@ -42,5 +43,10 @@ describe('buildAgentEnv', () => {
     expect(env.AGENT_RUNTIME_REQUEST_MAX_DURATION_MS).toBe(
       String(25 * 60 * 1000),
     );
+  });
+  it('forwards the configured Skill cache root through the bounded environment', async () => {
+    vi.stubEnv('FATECLAW_TEXT_SKILLS_DIR', '/synthetic/skill-cache');
+    const env = agentEnvToRecord(await buildAgentEnv('account-1'));
+    expect(env.FATECLAW_TEXT_SKILLS_DIR).toBe('/synthetic/skill-cache');
   });
 });

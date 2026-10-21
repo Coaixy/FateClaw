@@ -72,10 +72,6 @@ const {
 
 vi.mock('#modules/skills/skills-service', () => ({
   ...serviceMocks,
-  MAX_SKILL_BUNDLE_FILE_LENGTH: 100000,
-  MAX_SKILL_BUNDLE_FILES: 50,
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH: 500000,
-  MAX_USER_SKILLS: 30,
 }));
 
 import { skillsRoutes } from '#interfaces/http/skills-routes';

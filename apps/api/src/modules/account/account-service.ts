@@ -33,8 +33,7 @@ export async function addAccount(
     bot_token: botToken,
     base_url: baseUrl,
     get_updates_buf: '',
-    // 微信 Claw 已可逆停用（WECHAT_CLAW_FEATURE_ENABLED=false / 迁移 0057 把存量账号置 false）。
-    // CLI 新建账号默认 enabled=false，堵住绕过停用拉起 iLink 轮询的活口；恢复功能时再统一启用。
+    // Binding enables the account only after checking the admin switch and membership.
     enabled: false,
     created_at: new Date().toISOString(),
     owner_id: null,

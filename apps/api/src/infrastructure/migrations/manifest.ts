@@ -29,6 +29,7 @@ import { piSessionFramesMigration } from '#infrastructure/migrations/versions/00
 import { benefitFailureBudgetMigration } from '#infrastructure/migrations/versions/0095-benefit-failure-budget';
 import { userDeletionOrdersMigration } from '#infrastructure/migrations/versions/0096-user-deletion-orders';
 import { runtimeIpcReceiptsMigration } from '#infrastructure/migrations/versions/0097-runtime-ipc-receipts';
+import { runtimeConfigMigration } from '#infrastructure/migrations/versions/0098-runtime-config';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -61,6 +62,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   benefitFailureBudgetMigration,
   userDeletionOrdersMigration,
   runtimeIpcReceiptsMigration,
+  runtimeConfigMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

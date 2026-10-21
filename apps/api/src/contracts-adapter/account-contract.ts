@@ -1,9 +1,4 @@
-import type {
-  AccountDto,
-  AccountSoulDto,
-  QrCodeResultDto,
-  QrCodeStatusResultDto,
-} from '@fateclaw/contracts/account';
+import type { AccountDto, AccountSoulDto } from '@fateclaw/contracts/account';
 
 import type { Account } from '#shared/types';
 
@@ -37,17 +32,4 @@ export function toAccountSoulDto(
   editEnabled = true,
 ): AccountSoulDto {
   return { content, edit_enabled: editEnabled };
-}
-
-export function toQrCodeResultDto(data: {
-  qrcode: string;
-  qrcode_url: string;
-}): QrCodeResultDto {
-  return data;
-}
-
-export function toQrCodeStatusResultDto(status: string): QrCodeStatusResultDto {
-  return {
-    status: status as QrCodeStatusResultDto['status'],
-  };
 }

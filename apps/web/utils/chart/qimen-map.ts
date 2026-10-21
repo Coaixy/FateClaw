@@ -45,19 +45,6 @@ export const STAR_WUXING: Record<string, '金' | '木' | '水' | '火' | '土'> 
   禽: '土',
 };
 
-export const SHEN_COLOR: Record<string, string> = {
-  符: 'text-amber-300',      // 值符
-  蛇: 'text-emerald-400',    // 腾蛇
-  阴: 'text-sky-300',        // 太阴
-  合: 'text-emerald-300',    // 六合
-  勾: 'text-yellow-600',     // 勾陈
-  雀: 'text-rose-400',       // 朱雀
-  虎: 'text-rose-400',       // 白虎
-  地: 'text-yellow-600',     // 九地
-  天: 'text-amber-200',      // 九天
-  玄: 'text-slate-400',      // 玄武
-};
-
 const WUXING_TEXT_COLOR: Record<string, string> = {
   金: 'text-yellow-400',
   木: 'text-emerald-400',
@@ -92,12 +79,6 @@ export const STEM_WUXING_MAP: Record<string, '金' | '木' | '水' | '火' | '�
   庚: '金', 辛: '金',
   壬: '水', 癸: '水',
 };
-
-export function stemWuxing(stem?: string): string {
-  if (!stem) return '';
-  const wx = STEM_WUXING_MAP[stem];
-  return wx ? wuxingColor(wx) : 'text-ink';
-}
 
 // 甲遁六仪：甲子→戊、甲戌→己、甲申→庚、甲午→辛、甲辰→壬、甲寅→癸
 export const JIA_LIUYI_MAP: Record<string, string> = {

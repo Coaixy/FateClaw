@@ -32,7 +32,7 @@ import {
 } from '#shared/conversation-log-metrics';
 import { mapInternalErrorToPublicError } from '#shared/public-error';
 import { settleBillingReservation } from '#modules/billing/plans';
-import { estimateTokens } from '#shared/token-budget';
+import { estimateTokens } from '#shared/token-estimate';
 
 function formatTokens(n: number): string {
   if (n >= 1000) {
@@ -339,7 +339,7 @@ async function processOutboxResponse(
       });
     }
   } catch (error) {
-    // 即使投递失败也必须 resolve pending，否则 submitInboxRequest 会挂起直到 30 分钟超时
+    // Resolve any retained legacy waiter even when external delivery failed.
     if (pending) {
       clearTimeout(pending.timeout);
       pendingRequests.delete(payload.requestId!);

@@ -168,9 +168,11 @@ export async function startAccountPolling(account: Account): Promise<void> {
         if (resp.errcode === -14) {
           log.warn('会话已过期，禁用账号并停止轮询');
           await updateAccount(account.id, { enabled: false });
-          pollingAccounts.delete(account.id);
+          if (pollingAccounts.get(account.id) === abortController)
+            pollingAccounts.delete(account.id);
           limiter.stop();
-          messageLimiters.delete(account.id);
+          if (messageLimiters.get(account.id) === limiter)
+            messageLimiters.delete(account.id);
           return;
         }
 
@@ -202,7 +204,8 @@ export async function startAccountPolling(account: Account): Promise<void> {
       await sleep(5000);
     }
   }
-  pollingAccounts.delete(account.id);
+  if (pollingAccounts.get(account.id) === abortController)
+    pollingAccounts.delete(account.id);
   const stoppedLimiter = messageLimiters.get(account.id);
   if (stoppedLimiter === limiter) {
     stoppedLimiter.stop();

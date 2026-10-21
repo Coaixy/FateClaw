@@ -6,7 +6,6 @@ import {
   areMessagesEqual,
   canHostToolTraceFooter,
   filterProgressMessages,
-  formatChatCost,
   formatChatCostLabels,
   formatChatDuration,
   hasFinalAssistantAfterLatestUser,
@@ -147,11 +146,7 @@ describe('chat display message state helpers', () => {
     });
 
     expect(
-      filterProgressMessages([
-        boardRequest,
-        ordinaryUserMessage,
-        boardResult,
-      ]),
+      filterProgressMessages([boardRequest, ordinaryUserMessage, boardResult]),
     ).toEqual([ordinaryUserMessage, boardResult]);
   });
 
@@ -201,12 +196,6 @@ describe('chat display message state helpers', () => {
     expect(formatChatDuration(12_300)).toBe('耗时 12s');
     expect(formatChatDuration(65_000)).toBe('耗时 1m 5s');
     expect(formatChatDuration(-1)).toBeNull();
-  });
-
-  it('formats assistant response credit cost labels', () => {
-    expect(formatChatCost(0)).toBe('消耗 0.00 积分');
-    expect(formatChatCost(1.236)).toBe('消耗 1.24 积分');
-    expect(formatChatCost(-1)).toBeNull();
   });
 
   it('formats assistant response billing breakdown labels', () => {

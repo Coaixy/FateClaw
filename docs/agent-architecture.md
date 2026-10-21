@@ -60,7 +60,7 @@ The host and agent-runtime have distinct responsibilities:
 Local deployments no longer require Docker to run agent-runtime. The host uses `apps/api/src/runtime/local-runner.ts` to launch `apps/agent-runtime` as a child process:
 
 - Development prefers the source entry point `src/daemon.ts`; production or `LOCAL_AGENT_ENTRY_MODE=dist` uses `dist/daemon.js`.
-- Each runtimeId maps to one resident child process. AI Chat uses `web:{userId}`; WeChat uses the account ID.
+- Each runtimeId maps to one resident child process. AI Chat uses `web:{userId}`. WeChat linked-session turns enter that same owned chat pipeline; retained legacy account envelopes use the WeChat account ID.
 - `apps/api/src/runtime/agent-env.ts` centrally builds the child environment, injecting only runtime dependencies such as identity, PostgreSQL, Redis, project root, and Pi session directories. It does not inject global model keys.
 - The current local policy permits four resident account processes. At capacity, the host retires the oldest idle runtime and counts it until actual exit.
 - Idle runtimes retire after ten minutes. An admitted execution retains its exact child lease until final response, cancellation or timeout.
@@ -105,7 +105,7 @@ The main AI Chat flow lives in `apps/api/src/modules/chat/chat-session-service.t
 
 AI Chat normally responds to the frontend asynchronously: after successful enqueueing, HTTP `POST /api/chat-sessions/s/:sessionId/messages` usually returns `accepted: true` and `request_id`. `ipc-ai-chat-outbox-handler.ts` handles `ipc:{runtimeId}:ai-chat:outbox` and persists the final reply. The web client exchanges `POST /api/chat-sessions/s/:sessionId/stream-ticket` for a short-lived, single-use ticket, then connects to the `/api/chat-sessions/s/:sessionId/stream` WebSocket. The server uses Redis pub/sub to push Pi session events, progress, final replies, and errors to the current session.
 
-WeChat/resident agents use the default `ipc:{runtimeId}:outbox`, handled by `ipc-outbox-handler.ts`, which may deliver to iLink according to `autoDeliver`. The dedicated AI Chat outbox never sends WeChat messages.
+Current WeChat turns use `runOwnedChatSessionTurn()` and deliver the returned final messages through the WeChat message handler. Retained legacy account envelopes use `ipc:{runtimeId}:outbox`, handled by `ipc-outbox-handler.ts` during upgrades. The dedicated AI Chat outbox never sends WeChat messages. Runtime policy and WeChat activation are described in [Runtime configuration](runtime-configuration.md).
 
 ## Concurrency, cancellation, and settlement
 

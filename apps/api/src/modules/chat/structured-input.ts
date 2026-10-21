@@ -1,4 +1,4 @@
-import type { HistoryMessage } from '#shared/token-budget';
+import type { HistoryMessage } from '@fateclaw/contracts/agent';
 import { getUserSoulContent } from '#infrastructure/db';
 
 export interface StructuredInput {

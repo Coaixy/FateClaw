@@ -2,6 +2,7 @@ import {
   getPlatformModelSettings,
   getPlatformModelRuntimeSettings,
   savePlatformModelConfig,
+  getRuntimeConfig,
 } from '#infrastructure/db';
 import {
   ModelConfigurationError,
@@ -36,14 +37,7 @@ import {
 } from '#infrastructure/repositories/benefit-repository';
 import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 import { NON_MEMBER_PRICE_MULTIPLIER } from '#modules/billing/plans';
-import {
-  MAX_SKILL_BUNDLE_FILE_LENGTH,
-  MAX_SKILL_BUNDLE_FILES,
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH,
-  MAX_SKILL_BUNDLE_ZIP_BYTES,
-  MAX_USER_SKILLS,
-  type SkillBundleLimitsDto,
-} from '@fateclaw/contracts/skills';
+import type { SkillBundleLimitsDto } from '@fateclaw/contracts/skills';
 
 type RuntimeSecretSource = 'database' | 'missing';
 export class ModelUnavailableError extends Error {
@@ -53,18 +47,7 @@ export type ProviderAuthMode = ModelAuthModeDto;
 // Historical billing snapshots can still contain custom model requests.
 export type LlmRuntimeSource = 'custom' | 'official';
 export type LlmBillingMode = 'none' | 'metered';
-export const DEFAULT_AGENT_CONCURRENCY_LIMIT = 10;
-export const DEFAULT_LOCAL_AGENT_MAX_PROCESSES = 4;
-export const DEFAULT_LOCAL_AGENT_IDLE_TTL_MS = 600_000;
 export const DEFAULT_PI_THINKING_LEVEL: PiThinkingLevel = 'medium';
-export const DEFAULT_PI_SESSION_INACTIVE_CLEANUP_DAYS = 30;
-export const DEFAULT_PI_SESSION_ORPHAN_GRACE_DAYS = 30;
-export const DEFAULT_SKILL_BUNDLE_MAX_FILES = MAX_SKILL_BUNDLE_FILES;
-export const DEFAULT_SKILL_BUNDLE_MAX_FILE_CHARS = MAX_SKILL_BUNDLE_FILE_LENGTH;
-export const DEFAULT_SKILL_BUNDLE_MAX_TOTAL_CHARS =
-  MAX_SKILL_BUNDLE_TOTAL_LENGTH;
-export const DEFAULT_SKILL_BUNDLE_MAX_ZIP_BYTES = MAX_SKILL_BUNDLE_ZIP_BYTES;
-export const DEFAULT_USER_SKILL_MAX_COUNT = MAX_USER_SKILLS;
 export type SkillBundleLimitsPolicy = SkillBundleLimitsDto;
 
 export interface EffectiveLlmRuntimeConfig {
@@ -414,36 +397,39 @@ export async function saveOfficialModelSettings(
 }
 
 export async function getAgentConcurrencyLimit(): Promise<number> {
-  return DEFAULT_AGENT_CONCURRENCY_LIMIT;
+  return (await getRuntimeConfig()).agent_concurrency_limit;
 }
 
 export async function getLocalAgentRuntimePolicy(): Promise<{
   maxProcesses: number;
   idleTtlMs: number;
 }> {
+  const config = await getRuntimeConfig();
   return {
-    maxProcesses: DEFAULT_LOCAL_AGENT_MAX_PROCESSES,
-    idleTtlMs: DEFAULT_LOCAL_AGENT_IDLE_TTL_MS,
+    maxProcesses: config.local_agent_max_processes,
+    idleTtlMs: config.local_agent_idle_ttl_ms,
   };
 }
 
 export async function getPiSessionHealthPolicy(): Promise<PiSessionHealthPolicy> {
+  const config = await getRuntimeConfig();
   return {
-    enabled: false,
-    inactiveCleanupDays: DEFAULT_PI_SESSION_INACTIVE_CLEANUP_DAYS,
-    orphanGraceDays: DEFAULT_PI_SESSION_ORPHAN_GRACE_DAYS,
+    enabled: config.pi_session_health_enabled,
+    inactiveCleanupDays: config.pi_session_inactive_cleanup_days,
+    orphanGraceDays: config.pi_session_orphan_grace_days,
   };
 }
 
 export async function getSkillBundleLimitsPolicy(): Promise<SkillBundleLimitsPolicy> {
+  const config = await getRuntimeConfig();
   return {
-    max_files: DEFAULT_SKILL_BUNDLE_MAX_FILES,
-    max_file_chars: DEFAULT_SKILL_BUNDLE_MAX_FILE_CHARS,
-    max_total_chars: DEFAULT_SKILL_BUNDLE_MAX_TOTAL_CHARS,
-    max_zip_bytes: DEFAULT_SKILL_BUNDLE_MAX_ZIP_BYTES,
+    max_files: config.skill_bundle_max_files,
+    max_file_chars: config.skill_bundle_max_file_chars,
+    max_total_chars: config.skill_bundle_max_total_chars,
+    max_zip_bytes: config.skill_bundle_max_zip_bytes,
   };
 }
 
 export async function getUserSkillLimitPolicy(): Promise<number> {
-  return DEFAULT_USER_SKILL_MAX_COUNT;
+  return (await getRuntimeConfig()).user_skill_max_count;
 }

@@ -34,7 +34,10 @@ vi.mock('#infrastructure/logger', () => ({
   },
 }));
 
-import { runPiSessionHealthOnce } from '#runtime/pi-session-health-worker';
+import {
+  runPiSessionHealthOnce,
+  stopPiSessionHealthWorker,
+} from '#runtime/pi-session-health-worker';
 
 function cleanupResult(mode: 'soft_deleted' | 'inactive') {
   return {
@@ -60,6 +63,7 @@ function cleanupResult(mode: 'soft_deleted' | 'inactive') {
 
 describe('runPiSessionHealthOnce', () => {
   beforeEach(() => {
+    stopPiSessionHealthWorker();
     vi.clearAllMocks();
     mockLockRelease.mockResolvedValue(undefined);
     mockAcquireRedisWorkerLock.mockResolvedValue({ release: mockLockRelease });

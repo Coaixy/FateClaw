@@ -36,7 +36,6 @@ import {
 } from '#modules/billing/entitlements';
 
 import {
-  AGENT_REQUEST_TIMEOUT_MS as AGENT_REQUEST_TIMEOUT,
   AI_CHAT_REQUEST_TIMEOUT_MS as AI_CHAT_REQUEST_TIMEOUT,
   MAX_REQUEST_TIMEOUT_MS,
   SESSION_PROCESSING_LOCK_TTL_SECONDS,
@@ -74,7 +73,6 @@ import {
   onLocalAgentProcessExit,
   type LocalAgentProcessExitInfo,
 } from './local-runner.js';
-import { FREE_WECHAT_UNSUPPORTED_MESSAGE } from '#modules/account/account-service';
 import { getUserIdFromWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
 import type { User } from '#shared/types';
 import {
@@ -674,216 +672,6 @@ function startAccountListenerSupervisor(accountId: string): void {
   })();
 }
 
-export function submitInboxRequest(input: {
-  accountId: string;
-  type: 'chat' | 'task';
-  userMessage: string;
-  history: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp?: string;
-  }>;
-  toUserId?: string;
-  contextToken?: string;
-  autoDeliver?: boolean;
-  sessionId?: string;
-  userName?: string;
-  assistantName?: string;
-  llmRuntime?: EffectiveLlmRuntimeConfig;
-}): Promise<InboxRequestResult> {
-  const requestId = `inbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-  return new Promise<InboxRequestResult>((resolve, reject) => {
-    void (async () => {
-      let timeout: NodeJS.Timeout | null = null;
-      let billingReservation: BillingReservation | null = null;
-      let concurrencySlotId: string | undefined;
-      let localAgentLeaseId: string | undefined;
-
-      try {
-        const owner = await getOwnerByRuntimeId(input.accountId);
-        if (!owner?.id) {
-          // 未绑定平台用户的账号不应消费 token：拒绝并明确日志，避免无追踪计费泄漏。
-          logger.warn(
-            { accountId: input.accountId, type: input.type },
-            '收件箱请求被拒绝：账号未绑定到平台用户',
-          );
-          reject(new Error('账号未绑定平台用户，无法处理 AI 请求'));
-          return;
-        }
-        const entitlement = await getRuntimeEntitlementSnapshot(owner.id);
-        const priority = resolveInboxPriority(entitlement);
-        if ((input.autoDeliver ?? true) && !entitlement.canUseWechatClaw) {
-          reject(new Error(FREE_WECHAT_UNSUPPORTED_MESSAGE));
-          return;
-        }
-        const baseRuntime = input.llmRuntime
-          ? llmRuntimeToSnapshot(input.llmRuntime)
-          : await resolveLlmRuntimeSnapshot(owner.id);
-        // 非会员专家模式加价：把官方模型 token 单价烙进快照，贯穿 reserve/settle/recover。
-        const llmRuntime = applyNonMemberPricingMarkup(
-          baseRuntime,
-          entitlement.membershipActive,
-        );
-        billingReservation = await reserveBillingForRequest({
-          userId: owner.id,
-          requestId,
-          runtime: llmRuntime,
-          entitlementSnapshot: entitlementMetadata(entitlement),
-        });
-
-        timeout = setTimeout(async () => {
-          // 超时时清除会话忙碌标记
-          const pending = pendingInboxRequests.get(requestId);
-          const sessionId = pending?.sessionId;
-          pendingInboxRequests.delete(requestId);
-          if (sessionId) {
-            void releaseSessionProcessingLock(sessionId, requestId).catch(
-              () => {},
-            );
-          }
-          void releaseGlobalAgentSlot(
-            pending?.concurrencySlotId ?? concurrencySlotId ?? requestId,
-          );
-          void releasePerUserMeteredSlotByRequestId(requestId);
-          void releaseLocalAgentLeaseForPending(pending, {
-            accountId: input.accountId,
-            requestId,
-            reason: 'timeout',
-          });
-          logger.error(
-            { accountId: input.accountId, requestId, type: input.type },
-            '收件箱请求超时',
-          );
-          reject(new Error(`收件箱请求超时: ${requestId}`));
-        }, AGENT_REQUEST_TIMEOUT);
-
-        pendingInboxRequests.set(requestId, {
-          accountId: input.accountId,
-          ownerUserId: owner.id,
-          toUserId: input.toUserId,
-          contextToken: input.contextToken,
-          autoDeliver: input.autoDeliver ?? true,
-          sessionId: input.sessionId,
-          sessionProcessingRequestId: input.sessionId ? requestId : undefined,
-          llmRuntime,
-          billingReservation,
-          priority,
-          concurrencySlotId,
-          localAgentLeaseId,
-          resolve,
-          reject,
-          timeout,
-        });
-
-        concurrencySlotId = await acquireAgentExecution({
-          accountId: input.accountId,
-          deadlineAtMs: Date.now() + AGENT_REQUEST_TIMEOUT,
-          onRuntimeReady: (leaseId, capacityToken) => {
-            const pending = pendingInboxRequests.get(requestId);
-            if (!pending) return false;
-            localAgentLeaseId = leaseId;
-            pending.localAgentLeaseId = leaseId;
-            pending.capacityToken = capacityToken;
-            return true;
-          },
-          requestId,
-          priority,
-          shouldContinue: () => pendingInboxRequests.has(requestId),
-          onAcquired: (slotId) => {
-            concurrencySlotId = slotId;
-            const pending = pendingInboxRequests.get(requestId);
-            if (pending) {
-              pending.concurrencySlotId = slotId;
-            }
-          },
-        });
-        if (!pendingInboxRequests.has(requestId)) {
-          throw new Error('请求已取消或超时');
-        }
-
-        const payload = JSON.stringify({
-          type: input.type,
-          requestId,
-          accountId: input.accountId,
-          userMessage: input.userMessage,
-          history: input.history,
-          sessionId: input.sessionId,
-          userName: input.userName,
-          assistantName: input.assistantName,
-          llmRuntime,
-          timestamp: new Date().toISOString(),
-        });
-
-        // 写入会话忙碌标记（35 分钟 TTL，比 agent 超时 30min 多 5min 做缓冲）
-        if (input.sessionId) {
-          const processingClaimed = await claimOrRefreshSessionProcessingLock(
-            input.sessionId,
-            requestId,
-            SESSION_PROCESSING_LOCK_TTL_SECONDS,
-          );
-          if (!processingClaimed) {
-            throw new Error('会话正在处理其他请求');
-          }
-        }
-
-        const pending = pendingInboxRequests.get(requestId);
-        if (!pending) {
-          throw new Error('请求已取消或超时');
-        }
-        await enqueueInboxPayload(
-          input.accountId,
-          pending.priority ?? 'normal',
-          payload,
-        );
-        logger.info(
-          {
-            accountId: input.accountId,
-            requestId,
-            type: input.type,
-            autoDeliver: input.autoDeliver ?? true,
-            toUserId: input.toUserId,
-            billingRecorded: Boolean(billingReservation),
-            priority: pending.priority ?? 'normal',
-            concurrencySlotId,
-          },
-          '已提交收件箱请求到 Redis',
-        );
-      } catch (err) {
-        if (timeout) {
-          clearTimeout(timeout);
-        }
-        const pending = pendingInboxRequests.get(requestId);
-        pendingInboxRequests.delete(requestId);
-        if (input.sessionId) {
-          void releaseSessionProcessingLock(input.sessionId, requestId).catch(
-            () => {},
-          );
-        }
-        void releaseGlobalAgentSlot(concurrencySlotId ?? requestId);
-        if (pending) {
-          void releaseLocalAgentLeaseForPending(pending, {
-            accountId: input.accountId,
-            requestId,
-            reason: 'submit_error',
-          });
-        } else {
-          void releaseLocalAgentLeaseById(localAgentLeaseId, {
-            accountId: input.accountId,
-            requestId,
-            reason: 'submit_error',
-          });
-        }
-        reject(
-          err instanceof Error
-            ? err
-            : new Error(`写入 Redis 收件箱失败: ${String(err)}`),
-        );
-      }
-    })();
-  });
-}
-
 /**
  * 把本地 agent-runtime 子进程的退出详情，格式化成便于排障的详细描述。
  *
@@ -980,14 +768,6 @@ export function startIpcWorker(enabledAccountIds: string[]): void {
     { accounts: enabledAccountIds.length },
     'Redis IPC 工作线程已启动',
   );
-
-  // 一次性清理旧版 LIST 等待队列残留：等待队列已迁移为 ZSET（key 名不同，避免
-  // WRONGTYPE），旧 LIST 里的 requestId 全部属于已死进程，直接删除即可。
-  void getRedis()
-    .del('agent:concurrency:wait:member', 'agent:concurrency:wait:normal')
-    .catch((err) => {
-      logger.warn({ err }, '清理旧版并发等待队列残留失败（不影响运行）');
-    });
 
   for (const accountId of enabledAccountIds) {
     // 微信 Claw 账号监听随进程常驻，不参与空闲回收。
@@ -1087,12 +867,12 @@ export function getPendingAiChatRequests(): Map<string, PendingInboxRequest> {
   return pendingAiChatRequests;
 }
 
-export function __getGlobalAgentConcurrencyStateForTests(): {
+export function __getGlobalAgentConcurrencyStateForTests(): Promise<{
   activeKey: string;
   memberQueue: string;
   normalQueue: string;
   limit: number;
-} {
+}> {
   return getAgentConcurrencyKeys();
 }
 

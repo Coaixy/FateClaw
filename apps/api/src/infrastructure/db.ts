@@ -9,6 +9,10 @@ import {
 import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
 import { logger } from './logger.js';
 import { importLegacySkillContent } from '#modules/skills/legacy-skill-import';
+export {
+  getRuntimeConfig,
+  saveRuntimeConfig,
+} from '#infrastructure/repositories/runtime-config-repository';
 import {
   bindAccountToUser,
   createAccount,

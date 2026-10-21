@@ -32,7 +32,7 @@ declare module 'fastify' {
     adminPrincipal?: {
       role: 'owner' | 'user_manager';
       scopes: ('admin:*' | 'users:read' | 'users:create' | 'messages:read')[];
-      home_path: '/admin/overview' | '/admin/users';
+      home_path: '/overview' | '/users';
     };
     // 对外开放 API Key 鉴权后解析出的调用方身份；仅 /api/v1/* 对外路由会写入。
     apiKeyPrincipal?: {

@@ -22,6 +22,15 @@ vi.mock('#infrastructure/config', () => ({
   USER_MANAGER_KEY: 'test-user-manager-key',
 }));
 
+vi.mock('#infrastructure/repositories/runtime-config-repository', () => ({
+  getRuntimeConfig: vi.fn(),
+  saveRuntimeConfig: vi.fn(),
+}));
+import {
+  getRuntimeConfig,
+  saveRuntimeConfig,
+} from '#infrastructure/repositories/runtime-config-repository';
+
 vi.mock('#interfaces/http/rate-limit', () => ({
   rateLimitCheck: mockRateLimitCheck,
   rateLimitClear: mockRateLimitClear,
@@ -303,7 +312,7 @@ describe('adminRoutes authentication throttling', () => {
       success: true,
       role: 'owner',
       scopes: ['admin:*'],
-      home_path: '/admin/overview',
+      home_path: '/overview',
     });
   });
 
@@ -321,7 +330,7 @@ describe('adminRoutes authentication throttling', () => {
       success: true,
       role: 'user_manager',
       scopes: ['users:read', 'users:create', 'messages:read'],
-      home_path: '/admin/users',
+      home_path: '/users',
     });
   });
 
@@ -910,8 +919,74 @@ describe('adminRoutes authentication throttling', () => {
     expect(saveOfficialModelSettings).not.toHaveBeenCalled();
   });
 
+  it('reads and saves owner runtime configuration while rejecting restricted administrators', async () => {
+    const config = {
+      revision: 2,
+      agent_concurrency_limit: 3,
+      agent_account_concurrency: 2,
+      local_agent_max_processes: 2,
+      local_agent_idle_ttl_ms: 120_000,
+      pi_session_health_enabled: false,
+      pi_session_inactive_cleanup_days: 30,
+      pi_session_orphan_grace_days: 30,
+      skill_bundle_max_files: 50,
+      skill_bundle_max_file_chars: 100_000,
+      skill_bundle_max_total_chars: 500_000,
+      skill_bundle_max_zip_bytes: 8_388_608,
+      user_skill_max_count: 30,
+      wechat_claw_enabled: false,
+    };
+    const overview = { ...config, updated_at: '2026-10-21T00:00:00.000Z' };
+    vi.mocked(getRuntimeConfig).mockResolvedValue(overview);
+    vi.mocked(saveRuntimeConfig).mockResolvedValue({
+      ...overview,
+      revision: 3,
+    });
+    const headers = { 'x-admin-key': 'test-manager-key' };
+    const read = await app.inject({
+      method: 'GET',
+      url: '/system-config/runtime',
+      headers,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toEqual(overview);
+    const write = await app.inject({
+      method: 'PUT',
+      url: '/system-config/runtime',
+      headers,
+      payload: config,
+    });
+    expect(write.statusCode).toBe(200);
+    expect(saveRuntimeConfig).toHaveBeenCalledWith(config, 'owner');
+    const writes = vi.mocked(saveRuntimeConfig).mock.calls.length;
+    for (const method of ['GET', 'PUT'] as const) {
+      const restricted = await app.inject({
+        method,
+        url: '/system-config/runtime',
+        headers: { 'x-admin-key': 'test-user-manager-key' },
+        ...(method === 'PUT' ? { payload: config } : {}),
+      });
+      expect(restricted.statusCode).toBe(403);
+    }
+    expect(vi.mocked(saveRuntimeConfig).mock.calls).toHaveLength(writes);
+    for (const invalid of [
+      { ...config, agent_account_concurrency: 0 },
+      { ...config, skill_bundle_max_total_chars: 1 },
+      { ...config, wechat_claw_enabled: 'true' },
+      { ...config, default_official_model_id: 'retired' },
+    ]) {
+      const rejected = await app.inject({
+        method: 'PUT',
+        url: '/system-config/runtime',
+        headers,
+        payload: invalid,
+      });
+      expect(rejected.statusCode).toBe(400);
+    }
+    expect(vi.mocked(saveRuntimeConfig).mock.calls).toHaveLength(writes);
+  });
+
   it.each([
-    ['PUT', '/system-config/runtime'],
     ['PUT', '/system-config/model-billing'],
     ['POST', '/system-config/providers'],
     ['PATCH', '/system-config/providers/legacy'],

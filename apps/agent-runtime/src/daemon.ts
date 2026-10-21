@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { decodeAgentIpc, encodeAgentIpc } from './ipc-security.js';
 
-import { closeAgentDb } from './agent-db.js';
+import { closeAgentDb, getAgentAccountConcurrency } from './agent-db.js';
 import {
   claimDurableExecution,
   startDurableExecutionHeartbeat,
@@ -36,10 +36,6 @@ type CancelQueueRedis = {
 };
 
 const PENDING_CANCEL_TTL_MS = 35 * 60 * 1000;
-const AGENT_RUNTIME_ACCOUNT_CONCURRENCY = Math.max(
-  1,
-  Math.trunc(Number(process.env.AGENT_RUNTIME_ACCOUNT_CONCURRENCY ?? '1')) || 1,
-);
 // 无进展 watchdog：Pi 每次流式 delta、回合切换、工具事件都会刷新活动时间。
 // 连续超过该时长没有任何事件，才判定 Provider/工具 await 真正卡住；不再把正常推进的
 // 多技能长任务按「请求总时长」误杀。
@@ -725,27 +721,39 @@ async function loop(): Promise<void> {
   })();
 
   log(
-    `常驻 agent 已启动，账号 ${ctx.accountId}，通过 Redis BRPOP 监听，并发=${AGENT_RUNTIME_ACCOUNT_CONCURRENCY}`,
+    `常驻 agent 已启动，账号 ${ctx.accountId}，通过 Redis BRPOP 监听，并发=${await getAgentAccountConcurrency()}`,
   );
 
+  let pendingEnvelope: [string, string] | null = null;
   while (!shuttingDown) {
     try {
       while (
-        activeTasks.size >= AGENT_RUNTIME_ACCOUNT_CONCURRENCY &&
+        activeTasks.size >= (await getAgentAccountConcurrency()) &&
         !shuttingDown
       ) {
         await Promise.race([...activeTasks.values(), sleep(250)]);
       }
       if (shuttingDown) break;
-      // 30s timeout 让退出信号能在合理时间内被察觉，并允许 ioredis 自动重连
-      const result = await inboxRedis.brpop(
-        `ipc:${ctx.accountId}:inbox:member`,
-        `ipc:${ctx.accountId}:inbox`,
-        30,
-      );
-      if (!result || shuttingDown) continue;
+      if (!pendingEnvelope) {
+        pendingEnvelope = await inboxRedis.brpop(
+          `ipc:${ctx.accountId}:inbox:member`,
+          `ipc:${ctx.accountId}:inbox`,
+          1,
+        );
+      }
+      if (!pendingEnvelope) continue;
 
-      const [queue, encrypted] = result;
+      // A policy reduction can arrive while BRPOP waits for the next request.
+      while (
+        activeTasks.size >= (await getAgentAccountConcurrency()) &&
+        !shuttingDown
+      ) {
+        await Promise.race([...activeTasks.values(), sleep(250)]);
+      }
+      if (shuttingDown) break;
+
+      const [queue, encrypted] = pendingEnvelope;
+      pendingEnvelope = null;
       const raw = decodeAgentIpc(queue, encrypted);
       const requestId = readInboxRequestIdForTask(raw);
       const task = processInboxMessage(
@@ -771,6 +779,9 @@ async function loop(): Promise<void> {
       // 短暂等待后重试，避免紧密循环
       await sleep(1000);
     }
+  }
+  if (pendingEnvelope) {
+    await redis.lpush(pendingEnvelope[0], pendingEnvelope[1]);
   }
   await cancelDrainLoop.catch((error) => {
     log(

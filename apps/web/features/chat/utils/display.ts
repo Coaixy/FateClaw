@@ -14,12 +14,6 @@ export const PAIPAN_SKILLS = new Set([
   'qimen-paipan',
 ]);
 
-export type MessageGroup = {
-  label: string;
-  date: string;
-  messages: Message[];
-};
-
 export type ProgressMessage = Message & {
   metadata: {
     kind: 'progress' | 'tool_trace';
@@ -33,30 +27,6 @@ export type ProgressMessage = Message & {
     tool_path?: string;
   };
 };
-
-function resolveIntlLocale(locale?: Locale): string {
-  if (locale === 'zh-TW') {
-    return 'zh-TW';
-  }
-  if (locale === 'en') {
-    return 'en';
-  }
-  return 'zh-CN';
-}
-
-/**
- * 格式化聊天消息时间。
- *
- * @param ts 消息时间戳。
- * @param locale 当前前端展示语言；缺省时保持简中旧行为。
- * @returns 本地化后的小时分钟。
- */
-export function formatChatTime(ts: string, locale?: Locale) {
-  return new Date(ts).toLocaleTimeString(resolveIntlLocale(locale), {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 /**
  * 将 AI 回复耗时格式化为聊天气泡下方的紧凑标签。
@@ -127,75 +97,6 @@ export function formatChatCostLabels(
   }
 
   return labels;
-}
-
-/**
- * 将 AI 回复实际扣费金额格式化为聊天气泡下方的紧凑标签。
- *
- * @param value 后端写入 metadata.actual_charge_coins 的积分金额。
- * @returns 可直接展示的中文积分标签；非法或缺失时返回 null。
- */
-export function formatChatCost(
-  value: unknown,
-  locale?: Locale,
-  t?: (key: string, params?: Record<string, string | number>) => string,
-): string | null {
-  const labels = formatChatCostLabels(
-    { actual_charge_coins: value },
-    locale,
-    t,
-  );
-  if (!labels[0]) {
-    return null;
-  }
-  if (t) {
-    return t('format.consumed', {
-      coins: formatCoins(value as number, locale),
-    });
-  }
-  return labels[0]?.replace('积分实扣', '消耗') ?? null;
-}
-
-export function formatRelativeDateLabel(
-  ts: string,
-  locale?: Locale,
-  t?: (key: string, params?: Record<string, string | number>) => string,
-) {
-  const date = new Date(ts);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / 86400000);
-
-  if (days === 0) return t?.('format.today') ?? '今天';
-  if (days === 1) return t?.('format.yesterday') ?? '昨天';
-  if (days < 7) return t?.('format.daysAgoSpaced', { days }) ?? `${days} 天前`;
-
-  return date.toLocaleDateString(resolveIntlLocale(locale), {
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
-export function groupMessagesByDate(messages: Message[]): MessageGroup[] {
-  const groups: MessageGroup[] = [];
-
-  for (const message of messages) {
-    const date = message.timestamp.slice(0, 10);
-    const lastGroup = groups[groups.length - 1];
-
-    if (lastGroup && lastGroup.date === date) {
-      lastGroup.messages.push(message);
-      continue;
-    }
-
-    groups.push({
-      label: formatRelativeDateLabel(message.timestamp),
-      date,
-      messages: [message],
-    });
-  }
-
-  return groups;
 }
 
 function getMessageKind(message: Message) {

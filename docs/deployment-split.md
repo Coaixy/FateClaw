@@ -181,8 +181,8 @@ PM2's default 1.6-second kill window interrupts this flow, so keep this setting.
   (API fallback timeouts, 30 minutes by default). Backlog cleanup thresholds and session-lock TTLs
   follow automatically; invalid combinations fail at startup.
 
-Agent concurrency slots, the resident runtime limit, and the idle-reclamation timeout are stored in the database through the admin app.
-For a 2 GB server, start with `1` concurrent request, `2` resident runtimes, and `120` seconds before idle reclamation.
+Configure execution capacity and resident-process policy at admin `/system/runtime`; PostgreSQL values take priority. See [Runtime configuration](runtime-configuration.md) for application timing, session maintenance and the default-off WeChat switch.
+For a 2 GB server, start with `1` concurrent request, `2` resident runtimes, and `120000` ms before idle reclamation.
 
 To rebuild from source on the server, run `bash scripts/pack.sh api` to generate
 `fateclaw-backend-v<version>-source.tar.gz`, then deploy with

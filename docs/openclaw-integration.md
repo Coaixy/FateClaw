@@ -1,42 +1,32 @@
 # WeChat OpenClaw/iLink integration
 
-FateClaw retains the integration code for WeChat OpenClaw/iLink Bot. The full backend entry point still contains code to start iLink long polling and IPC listeners for enabled existing accounts with active memberships. However, `WECHAT_CLAW_FEATURE_ENABLED=false` and migration 0057 (`accounts.enabled=false`) both prevent activation, so zero accounts actually start. New QR-code bindings also remain unavailable on the web. This document describes the current state and the boundaries to check before restoring the full flow.
+FateClaw retains the WeChat OpenClaw/iLink Bot integration. The owner administrator controls availability through `wechat_claw_enabled` on `/system/runtime`; it defaults to false. Active membership and an enabled, owned account are also required. See [Runtime configuration](runtime-configuration.md).
 
-## Current status
+## Startup and live changes
 
-- The site's AI Chat is the current stable primary flow.
-- `apps/api/src/app/index.ts` initializes the database, system chart-calculation switches, Redis, IPC workers, retention workers, and the Fastify API.
-- Full startup reads `getEnabledAccounts()`, calls `startAccountPolling()` only for accounts with an `owner_id` and an active membership, and registers those accounts with `startIpcWorker(memberAccounts)`.
-- `activateAccount()` calls `addAccountListener(account.id)` and starts polling for that account, enabling activation immediately after binding.
-- The lightweight `pnpm run dev:api-only` entry point starts only the database, Redis, and API server. It skips iLink polling, IPC workers, and runtime activation.
-- Web device binding remains unavailable: the frontend displays the `WECHAT_DEVICE_BINDING_DISABLED_MESSAGE` constant (`account-service.ts`), while backend `checkAccountBindingLimit` (`account-http-service.ts`) rejects new binding requests.
+The full backend entry initializes IPC, then starts `runtime/wechat-runtime.ts`. It reconciles the administrator switch and account membership every ten seconds. Eligible accounts receive a pinned IPC listener and an iLink polling loop. Disabling access or losing membership stops those listeners and pollers without deleting account credentials or conversation history.
 
-The backend therefore retains a WeChat execution flow, but the product has not reopened new bindings. Restoring WeChat access requires coordinating frontend switches, membership and account policies, and the external platform protocol as well as backend polling.
+Binding HTTP requests start polling in the background and return without waiting for the long polling loop to finish. Newly created CLI accounts remain disabled until an authorized binding enables them. Existing disabled accounts are not automatically enabled by the global switch.
 
-## Related modules
+The API-only development entry skips polling and background workers. It cannot establish that a configured integration is polling successfully.
 
-- `apps/api/src/infrastructure/ilink.ts`: OpenClaw/iLink requests, QR-code login, long polling, message delivery, and message conversion.
-- `apps/api/src/modules/account/`: Account binding, account HTTP services, and account management.
-- `apps/api/src/modules/chat/message-handler.ts`: Processing WeChat messages before they reach the agent.
-- `apps/api/src/runtime/poller.ts`: Polling entry point.
-- `apps/api/src/runtime/resident-agent.ts`: Dispatching requests to account-level agent-runtime processes.
-- `apps/api/src/runtime/ipc-outbox-handler.ts`: Handling agent-runtime responses and sending WeChat messages.
-- `apps/web/components/workspace/`: Device and binding UI.
+## Binding and conversation APIs
 
-## Checklist before restoring the integration
+The retained authenticated `/api/account` routes provide QR-code creation/status, binding, account reads and deletion. Binding requires current WeChat availability and active membership. The current web app has no `/devices` page or `DevicesPanel`; enabling the backend switch does not create that frontend flow.
 
-1. Confirm that the OpenClaw/iLink Bot API base URL, token handling, QR-code login, and message-delivery endpoints still match the protocol in `ilink.ts`.
-2. Define the relationship between accounts and users to prevent one WeChat account from being incorrectly bound to multiple users.
-3. When reopening new bindings, check the `DevicesPanel` frontend switch, QR-code binding API, `startIpcWorker()`, account listeners and pollers, agent-runtime lifecycle, and graceful shutdown order.
-4. Confirm that `dispatchResidentPrompt()`'s `autoDeliver` behavior and outbox handling still meet WeChat automatic-delivery requirements.
-5. Add rate limits, error retries, and idempotency handling to prevent duplicate messages or uncontrolled message floods.
-6. Check log redaction to avoid recording bot tokens, user WeChat IDs, private messages, or model keys.
-7. Update the README, API documentation, and web device-page text to state which parts are available: polling for existing accounts, new bindings, automatic delivery, and failure degradation.
+WeChat messages use `runWechatChatSessionTurn()` and the same owned chat-session turn pipeline as the web interface. The integration supports selecting, resuming, creating and detaching sessions through its existing chat commands. The obsolete generic inbox submission API is not part of this path.
 
-## Environment variables and credentials
+## Owning modules
 
-OpenClaw/iLink credentials are primarily stored with account configuration and must not be committed. Redact bot tokens, QR-code login results, account exports, and message samples before including them in issues or PRs.
+- `apps/api/src/runtime/wechat-runtime.ts`: account activation, reconciliation and shutdown.
+- `apps/api/src/modules/billing/entitlements.ts`: administrator availability plus membership capabilities.
+- `apps/api/src/modules/account/account-http-service.ts`: owned account access and binding.
+- `apps/api/src/infrastructure/ilink.ts`: QR login, long polling and message transport.
+- `apps/api/src/runtime/poller.ts`: per-account polling and bounded message execution.
+- `apps/api/src/modules/chat/message-handler.ts` and `wechat-chat-session-service.ts`: message handling and unified session turns.
 
-## Operational boundaries
+## External verification
 
-WeChat is an external platform integration, subject to third-party availability, API changes, account risk controls, and message rate limits. In production, monitor WeChat and the site's AI Chat separately so external platform failures are not mistaken for failures in core agent capabilities.
+The administrator switch does not verify iLink protocol availability or authenticate an external account. Before advertising the integration as operational, verify the QR login, account credentials, external endpoint behavior and message delivery against the deployed platform. Monitor WeChat separately from web AI Chat.
+
+Credentials stay in their existing account source. Do not include bot tokens, QR login results, account exports, WeChat identifiers or private messages in reports, issues or repository files.

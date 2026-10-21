@@ -66,6 +66,7 @@ vi.mock('#infrastructure/repositories/agent-requests-repository', () => ({
 }));
 
 vi.mock('#infrastructure/db', () => ({
+  getRuntimeConfig: vi.fn(async () => ({ wechat_claw_enabled: false })),
   expireUserBonusBalanceBefore: vi.fn(async () => ({
     expired: 0,
     totalCoinsExpired: 0,
@@ -163,7 +164,6 @@ import {
   removeAccountListener,
   startIpcWorker,
   submitAiChatInboxRequest,
-  submitInboxRequest,
 } from '#runtime/ipc-worker';
 import type { PendingInboxRequest } from '#runtime/ipc-payloads';
 import { processAiChatOutboxPayload } from '#runtime/ipc-ai-chat-outbox-handler';
@@ -582,7 +582,7 @@ describe('global agent concurrency gate', () => {
   });
 
   it('exposes member and normal wait queues separately', async () => {
-    const state = (
+    const state = await (
       await import('#runtime/ipc-worker')
     ).__getGlobalAgentConcurrencyStateForTests();
 
@@ -779,46 +779,6 @@ describe('runtime lease lifecycle for submitted inbox requests', () => {
       ),
     );
     expect(mockReleaseLocalAgent).toHaveBeenCalledWith('web:user-1');
-    expect(mockLpush).not.toHaveBeenCalled();
-  });
-
-  it('releases normal inbox runtime lease when enqueue fails', async () => {
-    vi.mocked(getMembershipOverview).mockResolvedValueOnce({
-      active: true,
-      membership: { plan_key: 'membership' },
-    } as never);
-    mockLpush.mockRejectedValueOnce(new Error('redis down'));
-
-    // 微信 Claw 停用后，autoDeliver 默认 true 的请求会在门禁处被拒；
-    // 只有 autoDeliver:false（不投递微信，如取消/AI Chat 旁路）才会真正走到入队，
-    // 这条用例验证入队失败时本地 agent 租约被释放。
-    await expect(
-      submitInboxRequest({
-        accountId: 'account-1',
-        type: 'chat',
-        userMessage: 'hi',
-        history: [],
-        llmRuntime: effectiveRuntime,
-        autoDeliver: false,
-      }),
-    ).rejects.toThrow('redis down');
-
-    expect(mockRetainLocalAgent).toHaveBeenCalledWith('account-1');
-    expect(mockReleaseLocalAgent).toHaveBeenCalledWith('account-1');
-  });
-
-  it('does not auto-deliver WeChat requests for an active member', async () => {
-    await expect(
-      submitInboxRequest({
-        accountId: 'account-1',
-        type: 'chat',
-        userMessage: 'hi',
-        history: [],
-        llmRuntime: effectiveRuntime,
-      }),
-    ).rejects.toThrow('free unsupported');
-
-    expect(mockRetainLocalAgent).not.toHaveBeenCalled();
     expect(mockLpush).not.toHaveBeenCalled();
   });
 });

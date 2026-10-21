@@ -23,13 +23,14 @@ import {
   updateSoulContent,
   updateUserSoulEditEnabled,
   updateUserSoulContent,
+  updateAccount,
 } from '#infrastructure/db';
 import { getLoginQrCode, getQrCodeStatus } from '#infrastructure/ilink';
 import { WECHAT_DEVICE_BINDING_DISABLED_MESSAGE } from './account-service.js';
 import { removeAccountListener } from '#runtime/ipc-worker';
 import { stopLocalAgent } from '#runtime/local-runner';
 import { stopAccountPolling } from '#runtime/poller';
-import { activateAccount } from '#app/index';
+import { activateAccount } from '#runtime/wechat-runtime';
 import { fail, ok, type ServiceResult } from '#shared/service-result';
 import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 import {
@@ -165,7 +166,8 @@ export async function bindAccountForUser(
     return fail(403, '账号已被其他用户绑定');
   }
   await bindAccountToUser(account.id, userId);
-  await activateAccount({ ...account, owner_id: userId });
+  await updateAccount(account.id, { enabled: true });
+  await activateAccount({ ...account, owner_id: userId, enabled: true });
   return ok({ success: true });
 }
 
@@ -221,7 +223,8 @@ export async function getAccountBindingQrCodeStatus(
   }
   if (account) {
     await bindAccountToUser(account.id, userId);
-    await activateAccount({ ...account, owner_id: userId });
+    await updateAccount(account.id, { enabled: true });
+    await activateAccount({ ...account, owner_id: userId, enabled: true });
   } else {
     const { addAccount } = await import('./account-service.js');
     const created = await addAccount(
@@ -232,7 +235,8 @@ export async function getAccountBindingQrCodeStatus(
       status.baseurl,
     );
     await bindAccountToUser(created.id, userId);
-    await activateAccount({ ...created, owner_id: userId });
+    await updateAccount(created.id, { enabled: true });
+    await activateAccount({ ...created, owner_id: userId, enabled: true });
   }
   return ok({ status: 'confirmed' });
 }

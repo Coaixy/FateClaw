@@ -5,7 +5,6 @@ import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
-  SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react';
 import { Check, Copy, Loader2, type LucideIcon } from 'lucide-react';
@@ -66,19 +65,8 @@ export function AdminInput({
   className = '',
   ...props
 }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`h-9 px-2.5 ${CONTROL_BASE} ${className}`} {...props} />;
-}
-
-/** 后台统一下拉选择框；选项通过 children 传入 `<option>`。 */
-export function AdminSelect({
-  className = '',
-  children,
-  ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={`h-9 px-2.5 ${CONTROL_BASE} ${className}`} {...props}>
-      {children}
-    </select>
+    <input className={`h-9 px-2.5 ${CONTROL_BASE} ${className}`} {...props} />
   );
 }
 
@@ -100,7 +88,7 @@ export function AdminTextarea({
 /**
  * 后台主操作按钮，统一保存/确认类操作的主色视觉。
  *
- * 与 admin-states.tsx 的 AdminDangerButton 互补；`loading` 为真时展示 spinner 并自动禁用。
+ * Loading feedback prevents duplicate submissions.
  *
  * @param loading 是否处于加载态。
  * @param icon 左侧图标，可选。

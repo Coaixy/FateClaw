@@ -17,6 +17,7 @@ For coding tasks, start with the [Agent guide](../AGENT.md). For a first local r
 | Change chart or chat-input layout | [Web chart layout](web-chart-layout.md) | Container fitting, full-screen reading, chart details, and compact input |
 | Manage public feedback | [Issues](issues.md) | Anonymous discussion, private attribution, moderation and abuse limits |
 | Publish operational notices | [Popup announcements](announcements.md) | Admin publishing, versioned user dialogs and browser dismissal |
+| Configure runtime capacity, maintenance and WeChat availability | [Runtime configuration](runtime-configuration.md) | Administrator policies, revision conflicts and application timing |
 | Configure model supply and failover | [Official model pool](official-model-pool.md) | Mixed-model nodes, weighted routing, circuit recovery and billing |
 | Configure daily free AI usage | [Free model service](benefit-model-pool.md) | Separate pools, user allowance, shared upstream budgets, activation and status |
 | Change schema or generate a database baseline | [Database migrations](database-migrations.md) | Empty database bootstrap, existing database upgrades, and snapshot validation |

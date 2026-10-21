@@ -7,7 +7,6 @@ import {
 
 import type {
   BundleShareResponseDto,
-  BundleSkillPreviewDto,
   BundleSubscribeResultDto,
   BundleUnsubscribeResultDto,
   CreateSkillAccessInviteRequestDto,
@@ -44,7 +43,6 @@ export type UserSkillsResponse = UserSkillsResponseDto;
 export type SharedSkillPreview = SharedSkillPreviewDto;
 export type SkillBundleLimits = SkillBundleLimitsDto;
 export type SkillBundle = SkillBundleDto;
-export type BundleSkillPreview = BundleSkillPreviewDto;
 export type SharedBundlePreview = SharedBundlePreviewDto;
 export type BundleSubscribeResult = BundleSubscribeResultDto;
 export type BundleUnsubscribeResult = BundleUnsubscribeResultDto;
@@ -73,7 +71,8 @@ const pathSegment = (value: string) => encodeURIComponent(value);
 export const skillsApi = {
   limits: () => requestJson<SkillBundleLimits>('/api/skills/limits'),
   userList: () => requestJson<UserSkillsResponse>('/api/skills/user'),
-  userGet: (id: string) => requestJson<UserCustomSkill>(`/api/skills/user/${pathSegment(id)}`),
+  userGet: (id: string) =>
+    requestJson<UserCustomSkill>(`/api/skills/user/${pathSegment(id)}`),
   userCreate: (data: {
     skill_name: string;
     dir_name?: string;
@@ -131,9 +130,7 @@ export const skillsApi = {
       },
     ),
   sharedPreview: (token: string) =>
-    requestJson<SharedSkillDetail>(
-      `/api/skills/shared/${pathSegment(token)}`,
-    ),
+    requestJson<SharedSkillDetail>(`/api/skills/shared/${pathSegment(token)}`),
   subscribe: (token: string) =>
     requestJson<SkillSubscriptionCreateResponseDto>(
       `/api/skills/subscribe/${pathSegment(token)}`,
@@ -144,7 +141,10 @@ export const skillsApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  accessInviteList: (params: { target_type?: 'skill' | 'bundle'; target_id?: string }) => {
+  accessInviteList: (params: {
+    target_type?: 'skill' | 'bundle';
+    target_id?: string;
+  }) => {
     const qs = new URLSearchParams();
     if (params.target_type) qs.set('target_type', params.target_type);
     if (params.target_id) qs.set('target_id', params.target_id);

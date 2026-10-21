@@ -109,7 +109,10 @@ export function BottomSheet({
     if (!isDragging.current) return;
     isDragging.current = false;
     const panel = panelRef.current;
-    if (!panel) { setDragY(0); return; }
+    if (!panel) {
+      setDragY(0);
+      return;
+    }
     const height = panel.offsetHeight;
     if (dragY > height * DISMISS_THRESHOLD) {
       setDragY(height);
@@ -204,7 +207,10 @@ export function BottomSheet({
       <div
         ref={panelRef}
         className={`relative w-full ${SIZE_CLASS[size]} ${containerHeightClass} ${panelRadiusClass} bg-surface-raised border border-hairline shadow-2xl overflow-hidden flex flex-col animate-bottom-sheet-slide-up sm:animate-bottom-sheet-center-in`}
-        style={{ transform: `translateY(${dragY}px)`, transition: isDragging.current ? 'none' : 'transform 0.3s ease-out' }}
+        style={{
+          transform: `translateY(${dragY}px)`,
+          transition: isDragging.current ? 'none' : 'transform 0.3s ease-out',
+        }}
       >
         {/* 移动端 drag handle 指示条 */}
         <div
@@ -241,7 +247,10 @@ export function BottomSheet({
         )}
 
         {/* 内容区（flex-1 + 滚动，高度由外层 dvh 托管） */}
-        <div data-artifact-viewport className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          data-artifact-viewport
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
           {children}
         </div>
 
@@ -279,28 +288,11 @@ function getFocusableElements(root: HTMLElement): HTMLElement[] {
   return Array.from(
     root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
   ).filter(
-    (el) =>
-      !el.hasAttribute('aria-hidden') &&
-      el.offsetParent !== null, // 过滤掉被 display:none 隐藏的
+    (el) => !el.hasAttribute('aria-hidden') && el.offsetParent !== null, // 过滤掉被 display:none 隐藏的
   );
 }
 
-/**
- * Learning Mode · 决策点 B
- * Tab 键在 BottomSheet 内的边界循环逻辑。
- *
- * 要求：
- *   - 只管 Tab 键，其他键直接忽略
- *   - 焦点在最后一个元素按 Tab → 跳回第一个
- *   - 焦点在第一个元素按 Shift+Tab → 跳到最后一个
- *   - 找不到 panel / 无可聚焦元素 → 直接 return
- *
- * 已有工具：`getFocusableElements(panel)` 返回 HTMLElement[]
- *           当前活动 panel 是 `document.querySelector('[role="dialog"]')` 中最后一个
- *           （多层嵌套时只 trap 最上层）
- *
- * 下面是最小骨架，请在 5-10 行内完成 Tab 循环判断。
- */
+/** Only the topmost dialog owns keyboard focus when sheets are nested. */
 function trapTab(e: KeyboardEvent) {
   const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
   const topPanel = dialogs[dialogs.length - 1];
@@ -312,11 +304,6 @@ function trapTab(e: KeyboardEvent) {
   const last = focusables[focusables.length - 1];
   const active = document.activeElement as HTMLElement | null;
 
-  // TODO(决策点 B): 实现 Tab / Shift+Tab 的边界循环
-  // 提示：
-  //   if (e.shiftKey && active === first) { ... }
-  //   else if (!e.shiftKey && active === last) { ... }
-  //   else if (!topPanel.contains(active)) { ... } ← 这种情况要不要处理？
   if (e.shiftKey && active === first) {
     e.preventDefault();
     last.focus();

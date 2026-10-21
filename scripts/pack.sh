@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Usage: bash scripts/pack.sh [all|backend-runtime|backend-source|www|admin|source] [output] [--jobs N]
-# Legacy target aliases and --light/--no-obfuscate/--skip-install remain accepted.
+# Target aliases are listed in the deployment guide.
 
 set -euo pipefail
 
@@ -15,9 +15,7 @@ JOBS=3
 
 while [ "$#" -gt 0 ]; do
   arg="$1"
-  if [ "$arg" = "--light" ] || [ "$arg" = "--no-obfuscate" ] || [ "$arg" = "--skip-install" ]; then
-    shift
-  elif [ "$arg" = "--jobs" ]; then
+  if [ "$arg" = "--jobs" ]; then
     if [ "$#" -lt 2 ] || [[ "$2" == --* ]]; then
       echo "❌ --jobs 需要一个参数"
       exit 1
