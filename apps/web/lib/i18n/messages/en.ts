@@ -246,7 +246,7 @@ export const enMessages = {
     persona: 'Persona',
     modelSettings: 'Model settings',
     profile: 'Profile',
-    invitations: 'Invite new users',
+    invitations: 'Invite friends',
     logout: 'Log out',
   },
   pages: {
@@ -762,8 +762,8 @@ export const enMessages = {
   },
   invitations: {
     badge: 'Invitations',
-    title: 'Invite new users',
-    description: 'Share an invitation with a friend and use FateClaw together.',
+    title: 'Invite friends, give 3 days of membership',
+    description: 'Friends who sign up with a valid code receive a 3-day membership trial. Everyone can register without a code.',
     refresh: 'Refresh invitations',
     loadFailed: 'Could not load invitations. Please refresh.',
     createFailed: 'Could not confirm creation. Retry the same request.',
@@ -779,7 +779,9 @@ export const enMessages = {
     },
     netRecharge: 'Net recharge: {amount}',
     policy:
-      'Your net recharge tier determines the cumulative allowance. Tier totals are not added together. Each code expires in {days} days and allows one registration.',
+      'Your net recharge tier determines the cumulative allowance. Tier totals are not added together. Each code expires in {days} days and can be used once by a new user at signup.',
+    trialRules:
+      'The trial lasts 72 hours from signup, then the account returns to non-member access. Free models retain the daily member limits; paid models are billed by usage.',
     tiers: 'Net recharge tiers and total invitation allowance',
     tierThreshold: 'Net recharge of {amount}',
     tierSlots: '{count} total slots',
@@ -842,21 +844,20 @@ export const enMessages = {
     enterSmsCaptcha: 'Enter the SMS code',
     operationFailed: 'Operation failed',
     newUserHint:
-      'New users need a valid invitation code and a mainland China phone number. Existing users can log in directly.',
+      'Register with a mainland China phone number. An optional valid code gives you a 3-day membership trial. Existing users can log in directly.',
     createPhoneAccount: 'Create a phone account',
     phoneLogin: 'Phone login',
-    registerSubtitle:
-      'Use your invitation to activate your AI divination copilot',
+    registerSubtitle: 'Start using your AI divination copilot',
     loginSubtitle: 'Sign in to your divination workspace',
     phone: 'Mainland China phone',
-    inviteCode: 'Invitation code',
-    invitePlaceholder: 'Enter the code shared by a friend',
+    inviteCode: 'Invitation code (optional)',
+    invitePlaceholder: 'Enter a code for a 3-day membership trial',
     inviteHint:
-      'Registration requires a valid invitation. Each code can be used once.',
-    enterInviteCode: 'Enter your invitation code',
+      'Sign up without a code for a regular account, or use a valid code for 72 hours of membership starting at signup.',
+    clearInvite: 'Clear code and register without membership',
     inviteInvalid:
-      'This invitation is unavailable. Check the code or contact your inviter.',
-    inviteValid: 'Valid invitation. Expires {expiresAt}.',
+      'This invitation is unavailable. Check it or clear it to register without membership.',
+    inviteValid: 'Sign up to receive a 3-day membership trial. Code expires {expiresAt}.',
     password: 'Password',
     passwordPlaceholder: 'At least 8 characters',
     hidePassword: 'Hide password',

@@ -59,8 +59,11 @@ no longer registered and return 404. The Web OAuth callback page has also been
 removed. Existing users, OAuth identity records, and issued sessions are preserved;
 accounts that only used Google cannot start a new session through Google.
 
-Public signup now requires a single-use `inviteCode`. Registration SMS requests
-also require it; login and password recovery do not. See
+Public signup and registration SMS requests accept an optional single-use
+`inviteCode`. A valid code grants 72 hours of membership at signup; omitting or
+blanking it creates an ordinary account. Invalid supplied codes are rejected and
+can be cleared to continue without a trial. Login and password recovery do not
+require an invitation. See
 [Registration invitations](registration-invites.md) for allowance, expiry, refund
 accounting and owner administration.
 
@@ -94,7 +97,7 @@ Register a new user.
 | phoneNumber | string | Yes | Mainland China phone number |
 | password | string | Yes | At least eight characters |
 | smsCaptchaCode | string | Yes | SMS verification code |
-| inviteCode | string | Yes | Valid single-use registration invitation |
+| inviteCode | string | No | Valid single-use invitation for 72 hours of membership; omit or leave blank for ordinary registration |
 
 **Response 201**
 
@@ -216,7 +219,7 @@ Send an SMS verification code. Use `type = 1` for registration and `type = 0` fo
 | phoneNumber | string | Yes | Mainland China phone number |
 | captcha_token | string | Yes | Graphical captcha token |
 | captcha_answer | string | Yes | Graphical captcha answer |
-| inviteCode     | string | `type=1` | Required for registration; omitted for password recovery |
+| inviteCode     | string | No | Optional for registration; a supplied code must be valid. Omitted for password recovery |
 
 **Response 200**
 

@@ -268,6 +268,25 @@ describe('sendSMSCaptcha', () => {
     expect(mockSendSmsVerifyCode).not.toHaveBeenCalled();
   });
 
+  it('allows registration SMS without an invitation while keeping verification and send limits', async () => {
+    await sendSMSCaptcha({
+      clientIp: CLIENT_IP,
+      phoneNumber: PHONE_NUMBER,
+      type: 1,
+    });
+
+    expect(mockAssertRegistrationInviteValid).not.toHaveBeenCalled();
+    expect(mockRedisSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^sms:captcha:send-lock:/),
+      expect.any(String),
+      'EX',
+      180,
+      'NX',
+    );
+    expect(mockGetUserByPhone).toHaveBeenCalledWith(PHONE_NUMBER);
+    expect(mockSendSmsVerifyCode).toHaveBeenCalledOnce();
+  });
+
   it('allows password recovery SMS without an invitation', async () => {
     mockGetUserByPhone.mockResolvedValueOnce({ id: 'synthetic-existing-user' });
 

@@ -49,11 +49,16 @@ const PhoneSchema = z
   .transform((value) => normalizePhoneNumber(value))
   .refine(isValidMainlandChinaPhone, '手机号格式不正确');
 
+const OptionalRegistrationInviteCodeSchema = z.preprocess(
+  (value) => (typeof value === 'string' && !value.trim() ? undefined : value),
+  RegistrationInviteCodeSchema.optional(),
+);
+
 const RegisterSchema = z.object({
   phoneNumber: PhoneSchema,
   password: z.string().min(8, '密码至少 8 位'),
   smsCaptchaCode: z.string().trim().min(1, '短信验证码不能为空'),
-  inviteCode: RegistrationInviteCodeSchema,
+  inviteCode: OptionalRegistrationInviteCodeSchema,
 });
 
 const LoginSchema = z.object({
@@ -63,22 +68,13 @@ const LoginSchema = z.object({
   captcha_answer: z.string().min(1),
 });
 
-const SendSMSCaptchaSchema = z
-  .object({
-    type: z.union([z.literal(0), z.literal(1)]),
-    phoneNumber: PhoneSchema,
-    captcha_token: z.string().min(1),
-    captcha_answer: z.string().min(1),
-    inviteCode: RegistrationInviteCodeSchema.optional(),
-  })
-  .superRefine((value, context) => {
-    if (value.type === 1 && !value.inviteCode)
-      context.addIssue({
-        code: 'custom',
-        path: ['inviteCode'],
-        message: '请输入邀请码',
-      });
-  });
+const SendSMSCaptchaSchema = z.object({
+  type: z.union([z.literal(0), z.literal(1)]),
+  phoneNumber: PhoneSchema,
+  captcha_token: z.string().min(1),
+  captcha_answer: z.string().min(1),
+  inviteCode: OptionalRegistrationInviteCodeSchema,
+});
 
 const ChangePasswordSchema = z.object({
   current_password: z.string().min(1, '当前密码不能为空'),

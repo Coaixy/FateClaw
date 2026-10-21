@@ -11,6 +11,7 @@ import type {
   RegistrationInvitePreviewDto,
   RegistrationInviteSummaryDto,
 } from '@fateclaw/contracts/auth';
+import { MEMBERSHIP_PLAN_KEY } from '@fateclaw/contracts/membership';
 import { RegistrationInviteError } from '#modules/user/registration-invite-errors';
 import type { User } from '#shared/types';
 import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
@@ -296,14 +297,31 @@ export async function assertRegistrationInviteValid(
   });
 }
 
-export async function createInvitedUser(
+export async function createRegisteredUser(
   user: User,
-  code: string,
+  code?: string,
 ): Promise<void> {
   try {
     await transaction(async (client) => {
-      const invite = await validInviteUsing(client, code);
+      const inviteCode = code?.trim();
+      const invite = inviteCode
+        ? await validInviteUsing(client, inviteCode)
+        : null;
       await createUserUsing(client, user);
+      if (!invite) return;
+
+      // The ordinary membership row keeps expiry and entitlement checks authoritative.
+      await client.query(
+        `WITH trial AS (SELECT clock_timestamp() AS starts_at)
+         INSERT INTO user_memberships (
+           user_id, plan_key, status, current_period_start,
+           current_period_end, created_at, updated_at
+         )
+         SELECT $1, $2, 'active', starts_at,
+           starts_at + interval '72 hours', starts_at, starts_at
+         FROM trial`,
+        [user.id, MEMBERSHIP_PLAN_KEY],
+      );
       await client.query(
         `UPDATE registration_invites SET status='used', used_by_user_id=$2,
         used_at=clock_timestamp() WHERE id=$1`,

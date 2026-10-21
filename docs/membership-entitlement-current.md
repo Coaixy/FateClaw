@@ -40,6 +40,13 @@ model usage are charged separately. Disabling membership sales does not revoke a
 existing user's membership. Free allowance is independent of wallet credit;
 using it does not consume purchased or bonus coins.
 
+New users who register with a valid [invitation](registration-invites.md) receive
+72 hours of this same membership from registration time. The trial grants no wallet
+credit and does not charge a subscription fee. Existing expiry checks end the
+trial's membership entitlements; invitation eligibility still depends on net paid
+recharges. Registering without a code grants no membership. Unused invitation codes
+can grant a trial even when membership sales are disabled.
+
 ## Request gates and billing
 
 All on-site AI entry points converge on `prepareOwnedChatSessionTurn()` in [chat-session-service.ts](../apps/api/src/modules/chat/chat-session-service.ts). The selected session pool determines admission: paid requests reject an overdrawn wallet with HTTP 402 and do not require membership. Free requests check active membership inside the durable admission transaction, reject ineligible users with HTTP 403, and require a separate durable allowance while bypassing wallet debt. Membership expiry blocks new free requests; accepted queued/running requests and recovery retain their admission.

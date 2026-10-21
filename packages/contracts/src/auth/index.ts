@@ -29,7 +29,8 @@ export interface RegisterRequestDto {
   phoneNumber: string;
   password: string;
   smsCaptchaCode: string;
-  inviteCode: string;
+  /** Optional; a valid invitation grants 72 hours of membership at registration. */
+  inviteCode?: string;
 }
 
 export interface RegistrationInviteTierDto {

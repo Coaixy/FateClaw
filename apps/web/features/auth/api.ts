@@ -26,7 +26,7 @@ type SendSMSCaptchaArgs =
       phoneNumber: string,
       captchaToken: string,
       captchaAnswer: string,
-      inviteCode: string,
+      inviteCode?: string,
     ];
 
 /**
@@ -56,14 +56,14 @@ export const authApi = {
         phoneNumber,
         captcha_token: captchaToken,
         captcha_answer: captchaAnswer,
-        ...(type === 1 ? { inviteCode } : {}),
+        ...(type === 1 ? { inviteCode: inviteCode?.trim() || undefined } : {}),
       }),
     }),
   register: (
     phone: string,
     password: string,
     smsCaptchaCode: string,
-    inviteCode: string,
+    inviteCode?: string,
   ) =>
     requestJson<AuthResponse>('/api/auth/register', {
       method: 'POST',
@@ -71,7 +71,7 @@ export const authApi = {
         phoneNumber: phone,
         password,
         smsCaptchaCode,
-        inviteCode,
+        inviteCode: inviteCode?.trim() || undefined,
       } satisfies RegisterRequestDto),
     }),
   login: (

@@ -14,7 +14,7 @@ import { isValidMainlandChinaPhone, normalizePhoneNumber } from './phone.js';
 import { verifySMSCaptcha } from './sms-captcha-service.js';
 import {
   assertRegistrationInviteValid,
-  createInvitedUser,
+  createRegisteredUser,
 } from '#infrastructure/repositories/registration-invites-repository';
 import { RegistrationInviteError } from './registration-invite-errors.js';
 
@@ -26,7 +26,7 @@ export async function registerUser(
   password: string,
   smsCaptchaCode: string,
   clientIp: string,
-  inviteCode: string,
+  inviteCode?: string,
 ): Promise<User> {
   const normalizedPhone = normalizePhoneNumber(phone);
   if (!isValidMainlandChinaPhone(normalizedPhone)) {
@@ -34,7 +34,8 @@ export async function registerUser(
   }
   if (password.length < PASSWORD_MIN_LENGTH)
     throw new RegistrationInviteError(400, '密码至少 8 位');
-  await assertRegistrationInviteValid(inviteCode);
+  const code = inviteCode?.trim() || undefined;
+  if (code) await assertRegistrationInviteValid(code);
 
   const existing = await getUserByPhone(normalizedPhone);
   if (existing) {
@@ -59,7 +60,7 @@ export async function registerUser(
     created_at: now,
   };
 
-  await createInvitedUser(user, inviteCode);
+  await createRegisteredUser(user, code);
   return user;
 }
 

@@ -30,7 +30,7 @@ export function useAuthActions(setUser: (user: User | null) => void) {
       phone: string,
       password: string,
       smsCaptchaCode: string,
-      inviteCode: string,
+      inviteCode?: string,
     ) => {
       const res = await authApi.register(
         phone,

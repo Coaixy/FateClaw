@@ -90,9 +90,13 @@ describe('authentication HTTP routes', () => {
     expect(response.json()).not.toHaveProperty('token');
   });
 
-  it.each(['register', 'send-sms-captcha'])(
-    'requires an invitation before %s',
-    async (path) => {
+  it.each(
+    ['register', 'send-sms-captcha'].flatMap((path) =>
+      [undefined, '', '   '].map((inviteCode) => ({ path, inviteCode })),
+    ),
+  )(
+    'allows $path without an invitation ($inviteCode)',
+    async ({ path, inviteCode }) => {
       services.registerUser.mockResolvedValue({
         id: 'synthetic-new-user',
         phone: '13800138000',
@@ -114,11 +118,26 @@ describe('authentication HTTP routes', () => {
           smsCaptchaCode: '123456',
           captcha_token: 'synthetic',
           captcha_answer: 'abcde',
+          inviteCode,
         },
       });
-      expect(response.statusCode).toBe(400);
-      expect(services.registerUser).not.toHaveBeenCalled();
-      expect(sendSMSCaptcha).not.toHaveBeenCalled();
+      expect(response.statusCode).toBe(path === 'register' ? 201 : 200);
+      if (path === 'register') {
+        expect(services.registerUser).toHaveBeenCalledWith(
+          '13800138000',
+          'password123',
+          '123456',
+          '127.0.0.1',
+          undefined,
+        );
+      } else {
+        expect(sendSMSCaptcha).toHaveBeenCalledWith({
+          type: 1,
+          phoneNumber: '13800138000',
+          clientIp: '127.0.0.1',
+          inviteCode: undefined,
+        });
+      }
     },
   );
 

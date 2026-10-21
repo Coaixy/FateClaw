@@ -294,14 +294,6 @@ function LoginContent() {
     if (smsSending || submitting) return;
     formDispatch({ type: 'clearErrors' });
 
-    if (!inviteCode.trim()) {
-      formDispatch({
-        type: 'setText',
-        field: 'error',
-        value: t('login.enterInviteCode'),
-      });
-      return;
-    }
     const normalizedPhone = validatePhone();
     if (!normalizedPhone) {
       return;
@@ -326,14 +318,16 @@ function LoginContent() {
     statusDispatch({ type: 'setFlag', field: 'smsSending', value: true });
     let smsAttempted = false;
     try {
-      await registrationInvitesApi.preview(inviteCode.trim());
+      if (inviteCode.trim()) {
+        await registrationInvitesApi.preview(inviteCode.trim());
+      }
       smsAttempted = true;
       await authApi.sendSMSCaptcha(
         1,
         normalizedPhone,
         captcha.token,
         captchaInput,
-        inviteCode.trim(),
+        inviteCode.trim() || undefined,
       );
       statusDispatch({ type: 'setCooldown', value: 180 });
       formDispatch({ type: 'setText', field: 'error', value: '' });
@@ -356,14 +350,6 @@ function LoginContent() {
 
     const normalizedPhone = validatePhone();
     if (!normalizedPhone) {
-      return;
-    }
-    if (requiresSMSCaptcha && !inviteCode.trim()) {
-      formDispatch({
-        type: 'setText',
-        field: 'error',
-        value: t('login.enterInviteCode'),
-      });
       return;
     }
     if (!requiresSMSCaptcha && !captcha) {
@@ -390,7 +376,7 @@ function LoginContent() {
           normalizedPhone,
           password,
           smsCaptchaCode.trim(),
-          inviteCode.trim(),
+          inviteCode.trim() || undefined,
         );
       } else {
         await login(normalizedPhone, password, captcha!.token, captchaInput);
@@ -441,13 +427,14 @@ function LoginContent() {
                       ? inviteValidation
                       : null
                   }
-                  onChange={(value) =>
+                  onChange={(value) => {
                     formDispatch({
                       type: 'setText',
                       field: 'inviteCode',
                       value,
-                    })
-                  }
+                    });
+                    formDispatch({ type: 'setText', field: 'error', value: '' });
+                  }}
                 />
               ) : null}
               <PhoneField
@@ -514,7 +501,6 @@ function LoginContent() {
                 captchaReady={Boolean(captcha)}
                 requiresSMSCaptcha={requiresSMSCaptcha}
                 smsCaptchaCode={smsCaptchaCode}
-                inviteCode={inviteCode}
               />
             </form>
             <div className="mt-6 pt-4 border-t border-hairline">
@@ -611,7 +597,6 @@ function InviteCodeField({
         type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        required
         disabled={disabled}
         autoComplete="off"
         autoCapitalize="none"
@@ -639,6 +624,16 @@ function InviteCodeField({
               })
             : t('login.inviteHint'))}
       </p>
+      {value.trim() ? (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange('')}
+          className="mt-1 text-[11px] text-primary hover:underline disabled:opacity-60"
+        >
+          {t('login.clearInvite')}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -859,20 +854,18 @@ function SubmitButton({
   captchaReady,
   requiresSMSCaptcha,
   smsCaptchaCode,
-  inviteCode,
 }: {
   mode: AuthMode;
   submitting: boolean;
   captchaReady: boolean;
   requiresSMSCaptcha: boolean;
   smsCaptchaCode: string;
-  inviteCode: string;
 }) {
   const { t } = useI18n();
   const disabled =
     submitting ||
     (!requiresSMSCaptcha && !captchaReady) ||
-    (requiresSMSCaptcha && (!smsCaptchaCode.trim() || !inviteCode.trim()));
+    (requiresSMSCaptcha && !smsCaptchaCode.trim());
 
   return (
     <button

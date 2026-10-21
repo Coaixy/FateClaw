@@ -1,13 +1,27 @@
 # Registration invitations
 
-Public phone registration requires an invitation in addition to the existing
-image CAPTCHA, SMS verification and password rules. Existing login and password
-recovery remain available without an invitation. Google sign-in stays disabled.
+Public phone registration is open without an invitation. Image CAPTCHA, SMS
+verification, password rules and registration rate limits still apply. An optional
+valid invitation grants the new user 72 hours of the existing `membership` identity,
+starting at successful registration. Omitting or blanking the code creates an
+ordinary account without membership. A supplied invalid code fails explicitly;
+the user can clear it and continue with ordinary registration.
+
+The trial uses the existing membership entitlements, daily free-model limits and
+expiry checks. Paid model usage remains metered; no wallet credit is granted and
+no subscription fee is charged. Expiry returns the account to non-member access.
+Membership alone does not qualify the user to invite others: the existing recharge
+thresholds still apply. Membership sales being disabled does not disable invitation
+trials. Existing users and consumed invitations receive no retrospective grant;
+previously issued unused codes grant the trial when redeemed after this change.
+
+Existing login and password recovery remain available without an invitation.
+Google sign-in stays disabled.
 Authorized administrative user provisioning remains a separate privileged path.
 
 ## Policy and allowance
 
-The default cumulative allowance is three registrations at CNY 30 in net paid
+The default cumulative allowance is three invitations at CNY 30 in net paid
 recharges, five at CNY 100 and ten at CNY 300. Each invitation lasts seven days.
 The owner administrator can edit the increasing threshold/total-allowance ladder
 and code lifetime. Historical successful recharge orders count; wallet balance,
@@ -58,8 +72,10 @@ qualification reconcile in the same database transaction.
 The inviter's user row serializes code creation, redemption, allowance changes,
 payment qualification and refund registration. An invitation is rechecked after
 locking its owner and before creating the user. User creation, invitation
-attribution and code consumption commit in one PostgreSQL transaction. Concurrent
-redemptions produce one account; failed user creation leaves the code unused.
+attribution, the 72-hour membership grant and code consumption commit in one
+PostgreSQL transaction. Concurrent redemptions produce one account and one trial;
+failed user creation or trial issuance rolls everything back and leaves the code
+unused. Retrying a successful registration cannot grant another trial.
 The existing phone uniqueness constraint remains authoritative.
 The serialization lock is `FOR NO KEY UPDATE`: recharge inserts already hold
 foreign-key `KEY SHARE` locks, so upgrading them to `FOR UPDATE` can deadlock
@@ -68,8 +84,9 @@ The account transaction also holds a shared lock on the singleton policy row.
 Policy updates wait until its qualification, summary and reservation reads finish,
 so a response cannot mix an old allowance with a newer ladder or code lifetime.
 
-Registration SMS issuance and registration submission both validate the code on
-the server. Public preview and submission are rate-limited. Registration failures
+Registration SMS issuance and registration submission both validate a supplied
+non-empty code on the server; neither requires one. Public preview and submission
+are rate-limited. Registration failures
 are reported without exposing an inviter's identity, phone or payment history.
 Invitation responses are never cached and plaintext codes never enter logs.
 
@@ -101,7 +118,7 @@ Types are owned by `@fateclaw/contracts/auth`.
 | GET | `/api/admin/registration-invites/refunds?user_id=…` | List recent recorded refunds |
 
 All administrative invitation routes require the owner scope. Anonymous signup
-uses `inviteCode` in both `POST /api/auth/register` and registration-type
+accepts optional `inviteCode` in both `POST /api/auth/register` and registration-type
 `POST /api/auth/send-sms-captcha` requests. Password recovery does not accept or
 require an invitation. User invite links open `/login#invite=…` in registration
 mode. The browser reads the fragment locally, so the code is absent from static
@@ -109,10 +126,11 @@ host requests and access logs. Invitation values must not be echoed into diagnos
 
 ## Validation
 
-Required checks cover missing and invalid codes before SMS, registration without
-a code, expiry, revocation, ownership, suspension, concurrent creation and
-redemption, failed-registration rollback, paid-order qualification, partial
-refunds, refund retry conflicts, tier boundaries, cumulative allowance accounting,
+Required checks cover SMS and ordinary registration without a code, invalid codes
+before SMS, exact 72-hour trial issuance, trial-failure rollback, expiry, revocation,
+ownership, suspension, concurrent creation and redemption, failed-registration
+rollback, paid-order qualification, partial refunds, refund retry conflicts,
+tier boundaries, cumulative allowance accounting,
 manual adjustment preservation, coherent policy reads and owner-only
 administration. Database integration uses a disposable PostgreSQL instance with
 synthetic users and orders; application database configuration is never used.

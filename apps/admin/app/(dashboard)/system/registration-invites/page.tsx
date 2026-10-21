@@ -378,7 +378,7 @@ export default function AdminRegistrationInvitesPage() {
     if (actionPending.current) return;
     const accepted = await confirm({
       title: '撤销邀请码',
-      message: `撤销尾号 ${item.code_suffix} 的邀请码后，它将无法用于注册。用户邀请码占用的名额将被释放。`,
+      message: `撤销尾号 ${item.code_suffix} 的邀请码后，它将无法用于领取体验会员。用户邀请码占用的名额将被释放，新用户仍可正常注册。`,
       confirmLabel: '撤销邀请码',
       variant: 'danger',
     });
@@ -422,7 +422,7 @@ export default function AdminRegistrationInvitesPage() {
   }
 
   if (!canManage)
-    return <AdminAlert tone="error">仅所有者可管理注册邀请。</AdminAlert>;
+    return <AdminAlert tone="error">仅所有者可管理会员邀请。</AdminAlert>;
 
   const disabled = !!busy || loading;
   const occupiedSlots = summary
@@ -434,8 +434,8 @@ export default function AdminRegistrationInvitesPage() {
     <div className="space-y-5">
       <AdminPageHeader
         icon={Ticket}
-        title="注册邀请"
-        description="新用户凭邀请码完成手机号注册。管理邀请资格、运营邀请码与已完成退款记录。"
+        title="会员邀请"
+        description="开放手机号注册，新用户使用有效邀请码可获赠 72 小时体验会员。管理邀请资格、运营邀请码与已完成退款记录。"
         action={
           <AdminSecondaryButton
             icon={RefreshCw}
@@ -730,7 +730,7 @@ export default function AdminRegistrationInvitesPage() {
 
       <Section
         title="运营邀请码"
-        description="运营邀请码不占用户邀请名额，每个码仅可注册一次。完整邀请码只返回一次，请及时复制。"
+        description="运营邀请码不占用户邀请名额，仅限新用户注册时使用一次，赠送 72 小时体验会员。完整邀请码只返回一次，请及时复制。"
         action={
           <AdminPrimaryButton
             icon={Plus}
@@ -800,7 +800,7 @@ export default function AdminRegistrationInvitesPage() {
           </div>
         ) : (
           <p className="text-[12px] leading-5 text-muted">
-            生成后可将邀请码发给新用户；邀请关系不会归到任何用户账号。
+            生成后可将邀请码发给新用户领取体验会员；邀请关系不会归到任何用户账号。不使用邀请码也可正常注册。
           </p>
         )}
         {createUncertain && actionError ? (

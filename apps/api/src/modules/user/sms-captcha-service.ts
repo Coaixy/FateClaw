@@ -506,8 +506,8 @@ export async function sendSMSCaptcha(input: {
     throw userVisibleSMSCaptchaError('手机号格式不正确');
   }
 
-  if (input.type === 1) {
-    await assertRegistrationInviteValid(input.inviteCode ?? '');
+  if (input.type === 1 && input.inviteCode?.trim()) {
+    await assertRegistrationInviteValid(input.inviteCode.trim());
   }
 
   await assertSMSCaptchaSendAllowed(input.clientIp);

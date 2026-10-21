@@ -99,7 +99,7 @@ const navItems = [
   },
   {
     href: '/system/registration-invites',
-    label: '注册邀请',
+    label: '会员邀请',
     icon: Ticket,
     requiredScopes: ['admin:*'],
   },

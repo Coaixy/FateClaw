@@ -18,11 +18,21 @@ vi.mock('#infrastructure/db-pool', () => ({
 vi.mock('#infrastructure/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+vi.mock('#infrastructure/config', () => ({ MAX_OVERDRAFT_COINS: 50 }));
+vi.mock('#infrastructure/db', () => ({
+  getUserByPhone: (phone: string) => getUserByPhoneUsing(state.pool!, phone),
+}));
+vi.mock('#modules/user/sms-captcha-service', () => ({
+  verifySMSCaptcha: vi.fn(async () => 'synthetic-sms-verification'),
+}));
 
 import { MIGRATIONS } from '#infrastructure/migrations/manifest';
+import { getUserByPhoneUsing } from '#infrastructure/repositories/users-repository';
+import { getMembershipOverview } from '#infrastructure/repositories/billing-repository';
+import { registerUser } from '#modules/user/auth-service';
 import {
   assertRegistrationInviteValid,
-  createInvitedUser,
+  createRegisteredUser,
   createRegistrationInvite,
   getRegistrationInvitePolicy,
   getRegistrationInviteSummary,
@@ -133,6 +143,7 @@ describe.skipIf(!databaseUrl)(
       await db()
         .query(`TRUNCATE registration_invites,completed_recharge_refunds,
       registration_invite_accounts,recharge_orders,users CASCADE;
+      UPDATE membership_config SET enabled=true;
       UPDATE registration_invite_policy SET tiers='[{"threshold_cents":3000,"total_slots":3},{"threshold_cents":10000,"total_slots":5},{"threshold_cents":30000,"total_slots":10}]'::jsonb,expires_in_days=7,revision=1;
       INSERT INTO users(id,phone,phone_verified,created_at,purchased_coins,bonus_coins)
       VALUES('alice','13000000001',true,now(),500,500),('bob','13000000002',true,now(),0,0)`);
@@ -254,8 +265,8 @@ describe.skipIf(!databaseUrl)(
       const first = await issue(),
         second = await issue();
       await issue();
-      await createInvitedUser(newUser(), first.code!);
-      await createInvitedUser(newUser(), second.code!);
+      await createRegisteredUser(newUser(), first.code!);
+      await createRegisteredUser(newUser(), second.code!);
       await pay(70);
       expect(await getRegistrationInviteSummary('alice')).toMatchObject({
         total_slots: 5,
@@ -283,8 +294,8 @@ describe.skipIf(!databaseUrl)(
       });
       const codes = [];
       for (let index = 0; index < 7; index += 1) codes.push(await issue());
-      await createInvitedUser(newUser(), codes[0].code!);
-      await createInvitedUser(newUser(), codes[1].code!);
+      await createRegisteredUser(newUser(), codes[0].code!);
+      await createRegisteredUser(newUser(), codes[1].code!);
       await refund(trade, 70);
       expect(await getRegistrationInviteSummary('alice')).toMatchObject({
         net_recharge_yuan: 30,
@@ -321,7 +332,7 @@ describe.skipIf(!databaseUrl)(
       const trade = await pay(300);
       for (let index = 0; index < 7; index += 1) {
         const invitation = await issue();
-        await createInvitedUser(newUser(), invitation.code!);
+        await createRegisteredUser(newUser(), invitation.code!);
       }
       const unused = await issue();
       await refund(trade, 270);
@@ -532,12 +543,149 @@ describe.skipIf(!databaseUrl)(
       });
     });
 
-    it('allows a single account from concurrent redemptions and never restores a used slot after invitee deletion', async () => {
+    it('registers an ordinary account without an invitation or membership', async () => {
+      const user = await registerUser(
+        newUser().phone!,
+        'synthetic-password',
+        '123456',
+        '127.0.0.1',
+      );
+      expect(
+        (await db().query('SELECT id FROM users WHERE id=$1', [user.id])).rows,
+      ).toEqual([{ id: user.id }]);
+      expect(
+        (
+          await db().query('SELECT * FROM user_memberships WHERE user_id=$1', [
+            user.id,
+          ])
+        ).rows,
+      ).toEqual([]);
+      expect(
+        (await db().query('SELECT * FROM registration_invites')).rows,
+      ).toEqual([]);
+    });
+
+    it.each([true, false])(
+      'grants exactly 72 hours without charging the wallet and expires normally when membership sales are enabled=%s',
+      async (enabled) => {
+        await db().query('UPDATE membership_config SET enabled=$1', [enabled]);
+        await pay(30);
+        const { code } = await issue();
+        const started = Date.now();
+        const user = await registerUser(
+          newUser().phone!,
+          'synthetic-password',
+          '123456',
+          '127.0.0.1',
+          code!,
+        );
+        const {
+          rows: [membership],
+        } = await db().query(
+          'SELECT * FROM user_memberships WHERE user_id=$1',
+          [user.id],
+        );
+        expect(membership).toMatchObject({
+          plan_key: 'membership',
+          status: 'active',
+        });
+        expect(
+          membership.current_period_start.getTime(),
+        ).toBeGreaterThanOrEqual(started - 1000);
+        expect(membership.current_period_start.getTime()).toBeLessThanOrEqual(
+          Date.now() + 1000,
+        );
+        expect(
+          membership.current_period_end.getTime() -
+            membership.current_period_start.getTime(),
+        ).toBe(72 * 60 * 60 * 1000);
+        expect(
+          (
+            await db().query(
+              'SELECT purchased_coins::float8,bonus_coins::float8 FROM users WHERE id=$1',
+              [user.id],
+            )
+          ).rows,
+        ).toEqual([{ purchased_coins: 0, bonus_coins: 0 }]);
+        expect(
+          (
+            await db().query(
+              'SELECT * FROM wallet_transactions WHERE user_id=$1',
+              [user.id],
+            )
+          ).rows,
+        ).toEqual([]);
+        expect(await getRegistrationInviteSummary(user.id)).toMatchObject({
+          eligible: false,
+          available_slots: 0,
+        });
+        expect(await getMembershipOverview(user.id)).toMatchObject({
+          active: true,
+        });
+        await db().query(
+          `UPDATE user_memberships SET current_period_start=NOW()-interval '73 hours',
+         current_period_end=NOW()-interval '1 hour' WHERE user_id=$1`,
+          [user.id],
+        );
+        expect(await getMembershipOverview(user.id)).toMatchObject({
+          active: false,
+          membership: null,
+        });
+      },
+    );
+
+    it('rolls back registration and code consumption if the trial grant fails, then allows retry', async () => {
+      await pay(30);
+      const invitation = await issue();
+      const user = { ...newUser(), id: 'trial-grant-failure' };
+      await db().query(`
+        CREATE FUNCTION fail_invitation_trial_grant() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.user_id = 'trial-grant-failure' THEN
+            RAISE EXCEPTION 'Synthetic trial grant failure';
+          END IF;
+          RETURN NEW;
+        END $$;
+        CREATE TRIGGER fail_invitation_trial_grant BEFORE INSERT ON user_memberships
+          FOR EACH ROW EXECUTE FUNCTION fail_invitation_trial_grant();
+      `);
+      try {
+        await expect(
+          createRegisteredUser(user, invitation.code!),
+        ).rejects.toThrow('Synthetic trial grant failure');
+        expect(
+          (await db().query('SELECT id FROM users WHERE id=$1', [user.id]))
+            .rows,
+        ).toEqual([]);
+        expect(
+          (
+            await db().query(
+              'SELECT * FROM user_memberships WHERE user_id=$1',
+              [user.id],
+            )
+          ).rows,
+        ).toEqual([]);
+        await expect(
+          assertRegistrationInviteValid(invitation.code!),
+        ).resolves.toMatchObject({ valid: true });
+      } finally {
+        await db().query(
+          'DROP TRIGGER fail_invitation_trial_grant ON user_memberships; DROP FUNCTION fail_invitation_trial_grant()',
+        );
+      }
+      await createRegisteredUser(user, invitation.code!);
+      expect(await getRegistrationInviteSummary('alice')).toMatchObject({
+        used_slots: 1,
+        reserved_slots: 0,
+      });
+    });
+
+    it('allows a single account and trial from concurrent redemptions and never restores a used slot after invitee deletion', async () => {
       await pay(30);
       const { code } = await issue();
       const users = Array.from({ length: 8 }, () => newUser());
       const outcomes = await Promise.allSettled(
-        users.map((user) => createInvitedUser(user, code!)),
+        users.map((user) => createRegisteredUser(user, code!)),
       );
       expect(
         outcomes.filter((result) => result.status === 'fulfilled'),
@@ -553,6 +701,9 @@ describe.skipIf(!databaseUrl)(
       ).toBe(1);
       const winner =
         users[outcomes.findIndex((result) => result.status === 'fulfilled')];
+      expect(
+        (await db().query('SELECT user_id FROM user_memberships')).rows,
+      ).toEqual([{ user_id: winner.id }]);
       await db().query('DELETE FROM users WHERE id=$1', [winner.id]);
       expect(await getRegistrationInviteSummary('alice')).toMatchObject({
         used_slots: 1,
@@ -564,12 +715,12 @@ describe.skipIf(!databaseUrl)(
       await pay(30);
       const { code } = await issue();
       await expect(
-        createInvitedUser(newUser('13000000001'), code!),
+        createRegisteredUser(newUser('13000000001'), code!),
       ).rejects.toMatchObject({ statusCode: 400 });
       await expect(assertRegistrationInviteValid(code!)).resolves.toMatchObject(
         { valid: true },
       );
-      await createInvitedUser(newUser(), code!);
+      await createRegisteredUser(newUser(), code!);
       expect(await getRegistrationInviteSummary('alice')).toMatchObject({
         used_slots: 1,
         reserved_slots: 0,
@@ -639,7 +790,7 @@ describe.skipIf(!databaseUrl)(
       const trade = await pay(30);
       const first = await issue();
       const second = await issue();
-      await createInvitedUser(newUser(), first.code!);
+      await createRegisteredUser(newUser(), first.code!);
       const reference = requestKey();
       const results = await Promise.all(
         Array.from({ length: 6 }, () => refund(trade, 0.01, reference)),
@@ -695,7 +846,7 @@ describe.skipIf(!databaseUrl)(
 
     it('supports operational codes and reconciles revised tier totals without stacking capacity', async () => {
       const operational = await createRegistrationInvite(null, requestKey());
-      await createInvitedUser(newUser(), operational.code!);
+      await createRegisteredUser(newUser(), operational.code!);
       await pay(100);
       const policy = await getRegistrationInvitePolicy();
       await saveRegistrationInvitePolicy({

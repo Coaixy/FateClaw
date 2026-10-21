@@ -387,6 +387,7 @@ export function InvitationsContent({
                     days: summary.policy.expires_in_days,
                   })}
                 </p>
+                <p>{t('invitations.trialRules')}</p>
                 <p>{t('invitations.rechargeBasis')}</p>
                 <p>{t('invitations.slotRules')}</p>
               </div>

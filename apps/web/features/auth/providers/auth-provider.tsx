@@ -18,7 +18,7 @@ export interface AuthContextValue {
     phone: string,
     password: string,
     smsCaptchaCode: string,
-    inviteCode: string,
+    inviteCode?: string,
   ) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
