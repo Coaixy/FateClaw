@@ -164,11 +164,22 @@ entry point.
 ### Conversation visualizations
 
 Web requests with an admitted request ID, execution ID and session expose
-`render_visualization({ type, title, summary, spec })`. Mermaid source describes
+`render_visualization({ type, title, summary, spec })`. SVG source describes
+custom explanatory diagrams: element cycles, annotated relationships, grouped
+structures and timelines. Mermaid source describes automatically laid out
 flows, sequences, state diagrams, mind maps and timelines. Vega-Lite JSON
 describes charts with inline data, layers and selection or input parameters.
 The model must distinguish calculated facts from illustrative data in `summary`;
 visualization does not calculate or replace authoritative chart facts.
+
+The agent proactively illustrates relationships, structures, processes,
+comparisons and timelines when a figure improves understanding, without waiting
+for an explicit drawing request. Qualitative diagrams do not require invented
+scores or statistics. Each figure focuses on one topic and appears next to its
+explanation. Short factual answers and explicit text-only requests remain text.
+The session boundary appends the registered tools' snippets and guidelines to
+the custom system prompt: Pi 1.3 does not add those contributions automatically
+when a custom prompt is present. Only available tools contribute guidance.
 
 The tool uses account-encrypted `ipc:{accountId}:visualization` requests and the
 existing account listener. Both chart and visualization writes use
@@ -181,6 +192,13 @@ not remove an already committed visualization. RPC and queue lifetimes match
 conversation chart creation below.
 
 `packages/contracts/src/visualization/` owns the versioned rendering contract.
+SVG uses the same XML parser and element/attribute allowlist in the runtime,
+API and browser. It permits basic shapes, text, groups, markers, gradients and
+clipping, bounded to 64,000 bytes, 500 elements and 16 levels. A required viewBox
+bounds the root canvas to 100–1,600 by 100–2,400 units. Scripts, events, CSS,
+HTML, images, links, animation, document types and processing instructions are
+unavailable. Paint and marker references must resolve to matching definitions
+inside the figure. Theme color variables keep text readable in both themes.
 Mermaid source is bounded to 16,000 characters and disallows HTML, links,
 directives and custom styles. Syntax validation runs in a disposable worker with
 an empty environment, a private DOM and a four-second deadline. Vega-Lite uses
@@ -203,7 +221,10 @@ the answer references it; unreferenced results remain readable after interrupted
 turns. Unknown references and individual rendering failures preserve the text.
 Copying an answer substitutes each figure's title and summary for its reference.
 
-Browser renderers load on demand. Mermaid uses host-controlled strict settings.
+Browser renderers load on demand. SVG creates DOM nodes from its validated tree,
+without parsing model markup as HTML, and gives every mount its own definition
+IDs. Inline figures retain their natural height rather than shrinking long
+diagrams to a viewport. Mermaid uses host-controlled strict settings.
 Vega uses its AST interpreter without `unsafe-eval` and a loader that refuses
 external resources and links. Figure interaction and full-screen reading reuse
 the existing artifact portal and viewer. WeChat requests do not expose this

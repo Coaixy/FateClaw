@@ -16,6 +16,8 @@ import { runPiSession } from '#agent/pi-runtime/session';
 import { createRequestScope } from '#agent/request-scope';
 import type { ContainerInput } from '#agent/types';
 import * as paipanClient from '#agent/paipan-client';
+import * as hostToolClient from '#agent/host-tool-client';
+import { visualizationReference } from '@fateclaw/contracts/visualization';
 
 const servers: ReturnType<typeof createServer>[] = [];
 const directories: string[] = [];
@@ -197,6 +199,75 @@ async function seedV3(
 }
 
 describe('Pi SDK session lifecycle', () => {
+  it('delivers active tool guidance to the provider and embeds a persisted figure through the tool loop', async () => {
+    const id = `visualization-${'a'.repeat(64)}`;
+    const figure = {
+      type: 'svg' as const,
+      title: '五行相生',
+      summary: '五行相生关系示意，不代表个人强弱。',
+      spec: '<svg viewBox="0 0 480 180"><circle cx="100" cy="90" r="42" fill="var(--color-surface-soft)"/><text x="100" y="98">木</text><path d="M150 90H320" stroke="var(--color-primary)"/><text x="365" y="98">火</text></svg>',
+    };
+    const caller = vi.fn(async () => ({
+      ok: true as const,
+      sessionId,
+      artifact: { ...figure, id, version: 1 as const },
+      createdAt: '2026-10-23T00:00:00Z',
+    }));
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(caller);
+    const answer = `先看相生的方向。\n\n${visualizationReference(id)}\n\n箭头表示相生关系。`;
+    const { input, deps, requests, run } = await setup(
+      (_body, response, index) => {
+        if (index === 0)
+          send(
+            response,
+            {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'synthetic-figure',
+                  type: 'function',
+                  function: {
+                    name: 'render_visualization',
+                    arguments: JSON.stringify(figure),
+                  },
+                },
+              ],
+            },
+            true,
+          );
+        else send(response, { content: index === 1 ? answer : '文字答复' });
+      },
+    );
+    const scope = createRequestScope();
+    scope.requestId = 'synthetic-figure-request';
+    const result = await runPiSession({
+      containerInput: { ...input, executionId: 'synthetic-execution' },
+      runtime: { deps },
+      requestScope: scope,
+    });
+    expect(result.text).toBe(answer);
+    expect(caller).toHaveBeenCalledWith(
+      { ...figure, toolCallId: 'synthetic-figure' },
+      expect.any(AbortSignal),
+    );
+    const prompt = JSON.stringify(
+      requests[0].messages.filter((message) => message.role === 'system'),
+    );
+    expect(prompt).toContain('语法错误可简化后重新调用');
+    expect(prompt).toContain('summary 说明数据来源或示意性质');
+    expect(JSON.stringify(requests[1].messages)).toContain(id);
+
+    await run({ ...input, accountId: 'wechat:synthetic-user' });
+    expect(requests[2].tools?.map((tool) => tool.function.name)).not.toContain(
+      'render_visualization',
+    );
+    expect(
+      JSON.stringify(
+        requests[2].messages.filter((message) => message.role === 'system'),
+      ),
+    ).not.toContain('render_visualization');
+  });
+
   it('creates a chart through the model tool loop and reuses it in a later conversation turn', async () => {
     const board = {
       sourceMessageId: 'saved-chart',

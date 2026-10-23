@@ -1,4 +1,9 @@
-import type { VisualizationArtifact } from '@fateclaw/contracts/visualization';
+import {
+  parseSvgDiagram,
+  SVG_NAMESPACE,
+  type SvgDiagramNode,
+  type VisualizationArtifact,
+} from '@fateclaw/contracts/visualization';
 import type { TopLevelSpec } from 'vega-lite';
 
 let mermaidQueue: Promise<unknown> = Promise.resolve();
@@ -18,6 +23,52 @@ export async function mountVisualization(
   const primary = style.getPropertyValue('--color-primary').trim() || '#cc785c';
   const font =
     style.getPropertyValue('--font-sans').trim() || 'system-ui, sans-serif';
+  if (artifact.type === 'svg') {
+    const parsed = parseSvgDiagram(artifact.spec);
+    if (!parsed.ok) throw new Error(parsed.error);
+    // Each mount owns its definition IDs, including when the same figure appears twice.
+    const prefix = `fateclaw-svg-${++renderSequence}-`;
+    const createNode = (node: SvgDiagramNode): SVGElement => {
+      const element = host.ownerDocument.createElementNS(
+        SVG_NAMESPACE,
+        node.tag,
+      );
+      for (const [name, value] of Object.entries(node.attributes)) {
+        element.setAttribute(
+          name,
+          name === 'id'
+            ? prefix + value
+            : value.replace(
+                /^url\(#([a-zA-Z][\w-]{0,63})\)$/,
+                `url(#${prefix}$1)`,
+              ),
+        );
+      }
+      for (const child of node.children)
+        element.append(
+          typeof child === 'string'
+            ? host.ownerDocument.createTextNode(child)
+            : createNode(child),
+        );
+      return element;
+    };
+    const root = createNode(parsed.root);
+    root.setAttribute('width', '100%');
+    root.removeAttribute('height');
+    root.setAttribute('role', 'img');
+    root.setAttribute('aria-label', `${artifact.title}。${artifact.summary}`);
+    root.style.display = 'block';
+    root.style.height = 'auto';
+    root.style.maxWidth = `${Number(parsed.root.attributes.viewBox.trim().split(/[\s,]+/)[2])}px`;
+    root.style.marginInline = 'auto';
+    root.style.overflow = 'hidden';
+    root.style.fontFamily = font;
+    root.style.fontSize = '20px';
+    root.style.color = ink;
+    root.setAttribute('fill', root.getAttribute('fill') ?? 'currentColor');
+    host.replaceChildren(root);
+    return () => host.replaceChildren();
+  }
   if (artifact.type === 'mermaid') {
     const render = async () => {
       const { default: mermaid } = await import('mermaid');

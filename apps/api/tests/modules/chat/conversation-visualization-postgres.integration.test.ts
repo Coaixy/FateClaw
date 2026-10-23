@@ -157,6 +157,32 @@ describe.skipIf(!databaseUrl)(
       });
     });
 
+    it('persists SVG as a complete artifact and hydrates it with the referencing answer', async () => {
+      const original = request();
+      const spec =
+        '<svg viewBox="0 0 480 240"><circle cx="120" cy="120" r="60" fill="var(--color-surface-soft)"/><text x="100" y="128" font-size="24">木</text></svg>';
+      const result = await executeConversationVisualization(accountId, {
+        ...original,
+        operation: { ...original.operation, type: 'svg', spec },
+      });
+      if (!result.ok) throw new Error(result.error);
+      const entries = await resolveMessageVisualizations(
+        accountId,
+        'synthetic-session',
+        visualizationReference(result.artifact.id),
+        getDbPool(),
+      );
+      expect(entries).toHaveLength(1);
+      expect(entries[0].artifactData).toEqual({
+        title: original.operation.title,
+        summary: original.operation.summary,
+        type: 'svg',
+        spec,
+        id: result.artifact.id,
+        version: 1,
+      });
+    });
+
     it.each([
       "UPDATE agent_requests SET state='completed'",
       'UPDATE agent_requests SET cancel_requested_at=now()',

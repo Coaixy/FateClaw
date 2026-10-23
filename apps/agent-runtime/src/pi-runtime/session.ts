@@ -206,7 +206,6 @@ export async function runPiSession(args: {
       .getSkills()
       .skills.filter((skill) => !skill.disableModelInvocation);
     const systemPrompt = resourceLoader.getSystemPrompt() ?? '';
-    const appendSystemPrompt = resourceLoader.getAppendSystemPrompt();
     const customTools = createPiCustomTools({
       requestScope: args.requestScope,
       readableSkills,
@@ -232,6 +231,21 @@ export async function runPiSession(args: {
     );
 
     const allowedToolNames = customTools.map((tool) => tool.name);
+    // Pi 1.3 omits tool prompt contributions when a custom system prompt is supplied.
+    const appendSystemPrompt = [
+      ...resourceLoader.getAppendSystemPrompt(),
+      [
+        '<fateclaw_tool_guidance>',
+        ...customTools.flatMap((tool) => [
+          `### ${tool.name}`,
+          tool.promptSnippet ?? '',
+          ...(tool.promptGuidelines ?? []).map((rule) => `- ${rule}`),
+        ]),
+        '</fateclaw_tool_guidance>',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    ];
     const settingsManager = SettingsManager.inMemory({
       compaction: { enabled: true },
       // Warming issues extra billable calls outside the user-requested turn.
@@ -260,7 +274,10 @@ export async function runPiSession(args: {
         args.containerInput.llmRuntime.thinkingLevel,
       ),
       modelRuntime: providerRuntime.modelRuntime,
-      resourceLoader,
+      resourceLoader: {
+        ...resourceLoader,
+        getAppendSystemPrompt: () => appendSystemPrompt,
+      },
       sessionManager: piSession.manager,
       settingsManager,
       noTools: 'all',

@@ -1,3 +1,6 @@
+import { parseSvgDiagram } from './svg.js';
+export { parseSvgDiagram, SVG_NAMESPACE, type SvgDiagramNode } from './svg.js';
+
 export const VISUALIZATION_VERSION = 1;
 export const MAX_VISUALIZATION_BYTES = 64_000;
 export const VISUALIZATION_ID = /^visualization-[a-f0-9]{64}$/;
@@ -7,6 +10,7 @@ export type VisualizationInput = {
   summary: string;
 } & (
   | { type: 'mermaid'; spec: string }
+  | { type: 'svg'; spec: string }
   | { type: 'vega-lite'; spec: Record<string, unknown> }
 );
 
@@ -62,10 +66,24 @@ export function parseVisualizationInput(
       },
     };
   }
+  if (type === 'svg') {
+    const result = parseSvgDiagram(spec);
+    if (!result.ok) return result;
+    return {
+      ok: true,
+      value: {
+        type,
+        title: title.trim(),
+        summary: summary.trim(),
+        spec: (spec as string).trim(),
+      },
+    };
+  }
   if (type !== 'vega-lite' || !isRecord(spec))
     return {
       ok: false,
-      error: 'type 必须为 mermaid 或 vega-lite，后者的 spec 必须是 JSON 对象',
+      error:
+        'type 必须为 svg、mermaid 或 vega-lite；前两者使用字符串，vega-lite 使用 JSON 对象',
     };
 
   let nodes = 0;

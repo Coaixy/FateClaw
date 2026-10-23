@@ -2,13 +2,18 @@
 
 `apps/web/components/chat/artifact-renderer.tsx` owns the presentation of all seven structured chart artifacts: Bazi, Ziwei, Liuyao, Jingzhan, Qimen, Liuren, and Meihua. Calculation results and formatter text remain authoritative; layout changes must preserve the supplied data and the copy-text action.
 
-It also presents versioned Mermaid and Vega-Lite visualizations. Their titles
+It also presents versioned SVG, Mermaid and Vega-Lite visualizations. Their titles
 and text descriptions sit outside the measured figure. The same portal moves
 the figure into the viewer, retaining chart selections and filter controls.
 `VisualizationContext` resolves fenced `visualization` references from saved
 message artifacts, so `MarkdownContent` can place figures between paragraphs.
 Code examples inside an outer fence remain code. Loading, missing references
 and renderer failures are local to the figure and retain the surrounding text.
+Inline visualizations adapt to the available width and retain their natural height;
+they bypass the board fitting frame so long diagrams remain readable. SVG uses
+the shared validated element tree, theme colors and mount-local definition IDs.
+Its viewBox width caps its inline size so small diagrams do not expand to fill
+a desktop conversation column.
 See [Agent architecture](agent-architecture.md#conversation-visualizations) for
 the persistence contract and rendering limits.
 

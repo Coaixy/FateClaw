@@ -106,5 +106,8 @@
   "devDependencies": {
     "@types/node": "22.19.15",
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@rgrove/parse-xml": "5.0.0"
   }
 }

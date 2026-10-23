@@ -188,13 +188,17 @@ function ArtifactBlock({
       )}
       <ChartErrorBoundary fallbackTitle={`${title} 渲染失败`}>
         <div className={cn('w-full min-w-0 mx-auto', shellClassName)}>
-          <ResponsiveArtifactFrame
-            fitViewportHeight={fitViewportHeight}
-            minContentWidth={minContentWidth}
-            layoutAspectRatio={layoutAspectRatio}
-          >
+          {visualization ? (
             <ArtifactChartMount host={chartHost} active={!expanded} />
-          </ResponsiveArtifactFrame>
+          ) : (
+            <ResponsiveArtifactFrame
+              fitViewportHeight={fitViewportHeight}
+              minContentWidth={minContentWidth}
+              layoutAspectRatio={layoutAspectRatio}
+            >
+              <ArtifactChartMount host={chartHost} active={!expanded} />
+            </ResponsiveArtifactFrame>
+          )}
         </div>
       </ChartErrorBoundary>
       <div

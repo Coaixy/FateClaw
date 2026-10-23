@@ -68,7 +68,7 @@ export async function executeConversationVisualization(
         code: 'VISUALIZATION.INVALID_SPEC',
         error: 'Mermaid 语法无法解析，请简化节点和连线，检查引号及括号后重试',
       };
-  } else {
+  } else if (input.type === 'vega-lite') {
     if (!validateVega(input.spec))
       return {
         ok: false,

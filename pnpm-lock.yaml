@@ -378,6 +378,10 @@ importers:
   packages/backend-shared: {}
 
   packages/contracts:
+    dependencies:
+      '@rgrove/parse-xml':
+        specifier: 5.0.0
+        version: 5.0.0
     devDependencies:
       '@types/node':
         specifier: 22.19.15
@@ -1323,6 +1327,10 @@ packages:
 
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
+
+  '@rgrove/parse-xml@5.0.0':
+    resolution: {integrity: sha512-SgHFyisNAkS2ZbM8SCriUm1N0bxLiz0POKvpDeAtrnLrXaYG1PawNwu1rSjmE/vcVHbZzYWNgVP6xkep6R4uXg==}
+    engines: {node: '>=22.12.0'}
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     resolution: {integrity: sha512-aWR+XKH9+rW7m5fWq/5360J3mHycrx/o6xZM2DQFdJnTMdyP7/WzxPjhtLbVWdKo2y612/4U1bWqb3HQhiF7vg==}
@@ -6446,6 +6454,8 @@ snapshots:
   '@protobufjs/pool@1.1.0': {}
 
   '@protobufjs/utf8@1.1.2': {}
+
+  '@rgrove/parse-xml@5.0.0': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     optional: true
