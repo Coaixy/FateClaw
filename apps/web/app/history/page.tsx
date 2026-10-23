@@ -89,40 +89,6 @@ function formatSessionTime(
   return formatDate(d, { month: 'short', day: 'numeric' });
 }
 
-type RowActionState = {
-  renamingSessionId: string;
-  sharingSessionId: string;
-};
-
-type RowActionAction =
-  | { type: 'setRenaming'; sessionId: string }
-  | { type: 'setSharing'; sessionId: string };
-
-function rowActionReducer(
-  state: RowActionState,
-  action: RowActionAction,
-): RowActionState {
-  switch (action.type) {
-    case 'setRenaming':
-      // 同一时间只允许一行处于操作中，再次点击同一行则取消该状态。
-      return {
-        ...state,
-        renamingSessionId:
-          state.renamingSessionId === action.sessionId ? '' : action.sessionId,
-        sharingSessionId:
-          state.sharingSessionId === action.sessionId ? '' : state.sharingSessionId,
-      };
-    case 'setSharing':
-      return {
-        ...state,
-        sharingSessionId:
-          state.sharingSessionId === action.sessionId ? '' : action.sessionId,
-        renamingSessionId:
-          state.renamingSessionId === action.sessionId ? '' : state.renamingSessionId,
-      };
-  }
-}
-
 /**
  * 对话历史页：完整查看全部站内 AI Chat 会话（侧栏仅展示最近 10 条的预览）。
  *
@@ -157,10 +123,7 @@ function HistoryContent() {
   // 行内改名编辑态：editingId 非空表示该行正在编辑标题。
   const [editingId, setEditingId] = useState('');
   const [editingTitle, setEditingTitle] = useState('');
-  const [rowAction, dispatchRowAction] = useReducer(rowActionReducer, {
-    renamingSessionId: '',
-    sharingSessionId: '',
-  });
+  const [renamingSessionId, setRenamingSessionId] = useState('');
 
   // 列表查询态：搜索词、日期筛选、页码。筛选变化时重置页码。
   const [query, dispatchQuery] = useReducer(
@@ -238,7 +201,7 @@ function HistoryContent() {
   const startEditing = (session: ChatSession) => {
     setEditingId(session.id);
     setEditingTitle(session.title);
-    dispatchRowAction({ type: 'setRenaming', sessionId: '' });
+    setRenamingSessionId('');
   };
 
   const resetEditing = () => {
@@ -265,35 +228,17 @@ function HistoryContent() {
       return;
     }
 
-    dispatchRowAction({ type: 'setRenaming', sessionId });
+    setRenamingSessionId(sessionId);
     try {
       await renameSession(sessionId, normalizedTitle);
       toast('success', t('sidebar.titleUpdated'));
       resetEditing();
     } catch (error) {
-      dispatchRowAction({ type: 'setRenaming', sessionId: '' });
+      setRenamingSessionId('');
       toast(
         'error',
         error instanceof Error ? error.message : t('sidebar.titleUpdateFailed'),
       );
-    }
-  };
-
-  const copySessionShareLink = async (sessionId: string) => {
-    if (rowAction.sharingSessionId) return;
-    dispatchRowAction({ type: 'setSharing', sessionId });
-    try {
-      const token = await shareSession(sessionId);
-      const url = `${window.location.origin}/ai-chat/share?token=${encodeURIComponent(token)}`;
-      await navigator.clipboard.writeText(url);
-      toast('success', t('sidebar.shareCopied'));
-    } catch (error) {
-      toast(
-        'error',
-        error instanceof Error ? error.message : t('sidebar.shareFailed'),
-      );
-    } finally {
-      dispatchRowAction({ type: 'setSharing', sessionId: '' });
     }
   };
 
@@ -388,8 +333,7 @@ function HistoryContent() {
               <div className="space-y-2.5">
                 {pagedSessions.map((session) => {
                   const isEditing = session.id === editingId;
-                  const isRenaming = session.id === rowAction.renamingSessionId;
-                  const isSharing = session.id === rowAction.sharingSessionId;
+                  const isRenaming = session.id === renamingSessionId;
 
                   if (isEditing) {
                     // 编辑态整行替换成输入框容器，避免按钮冒泡误触会话跳转。
@@ -473,6 +417,12 @@ function HistoryContent() {
                           <span>
                             {formatSessionTime(session.updated_at, t, formatDate)}
                           </span>
+                          {session.share_token ? (
+                            <span className="inline-flex items-center gap-1 text-primary">
+                              <Share2 size={10} aria-hidden="true" />
+                              {t('sidebar.shared')}
+                            </span>
+                          ) : null}
                           {session.client_id && clientNameById.get(session.client_id) && (
                             <span className="inline-flex items-center gap-1 truncate">
                               <MessageSquareText size={10} className="shrink-0" />
@@ -488,18 +438,13 @@ function HistoryContent() {
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void copySessionShareLink(session.id);
+                            shareSession(session.id);
                           }}
-                          disabled={Boolean(rowAction.sharingSessionId)}
                           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-primary/10 hover:text-primary disabled:cursor-wait disabled:opacity-40"
-                          aria-label={t('sidebar.copyShareLink')}
-                          title={t('sidebar.copyShareLink')}
+                          aria-label={t('sharePoster.title')}
+                          title={t('sharePoster.title')}
                         >
-                          {isSharing ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          ) : (
-                            <Share2 size={14} />
-                          )}
+                          <Share2 size={14} />
                         </button>
                         <button
                           type="button"

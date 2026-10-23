@@ -165,16 +165,13 @@ function Logo({ compact = false }: { compact?: boolean }) {
   );
 }
 
-// 侧栏会话列表的临时交互状态：搜索词、日期筛选、行内改名（编辑中的会话与标题、
-// 改名提交中）、分享提交中、展开的会话面板是否打开。这些都属于「会话列表视图态」，且在登录态
-// 变化时需要整体复位，因此聚合到一个 reducer 里统一管理，用单次 dispatch 表达整组变更。
+// Reset transient list state together when authentication changes.
 type SessionListState = {
   search: string;
   dateFilter: SessionDateFilter;
   editingSessionId: string;
   editingTitle: string;
   renamingSessionId: string;
-  sharingSessionId: string;
   sessionsPanelOpen: boolean;
 };
 
@@ -184,7 +181,6 @@ const INITIAL_SESSION_LIST_STATE: SessionListState = {
   editingSessionId: '',
   editingTitle: '',
   renamingSessionId: '',
-  sharingSessionId: '',
   sessionsPanelOpen: false,
 };
 
@@ -194,8 +190,7 @@ type SessionListAction =
   | { type: 'clearEditing' } // 退出行内改名
   | { type: 'startEditing'; sessionId: string; title: string }
   | { type: 'setEditingTitle'; title: string }
-  | { type: 'setRenaming'; sessionId: string }
-  | { type: 'setSharing'; sessionId: string };
+  | { type: 'setRenaming'; sessionId: string };
 
 function sessionListReducer(
   state: SessionListState,
@@ -224,8 +219,6 @@ function sessionListReducer(
       return { ...state, editingTitle: action.title };
     case 'setRenaming':
       return { ...state, renamingSessionId: action.sessionId };
-    case 'setSharing':
-      return { ...state, sharingSessionId: action.sessionId };
     default:
       return state;
   }
@@ -260,7 +253,6 @@ export function Sidebar({
     editingSessionId,
     editingTitle,
     renamingSessionId,
-    sharingSessionId,
     sessionsPanelOpen,
   } = sessionList;
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -405,24 +397,6 @@ export function Sidebar({
 
   const startEditingSession = (sessionId: string, title: string) => {
     dispatchSessionList({ type: 'startEditing', sessionId, title });
-  };
-
-  const copySessionShareLink = async (sessionId: string) => {
-    if (sharingSessionId) return;
-    dispatchSessionList({ type: 'setSharing', sessionId });
-    try {
-      const token = await shareSession(sessionId);
-      const url = `${window.location.origin}/ai-chat/share?token=${encodeURIComponent(token)}`;
-      await navigator.clipboard.writeText(url);
-      toast('success', t('sidebar.shareCopied'));
-    } catch (error) {
-      toast(
-        'error',
-        error instanceof Error ? error.message : t('sidebar.shareFailed'),
-      );
-    } finally {
-      dispatchSessionList({ type: 'setSharing', sessionId: '' });
-    }
   };
 
   const saveSessionTitle = async (sessionId: string) => {
@@ -649,7 +623,6 @@ export function Sidebar({
                   const active = session.id === selectedSession && isAiChatPath(pathname);
                   const isEditing = session.id === editingSessionId;
                   const isRenaming = session.id === renamingSessionId;
-                  const isSharing = session.id === sharingSessionId;
                   const openSession = () => {
                     openChatSession(session.id);
                   };
@@ -766,29 +739,29 @@ export function Sidebar({
                               {clientNameById.get(session.client_id)}
                             </p>
                           )}
-                        <p className="text-[10px] text-muted/70 leading-tight mt-1">
-                          {formatSessionTime(
-                            session.updated_at,
-                            t,
-                            formatDate,
-                          )}
+                        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] leading-tight text-muted/70">
+                          <span>
+                            {formatSessionTime(session.updated_at, t, formatDate)}
+                          </span>
+                          {session.share_token ? (
+                            <span className="inline-flex items-center gap-1 text-primary">
+                              <Share2 size={10} aria-hidden="true" />
+                              {t('sidebar.shared')}
+                            </span>
+                          ) : null}
                         </p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
-                            void copySessionShareLink(session.id);
+                            shareSession(session.id);
                           }}
-                          disabled={Boolean(sharingSessionId)}
                           className="w-5 h-5 rounded flex items-center justify-center opacity-40 group-hover:opacity-60 hover:!opacity-100 text-muted hover:text-primary hover:bg-primary/10 transition-all duration-200 cursor-pointer disabled:cursor-wait disabled:opacity-40"
-                          aria-label={t('sidebar.copyShareLink')}
+                          aria-label={t('sharePoster.title')}
+                          title={t('sharePoster.title')}
                         >
-                          {isSharing ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : (
-                            <Share2 size={11} />
-                          )}
+                          <Share2 size={11} />
                         </button>
                         <button
                           onClick={(event) => {

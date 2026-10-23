@@ -114,6 +114,12 @@ The current main product entry point is `components/ai-chat/ai-chat-workspace.ts
 
 For chart sizing, preview boundaries, full-screen reading, and the compact composer, see [Web chart layout](../../docs/web-chart-layout.md).
 
+### Conversation sharing
+
+The sidebar and history page call `useChatSessions().shareSession()` to open one provider-owned `SessionShareDialog`. It creates or reuses the API share link, then reads the shared conversation to build a 1080 × 1440 PNG with the first user question, product identity, and a QR code for the returned `share_url_path`. Direct chart-request summaries are excluded from question selection; conversations without a question use their title. Long questions shrink to fit and are ellipsized at the minimum font size; the linked conversation remains complete.
+
+The preview and saved image use the same PNG. Supported browsers open the native file share menu; others download the image. The link remains usable when poster generation fails. Requests are bounded and cancelled when the dialog closes; image object URLs are revoked on cleanup. Both session lists derive their `Shared` indicator from the persisted `share_token`, including after reload.
+
 ## UI characteristics
 
 - The current UI has a strong visual style, especially on the home page and dashboard, rather than a conventional admin-template appearance.

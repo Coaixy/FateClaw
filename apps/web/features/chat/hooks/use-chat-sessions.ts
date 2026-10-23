@@ -15,6 +15,7 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { chatSessionsApi, ChatSession } from '@/features/chat/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { SessionShareDialog } from '@/components/ai-chat/session-share-dialog';
 
 interface ChatSessionsContextValue {
   chatAvailable: boolean;
@@ -27,7 +28,7 @@ interface ChatSessionsContextValue {
   ) => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
-  shareSession: (sessionId: string) => Promise<string>;
+  shareSession: (sessionId: string) => void;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
   loading: boolean;
 }
@@ -159,6 +160,10 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [shareTarget, setShareTarget] = useState<{
+    sessionId: string;
+    ownerId: string;
+  } | null>(null);
   // 选中会话与其修订号始终成对更新（每次切换/同步都要 bump revision），
   // 合并到同一个 state 用一次 setSelection 翻转，避免分散的双 setState 级联重渲染。
   const [selection, setSelection] = useState<{ id: string; revision: number }>({
@@ -234,6 +239,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     const hasToken = hasStoredAuthToken();
     if (shouldClearChatSelection({ user, authLoading, hasToken })) {
       setSessions([]);
+      setShareTarget(null);
       applySelectedSession('');
       latestSessionsRequestRef.current = 0;
       return;
@@ -319,15 +325,29 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     [selectedSession, setSelectedSession],
   );
 
-  const shareSession = useCallback(async (sessionId: string) => {
-    const result = await chatSessionsApi.share(sessionId);
-    setSessions((previous) =>
-      previous.map((session) =>
-        session.id === sessionId ? result.session : session,
-      ),
-    );
-    return result.share_token;
-  }, []);
+  const shareSession = useCallback(
+    (sessionId: string) => {
+      setShareTarget({ sessionId, ownerId: user?.id ?? '' });
+    },
+    [user?.id],
+  );
+
+  const createShare = useCallback(
+    async (sessionId: string, signal: AbortSignal) => {
+      const result = await chatSessionsApi.share(sessionId, { signal });
+      if (!signal.aborted) {
+        setSessions((previous) =>
+          previous.map((session) =>
+            session.id === sessionId ? result.session : session,
+          ),
+        );
+      }
+      return result;
+    },
+    [],
+  );
+
+  const closeShare = useCallback(() => setShareTarget(null), []);
 
   const touchSession = useCallback(
     (sessionId: string, patch: Partial<ChatSession>) => {
@@ -367,7 +387,19 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return createElement(ChatSessionsContext.Provider, { value }, children);
+  return createElement(
+    ChatSessionsContext.Provider,
+    { value },
+    children,
+    shareTarget && !authLoading && shareTarget.ownerId === (user?.id ?? '')
+      ? createElement(SessionShareDialog, {
+          key: shareTarget.sessionId,
+          sessionId: shareTarget.sessionId,
+          createShare,
+          onClose: closeShare,
+        })
+      : null,
+  );
 }
 
 export function useChatSessions() {

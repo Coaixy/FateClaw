@@ -218,14 +218,15 @@ export const chatSessionsApi = {
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/restore`,
       { method: 'POST' },
     ).finally(clearChatSessionsCache),
-  share: (sessionId: string) =>
+  share: (sessionId: string, options: ChatSessionRequestOptions = {}) =>
     requestJson<ChatSessionShareResponse>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/share`,
-      { method: 'POST' },
+      { method: 'POST', signal: options.signal, timeoutMs: 15_000 },
     ).finally(clearChatSessionsCache),
-  shared: (token: string) =>
+  shared: (token: string, options: ChatSessionRequestOptions = {}) =>
     requestJson<SharedChatSession>(
       `/api/chat-sessions/shared/${encodeURIComponent(token)}`,
+      { signal: options.signal, timeoutMs: 15_000 },
     ),
   createStreamTicket: (sessionId: string) =>
     requestJson<ChatSessionStreamTicket>(
