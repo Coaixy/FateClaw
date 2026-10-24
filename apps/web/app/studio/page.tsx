@@ -119,27 +119,37 @@ function paginateItems<T>(items: T[], page: number, pageSize: number) {
 
 /** 三个列表区(订阅 / 捆绑包 / 我的技能)的标识,用于复用搜索 + 分页 reducer。 */
 type StudioListKey = 'subscription' | 'bundle' | 'skill';
+type SkillStatusFilter = 'all' | 'enabled' | 'disabled';
 
 /** 三个列表各自的搜索关键词与当前页码,合并为一个切片。 */
 type StudioListsState = {
   subscriptionSearch: string;
+  subscriptionStatus: SkillStatusFilter;
   subscriptionPage: number;
   bundleSearch: string;
   bundlePage: number;
   skillSearch: string;
+  skillStatus: SkillStatusFilter;
   skillPage: number;
 };
 
 type StudioListsAction =
   | { type: 'set-search'; list: StudioListKey; value: string }
+  | {
+      type: 'set-status';
+      list: 'subscription' | 'skill';
+      value: SkillStatusFilter;
+    }
   | { type: 'set-page'; list: StudioListKey; page: number };
 
 const initialStudioLists: StudioListsState = {
   subscriptionSearch: '',
+  subscriptionStatus: 'all',
   subscriptionPage: 1,
   bundleSearch: '',
   bundlePage: 1,
   skillSearch: '',
+  skillStatus: 'all',
   skillPage: 1,
 };
 
@@ -154,6 +164,10 @@ function studioListsReducer(
   action: StudioListsAction,
 ): StudioListsState {
   switch (action.type) {
+    case 'set-status':
+      return action.list === 'subscription'
+        ? { ...state, subscriptionStatus: action.value, subscriptionPage: 1 }
+        : { ...state, skillStatus: action.value, skillPage: 1 };
     case 'set-search': {
       if (action.list === 'subscription')
         return {
@@ -299,10 +313,12 @@ export default function StudioPage() {
   );
   const {
     subscriptionSearch,
+    subscriptionStatus,
     subscriptionPage,
     bundleSearch,
     bundlePage,
     skillSearch,
+    skillStatus,
     skillPage,
   } = lists;
 
@@ -377,8 +393,15 @@ export default function StudioPage() {
   }, [bundles.length, ownSkills]);
 
   const subscribedGroups = useMemo(
-    () => groupSubscribedSkills(subscribedSkills),
-    [subscribedSkills],
+    () =>
+      groupSubscribedSkills(
+        subscribedSkills.filter(
+          (skill) =>
+            subscriptionStatus === 'all' ||
+            skill.subscription_enabled === (subscriptionStatus === 'enabled'),
+        ),
+      ),
+    [subscribedSkills, subscriptionStatus],
   );
 
   const subscribedItems = useMemo<SubscribedListItem[]>(
@@ -433,18 +456,20 @@ export default function StudioPage() {
 
   const filteredOwnSkills = useMemo(() => {
     const query = normalizeSearch(skillSearch);
-    return ownSkills.filter((skill) =>
-      matchesSearch(
-        [
-          skill.skill_name,
-          skill.description,
-          skill.content_length,
-          skill.stat_subscriber_count,
-        ],
-        query,
-      ),
+    return ownSkills.filter(
+      (skill) =>
+        (skillStatus === 'all' || skill.enabled === (skillStatus === 'enabled')) &&
+        matchesSearch(
+          [
+            skill.skill_name,
+            skill.description,
+            skill.content_length,
+            skill.stat_subscriber_count,
+          ],
+          query,
+        ),
     );
-  }, [ownSkills, skillSearch]);
+  }, [ownSkills, skillSearch, skillStatus]);
 
   const pagedSubscribedItems = useMemo(
     () =>
@@ -478,8 +503,8 @@ export default function StudioPage() {
     [filteredSubscribedItems],
   );
   const hasSubscribedSkills = useMemo(
-    () => subscribedItems.some((item) => item.type === 'skill'),
-    [subscribedItems],
+    () => subscribedGroups.direct.length > 0,
+    [subscribedGroups.direct],
   );
   const allOwnSelected =
     ownSelectableIds.length > 0 &&
@@ -1062,6 +1087,23 @@ export default function StudioPage() {
                   }
                   placeholder={t('pages.studio.subscribedSearchPlaceholder')}
                 />
+                <ListStatusFilter
+                  value={subscriptionStatus}
+                  totalCount={subscribedSkills.length}
+                  enabledCount={
+                    subscribedSkills.filter((skill) => skill.subscription_enabled).length
+                  }
+                  disabled={batchBusy}
+                  onChange={(value) => {
+                    if (value === subscriptionStatus) return;
+                    dispatchLists({
+                      type: 'set-status',
+                      list: 'subscription',
+                      value,
+                    });
+                    dispatchSelection({ type: 'set-sub-ids', ids: new Set() });
+                  }}
+                />
                 {subSelectionMode && (
                   <BatchActionBar
                     selectedCount={subSelectedIds.size}
@@ -1079,9 +1121,13 @@ export default function StudioPage() {
                 )}
                 {filteredSubscribedItems.length === 0 ? (
                   <ListEmptyMessage
-                    message={t('pages.studio.noSearchResults', {
-                      query: subscriptionSearch.trim(),
-                    })}
+                    message={
+                      subscriptionSearch.trim()
+                        ? t('pages.studio.noSearchResults', {
+                            query: subscriptionSearch.trim(),
+                          })
+                        : t('pages.studio.noStatusResults')
+                    }
                   />
                 ) : (
                   <>
@@ -1091,6 +1137,7 @@ export default function StudioPage() {
                           <SubscribedBundleGroup
                             key={item.key}
                             group={item.group}
+                            onToggle={handleSubscriptionToggle}
                             onUnsubscribeBundle={handleBundleUnsubscribe}
                           />
                         ) : (
@@ -1298,6 +1345,17 @@ export default function StudioPage() {
                   }
                   placeholder={t('pages.studio.ownSkillsSearchPlaceholder')}
                 />
+                <ListStatusFilter
+                  value={skillStatus}
+                  totalCount={ownSkills.length}
+                  enabledCount={ownSkills.filter((skill) => skill.enabled).length}
+                  disabled={batchBusy}
+                  onChange={(value) => {
+                    if (value === skillStatus) return;
+                    dispatchLists({ type: 'set-status', list: 'skill', value });
+                    dispatchSelection({ type: 'set-own-ids', ids: new Set() });
+                  }}
+                />
                 {ownSelectionMode && (
                   <BatchActionBar
                     selectedCount={ownSelectedIds.size}
@@ -1315,9 +1373,11 @@ export default function StudioPage() {
                 )}
                 {filteredOwnSkills.length === 0 ? (
                   <ListEmptyMessage
-                    message={t('pages.studio.noSearchResults', {
-                      query: skillSearch.trim(),
-                    })}
+                    message={
+                      skillSearch.trim()
+                        ? t('pages.studio.noSearchResults', { query: skillSearch.trim() })
+                        : t('pages.studio.noStatusResults')
+                    }
                   />
                 ) : (
                   <>
@@ -1400,6 +1460,59 @@ function StatCard({
       {hint && (
         <p className="mt-0.5 text-[10px] text-muted">{hint}</p>
       )}
+    </div>
+  );
+}
+
+function ListStatusFilter({
+  value,
+  totalCount,
+  enabledCount,
+  disabled,
+  onChange,
+}: {
+  value: SkillStatusFilter;
+  totalCount: number;
+  enabledCount: number;
+  disabled: boolean;
+  onChange: (value: SkillStatusFilter) => void;
+}) {
+  const { formatNumber, t } = useI18n();
+  const options = [
+    { value: 'all', label: t('pages.studio.statusAll'), count: totalCount },
+    { value: 'enabled', label: t('pages.common.enabled'), count: enabledCount },
+    {
+      value: 'disabled',
+      label: t('pages.common.disabled'),
+      count: totalCount - enabledCount,
+    },
+  ] as const;
+
+  return (
+    <div
+      role="group"
+      aria-label={t('pages.studio.statusFilter')}
+      className="flex flex-wrap items-center gap-2"
+    >
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          disabled={disabled}
+          onClick={() => onChange(option.value)}
+          className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50 ${
+            value === option.value
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-hairline bg-surface-card text-muted hover:border-primary/40'
+          }`}
+        >
+          {option.label}
+          <span className="text-[11px] tabular-nums opacity-75">
+            {formatNumber(option.count)}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

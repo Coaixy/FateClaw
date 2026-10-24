@@ -315,6 +315,11 @@ export const enMessages = {
       subscribedEmpty:
         'Subscribe to other creators’ skills from the market or share links',
       subscribedSearchPlaceholder: 'Search subscribed skills or bundles...',
+      statusFilter: 'Skill status',
+      statusAll: 'All',
+      noStatusResults: 'No skills match this status',
+      enableSkill: 'Enable skill',
+      disableSkill: 'Disable skill',
       noSearchResults: 'No content matches "{query}"',
       paginationRange: '{start}-{end} / {total}',
       pageIndicator: '{page} / {total}',

@@ -1,16 +1,21 @@
 'use client';
 
-import { Layers, Trash2 } from 'lucide-react';
+import { Layers, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 
 import type { SkillSubscriptionGroup } from '@/features/skills/subscription-groups';
+import { useI18n } from '@/lib/i18n';
 
 export function SubscribedBundleGroup({
   group,
+  onToggle,
   onUnsubscribeBundle,
 }: {
   group: SkillSubscriptionGroup;
+  onToggle: (subscriptionId: string) => void;
   onUnsubscribeBundle: (bundleId: string) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-hairline bg-surface-raised hover:border-primary/40 transition-all duration-300">
       <div className="relative p-3.5 sm:p-4">
@@ -52,6 +57,23 @@ export function SubscribedBundleGroup({
                 <span className="min-w-0 flex-1 truncate">
                   {sk.description || '无简介'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => onToggle(sk.subscription_id)}
+                  className="shrink-0 rounded-xl p-2 transition-colors hover:bg-surface-cream-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  title={t(
+                    sk.subscription_enabled
+                      ? 'pages.studio.disableSkill'
+                      : 'pages.studio.enableSkill',
+                  )}
+                  aria-label={`${t(sk.subscription_enabled ? 'pages.studio.disableSkill' : 'pages.studio.enableSkill')}：${sk.skill_name}`}
+                >
+                  {sk.subscription_enabled ? (
+                    <ToggleRight size={24} className="text-primary" />
+                  ) : (
+                    <ToggleLeft size={24} className="text-muted" />
+                  )}
+                </button>
               </div>
             ))}
           </div>
