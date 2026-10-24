@@ -752,7 +752,8 @@ export const zhTWMessages = {
   invitations: {
     badge: '邀請計畫',
     title: '邀請好友，贈送 3 天會員',
-    description: '朋友透過有效邀請碼註冊，即可獲得 3 天體驗會員；不使用邀請碼也能正常註冊。',
+    description:
+      '朋友透過有效邀請碼註冊，即可獲得 3 天體驗會員；不使用邀請碼也能正常註冊。',
     refresh: '重新整理邀請資訊',
     loadFailed: '邀請資訊載入失敗，請重新整理。',
     createFailed: '暫時無法確認產生結果，請重試同一次請求。',
@@ -840,7 +841,8 @@ export const zhTWMessages = {
     phone: '中國大陸手機號',
     inviteCode: '邀請碼（選填）',
     invitePlaceholder: '填寫可獲贈 3 天體驗會員',
-    inviteHint: '不填可正常註冊為普通使用者；填寫有效邀請碼，註冊成功即享 72 小時會員。',
+    inviteHint:
+      '不填可正常註冊為普通使用者；填寫有效邀請碼，註冊成功即享 72 小時會員。',
     clearInvite: '清空邀請碼，以普通使用者註冊',
     inviteInvalid: '邀請碼無法使用，請檢查，或清空後以普通使用者註冊。',
     inviteValid: '註冊成功將獲贈 3 天體驗會員；邀請碼 {expiresAt} 到期。',
@@ -1033,6 +1035,10 @@ export const zhTWMessages = {
         missingLiurenDate: '請先選擇起課日期（公曆）',
         missingQimenDate: '請先選擇起盤日期（公曆）',
         missingLiurenTime: '請先選擇起課時間（公曆）',
+        missingYueJiang: '請選擇月將地支',
+        missingShiChen: '請選擇占時地支',
+        invalidRiGanZhi: '請填寫有效的日干支，例如丁巳',
+        invalidYueLing: '請選擇有效月令，或留空按月將推算',
         missingQimenTime: '請先選擇起盤時間（公曆）',
         missingDivinationTime: '請先選擇起卦時間（公曆）',
         invalidManualYao: '手動起卦需要輸入 6 位爻值，例如 789678',
@@ -1324,6 +1330,9 @@ export const zhTWMessages = {
         },
       },
       qimen: {
+        panTypeTitle: '盤式',
+        rotating: '轉盤',
+        mingfa: '鳴法飛盤',
         timeTitle: '起盤時間（公曆）',
         timeDescription:
           '新手直接用目前公曆時間即可；想隨機取今日時辰或回看某個時刻時再切換。',
@@ -1338,6 +1347,16 @@ export const zhTWMessages = {
         timeFieldTitle: '起盤時間（公曆）',
       },
       liuren: {
+        methodTitle: '起課方式',
+        timeMethod: '公曆時間',
+        ancientMethod: '古籍式起盤',
+        yueJiang: '月將',
+        shiChen: '占時',
+        riGanZhi: '日干支',
+        riGanZhiPlaceholder: '例如丁巳',
+        yueLing: '月令（選填）',
+        selectBranch: '請選擇地支',
+        deriveYueLing: '按月將推算',
         timeTitle: '起課時間（公曆）',
         timeDescription:
           '新手直接用目前公曆時間；也可以隨機抽今日時辰，或指定一個確切時刻。',

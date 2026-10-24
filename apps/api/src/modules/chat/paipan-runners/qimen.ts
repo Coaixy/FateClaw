@@ -1,14 +1,18 @@
 import {
   Qimen,
   type Gong,
-  type HourChabuPan,
+  type HourQimenPan,
   type QimenDateInput,
 } from 'kinqimen';
 import { calcXunKong, solarToLunar } from 'iching-shifa';
+import { fullQimenGodName } from '@fateclaw/contracts/chat';
 
 type GongGanPan = Partial<Record<Gong, string>>;
 type FullGongGanPan = Record<Gong, string>;
-type KinqimenChangshengItem = { gan: string; changsheng: Record<string, string> };
+type KinqimenChangshengItem = {
+  gan: string;
+  changsheng: Record<string, string>;
+};
 type KinqimenMenpoItem = {
   door: string;
   gong: string;
@@ -17,17 +21,6 @@ type KinqimenMenpoItem = {
 };
 type KinqimenJixingItem = { gong: string; gan: string };
 
-const SHORT_GOD_MAP: Record<string, string> = {
-  值符: '符',
-  螣蛇: '蛇',
-  腾蛇: '蛇',
-  太阴: '阴',
-  六合: '合',
-  白虎: '虎',
-  玄武: '玄',
-  九地: '地',
-  九天: '天',
-};
 const GONG_BY_NUMBER = [
   '坎',
   '坤',
@@ -74,6 +67,7 @@ const GOD_PAN_YIN: Record<number, string[]> = {
 };
 
 interface QimenInput {
+  panType?: HourQimenPan['type'];
   solarDate?: string;
   hour?: number;
   minute?: number;
@@ -113,7 +107,8 @@ interface ChineseJixingItem {
 
 /** 奇门排盘对外结果，保持中文字段契约以兼容前端图表和 formatter。 */
 export interface QimenPaipanResult {
-  排盘方式: HourChabuPan['method'];
+  盘式: HourQimenPan['type'];
+  排盘方式: HourQimenPan['juMethod'];
   干支: string;
   旬首: string;
   旬空: Record<'年空' | '月空' | '日空' | '时空', string>;
@@ -128,6 +123,7 @@ export interface QimenPaipanResult {
   星: GongGanPan;
   神: GongGanPan;
   暗干: FullGongGanPan;
+  暗支?: FullGongGanPan;
   马星: ChineseMaXing;
   长生运: {
     天盘: Record<string, ChineseChangshengItem>;
@@ -190,20 +186,20 @@ function normalizeFullGanPan(pan: Record<string, string>): FullGongGanPan {
   return normalizeGanPan(pan) as FullGongGanPan;
 }
 
-function normalizeStarPan(pan: HourChabuPan['starPan']): GongGanPan {
+function normalizeStarPan(pan: HourQimenPan): GongGanPan {
   return Object.fromEntries(
-    Object.entries(pan).map(([palace, star]) => [
+    Object.entries(pan.starPan).map(([palace, star]) => [
       palace,
-      star === '禽' ? '芮禽' : String(star),
+      pan.type === '转盘' && star === '禽' ? '芮禽' : String(star),
     ]),
   ) as GongGanPan;
 }
 
-function normalizeGodPan(pan: HourChabuPan['godPan']): GongGanPan {
+function normalizeGodPan(pan: HourQimenPan['godPan']): GongGanPan {
   return Object.fromEntries(
     Object.entries(pan).map(([palace, god]) => [
       palace,
-      SHORT_GOD_MAP[String(god)] ?? String(god),
+      fullQimenGodName(String(god)),
     ]),
   ) as GongGanPan;
 }
@@ -255,18 +251,19 @@ function referenceShenPan(
 
   return Object.fromEntries(
     values
-      .map((god, index) => [GONG_BY_NUMBER[index], god])
+      .map((god, index) => [GONG_BY_NUMBER[index], fullQimenGodName(god)])
       .filter(([, god]) => god),
   );
 }
 
 function normalizeQimenPan(
-  pan: HourChabuPan,
+  pan: HourQimenPan,
   dateInput: QimenDateInput,
 ): QimenPaipanResult {
   const zhifuStarGong = pan.zhifuZhishi.zhifuStarGong;
   const normalized: QimenPaipanResult = {
-    排盘方式: pan.method,
+    盘式: pan.type,
+    排盘方式: pan.juMethod,
     干支: pan.ganzhi,
     旬首: pan.xunHead,
     旬空: buildFourPillarKong(dateInput),
@@ -282,9 +279,10 @@ function normalizeQimenPan(
     天盘: normalizeGanPan(pan.skyPan),
     地盘: normalizeFullGanPan(pan.earthPan),
     门: normalizeGanPan(pan.doorPan),
-    星: normalizeStarPan(pan.starPan),
+    星: normalizeStarPan(pan),
     神: normalizeGodPan(pan.godPan),
     暗干: normalizeFullGanPan(pan.anganPan),
+    ...(pan.type === '鸣法' ? { 暗支: normalizeFullGanPan(pan.anzhiPan) } : {}),
     马星: {
       天马: pan.maXing.tianMa,
       丁马: pan.maXing.dingMa,
@@ -298,7 +296,8 @@ function normalizeQimenPan(
     击刑: normalizeJixing(pan.jixing),
   };
 
-  if (Array.isArray(zhifuStarGong)) {
+  // Mingfa retains all nine gods; the reference eight-god layout applies only to rotating charts.
+  if (pan.type === '转盘' && Array.isArray(zhifuStarGong)) {
     const referenceGods = referenceShenPan(pan.ju?.[0], zhifuStarGong);
     normalized.神 = referenceGods;
   }
@@ -306,10 +305,17 @@ function normalizeQimenPan(
   return normalized;
 }
 
-/** 按指定公历时间执行奇门拆补法排盘，并输出前端兼容的中文字段。 */
+/** Build a rotating or Mingfa chart with the shared Chinese artifact contract. */
 export async function runQimenPaipan(
   input: Record<string, unknown>,
 ): Promise<QimenPaipanResult> {
+  const { panType = '转盘' } = input as QimenInput;
+  if (panType !== '转盘' && panType !== '鸣法') {
+    throw new RangeError('盘式仅支持转盘或鸣法');
+  }
   const dateInput = resolveDateInput(input as QimenInput);
-  return normalizeQimenPan(new Qimen(dateInput).pan(), dateInput);
+  return normalizeQimenPan(
+    new Qimen(dateInput).pan({ type: panType }),
+    dateInput,
+  );
 }

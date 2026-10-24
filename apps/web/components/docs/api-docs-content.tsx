@@ -467,8 +467,16 @@ const PAIPAN_SPECS: PaipanSpec[] = [
     type: 'qimen',
     name: '奇门遁甲排盘',
     summary:
-      '奇门遁甲排盘（拆补法）。按指定时间或当前时间起局，给出九宫、值符值使、八门九星、天地盘、马星等。',
+      '奇门遁甲排盘。支持转盘与鸣法飞盘，均采用拆补定局；按指定时间或当前时间起局。',
     params: [
+      {
+        name: 'pan_type',
+        type: 'string',
+        req: '否',
+        def: '转盘',
+        constraints: '转盘 | 鸣法',
+        desc: '选择盘式；鸣法保留完整九宫，并提供暗支。',
+      },
       {
         name: 'solar_date',
         type: 'string',
@@ -498,13 +506,15 @@ const PAIPAN_SPECS: PaipanSpec[] = [
       'solar_date 和 hour 要么都传、要么都不传；都不传则用服务器当前时间。',
     ],
     example: `{
+  "pan_type": "鸣法",
   "solar_date": "2026-04-17",
   "hour": 14
 }`,
-    returns: 'text 是中文局盘（局盘概要、九宫盘、门迫、击刑）。',
+    returns:
+      'text 是完整中文局盘，含值符值使、天乙、九宫、门迫、击刑及天地盘长生运，神名使用完整写法。',
     tips: [
       '需要后台为你启用「奇门遁甲」技能，否则会返回未启用错误。',
-      '长生运不在 text 里，需要的话从结构化的 data 读取。',
+      '复制盘面与站内 AI 读盘使用同一套文本格式；转盘还会单列中宫原始数据。',
     ],
   },
   {
@@ -512,8 +522,48 @@ const PAIPAN_SPECS: PaipanSpec[] = [
     type: 'liuren',
     name: '大六壬排盘',
     summary:
-      '大六壬排盘。按当前时间、指定时间或随机时辰起一课，返回天地盘、四课、三传、建除和神煞。',
+      '大六壬排盘。支持公历时间、随机时辰，以及按月将、占时、日干支进行古籍式起盘。',
     params: [
+      {
+        name: 'method',
+        type: 'string',
+        req: '否',
+        def: 'time',
+        constraints: 'time | yuejiang',
+        desc: 'time 按公历时间起课；yuejiang 使用古籍式参数。',
+      },
+      {
+        name: 'yue_jiang',
+        type: 'string',
+        req: '条件',
+        def: '',
+        constraints: '十二地支之一，例如亥',
+        desc: '古籍式起盘的月将，method=yuejiang 时必填。',
+      },
+      {
+        name: 'shi_chen',
+        type: 'string',
+        req: '条件',
+        def: '',
+        constraints: '十二地支之一，例如未',
+        desc: '古籍式起盘的占时，method=yuejiang 时必填。',
+      },
+      {
+        name: 'ri_gan_zhi',
+        type: 'string',
+        req: '条件',
+        def: '',
+        constraints: '有效六十甲子，例如丁巳',
+        desc: '古籍式起盘的日干支，method=yuejiang 时必填。',
+      },
+      {
+        name: 'yue_ling',
+        type: 'string',
+        req: '否',
+        def: '',
+        constraints: '十二地支之一',
+        desc: '古籍式月令，用于计算天马；省略时从月将推算。',
+      },
       {
         name: 'solar_date',
         type: 'string',
@@ -557,6 +607,8 @@ const PAIPAN_SPECS: PaipanSpec[] = [
     ],
     rules: [
       '全部省略 = 用当前时间起课。',
+      'method=yuejiang 必须提供月将、占时和日干支，不能混用公历或随机时辰参数。',
+      '古籍式起盘不推测公历年月；三传成局时，课体会追加润下、炎上等课格。',
       '要指定时间，solar_date 和 hour 一起传；想随机起课可只传 solar_date 或 random_number。',
     ],
     example: `{

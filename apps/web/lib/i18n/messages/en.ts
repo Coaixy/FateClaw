@@ -784,7 +784,8 @@ export const enMessages = {
   invitations: {
     badge: 'Invitations',
     title: 'Invite friends, give 3 days of membership',
-    description: 'Friends who sign up with a valid code receive a 3-day membership trial. Everyone can register without a code.',
+    description:
+      'Friends who sign up with a valid code receive a 3-day membership trial. Everyone can register without a code.',
     refresh: 'Refresh invitations',
     loadFailed: 'Could not load invitations. Please refresh.',
     createFailed: 'Could not confirm creation. Retry the same request.',
@@ -878,7 +879,8 @@ export const enMessages = {
     clearInvite: 'Clear code and register without membership',
     inviteInvalid:
       'This invitation is unavailable. Check it or clear it to register without membership.',
-    inviteValid: 'Sign up to receive a 3-day membership trial. Code expires {expiresAt}.',
+    inviteValid:
+      'Sign up to receive a 3-day membership trial. Code expires {expiresAt}.',
     password: 'Password',
     passwordPlaceholder: 'At least 8 characters',
     hidePassword: 'Hide password',
@@ -1073,6 +1075,11 @@ export const enMessages = {
         missingLiurenDate: 'Choose the Ke date first',
         missingQimenDate: 'Choose the chart date first',
         missingLiurenTime: 'Choose the Ke time first',
+        missingYueJiang: 'Choose the monthly general branch',
+        missingShiChen: 'Choose the divination hour branch',
+        invalidRiGanZhi: 'Enter a valid day stem-branch, such as 丁巳',
+        invalidYueLing:
+          'Choose a valid month branch or leave it empty to derive it',
         missingQimenTime: 'Choose the chart time first',
         missingDivinationTime: 'Choose the divination time first',
         invalidManualYao:
@@ -1412,6 +1419,9 @@ export const enMessages = {
         },
       },
       qimen: {
+        panTypeTitle: 'Chart type',
+        rotating: 'Rotating chart',
+        mingfa: 'Mingfa flying chart',
         timeTitle: 'Chart time (Gregorian)',
         timeDescription:
           'Beginners can use current Gregorian time. Switch for a random shichen today or a specific moment.',
@@ -1427,6 +1437,16 @@ export const enMessages = {
         timeFieldTitle: 'Chart time (Gregorian)',
       },
       liuren: {
+        methodTitle: 'Chart method',
+        timeMethod: 'Gregorian time',
+        ancientMethod: 'Classical inputs',
+        yueJiang: 'Monthly general',
+        shiChen: 'Divination hour',
+        riGanZhi: 'Day stem-branch',
+        riGanZhiPlaceholder: 'For example, 丁巳',
+        yueLing: 'Month branch (optional)',
+        selectBranch: 'Choose a branch',
+        deriveYueLing: 'Derive from monthly general',
         timeTitle: 'Ke time (Gregorian)',
         timeDescription:
           'Beginners can use current Gregorian time, randomly pick today’s shichen, or set an exact moment.',

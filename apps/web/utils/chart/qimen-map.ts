@@ -4,9 +4,15 @@
 //   3:震/3  4:中/5  5:兑/7
 //   6:艮/8  7:坎/1  8:乾/6
 export const LUOSHU_ORDER: Array<string> = [
-  '巽', '离', '坤',
-  '震', '中', '兑',
-  '艮', '坎', '乾',
+  '巽',
+  '离',
+  '坤',
+  '震',
+  '中',
+  '兑',
+  '艮',
+  '坎',
+  '乾',
 ];
 
 export const GUA_TO_GONG_NUMBER: Record<string, number> = {
@@ -23,6 +29,7 @@ export const GUA_TO_GONG_NUMBER: Record<string, number> = {
 
 // 八门 / 九星 / 八神 各自的五行归属（用于着色）
 export const MEN_WUXING: Record<string, '金' | '木' | '水' | '火' | '土'> = {
+  中: '土',
   休: '水',
   生: '土',
   伤: '木',
@@ -72,25 +79,28 @@ export const GUA_TO_BRANCHES: Record<string, string[]> = {
 };
 
 // 天干五行归属（用于宫位内天干着色）
-export const STEM_WUXING_MAP: Record<string, '金' | '木' | '水' | '火' | '土'> = {
-  甲: '木', 乙: '木',
-  丙: '火', 丁: '火',
-  戊: '土', 己: '土',
-  庚: '金', 辛: '金',
-  壬: '水', 癸: '水',
-};
+export const STEM_WUXING_MAP: Record<string, '金' | '木' | '水' | '火' | '土'> =
+  {
+    甲: '木',
+    乙: '木',
+    丙: '火',
+    丁: '火',
+    戊: '土',
+    己: '土',
+    庚: '金',
+    辛: '金',
+    壬: '水',
+    癸: '水',
+  };
 
 // 甲遁六仪：甲子→戊、甲戌→己、甲申→庚、甲午→辛、甲辰→壬、甲寅→癸
 export const JIA_LIUYI_MAP: Record<string, string> = {
-  甲子: '戊', 甲戌: '己', 甲申: '庚',
-  甲午: '辛', 甲辰: '壬', 甲寅: '癸',
-};
-
-// 八神名字规范化（fateclaw 单字 → 原版两字）
-export const SHEN_FULL_NAME: Record<string, string> = {
-  符: '值符', 蛇: '腾蛇', 阴: '太阴', 合: '六合',
-  勾: '勾陈', 雀: '朱雀',
-  虎: '白虎', 地: '九地', 天: '九天', 玄: '玄武',
+  甲子: '戊',
+  甲戌: '己',
+  甲申: '庚',
+  甲午: '辛',
+  甲辰: '壬',
+  甲寅: '癸',
 };
 
 // 九星名字规范化：fateclaw 单字 "蓬" → "天蓬"

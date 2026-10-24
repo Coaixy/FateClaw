@@ -17,6 +17,36 @@ async function runPaipan(
 }
 
 describe('qimen-paipan reference alignment', () => {
+  it('keeps all nine Mingfa palaces, separate stars and dark branches', async () => {
+    const result = await runPaipan({
+      panType: '鸣法',
+      solarDate: '2024-12-13',
+      hour: 9,
+      minute: 31,
+    });
+
+    expect(result.盘式).toBe('鸣法');
+    expect(result.排盘方式).toBe('拆补');
+    expect(result.排局).toBe('阴四局上');
+    for (const layer of [
+      result.天盘,
+      result.地盘,
+      result.门,
+      result.星,
+      result.神,
+      result.暗干,
+      result.暗支,
+    ]) {
+      expect(Object.keys(layer ?? {})).toHaveLength(9);
+    }
+    expect(result.星.中).toBe('任');
+    expect(Object.values(result.星)).toContain('禽');
+    expect(Object.values(result.星)).not.toContain('芮禽');
+    expect(Object.values(result.神)).toContain('太常');
+    expect(result.暗干.坤).toBe('癸');
+    expect(result.暗支?.坤).toBe('巳');
+  });
+
   it('exposes the corrected 2026-06-04 17:00 sky pan and dark stem data from kinqimen 0.3', async () => {
     const result = await runPaipan({
       solarDate: '2026-06-04',
@@ -91,15 +121,15 @@ describe('qimen-paipan reference alignment', () => {
       '芮禽',
     ]);
     expect(palaceOrder.map((gong) => result.神[gong] ?? '')).toEqual([
-      '蛇',
-      '地',
-      '合',
-      '虎',
+      '腾蛇',
+      '九地',
+      '六合',
+      '白虎',
       '',
-      '符',
-      '天',
-      '阴',
-      '玄',
+      '值符',
+      '九天',
+      '太阴',
+      '玄武',
     ]);
   });
 
@@ -136,15 +166,15 @@ describe('qimen-paipan reference alignment', () => {
       '己',
     ]);
     expect(palaceOrder.map((gong) => result.神[gong] ?? '')).toEqual([
-      '虎',
-      '天',
-      '阴',
-      '蛇',
+      '白虎',
+      '九天',
+      '太阴',
+      '腾蛇',
       '',
-      '玄',
-      '地',
-      '合',
-      '符',
+      '玄武',
+      '九地',
+      '六合',
+      '值符',
     ]);
   });
 
@@ -192,15 +222,15 @@ describe('qimen-paipan reference alignment', () => {
       '芮禽',
     ]);
     expect(palaceOrder.map((gong) => result.神[gong] ?? '')).toEqual([
-      '虎',
-      '天',
-      '阴',
-      '蛇',
+      '白虎',
+      '九天',
+      '太阴',
+      '腾蛇',
       '',
-      '玄',
-      '地',
-      '合',
-      '符',
+      '玄武',
+      '九地',
+      '六合',
+      '值符',
     ]);
   });
 });

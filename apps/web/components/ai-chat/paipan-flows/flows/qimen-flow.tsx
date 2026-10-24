@@ -47,6 +47,15 @@ export function QimenFlow({
       resultContent={resultContent}
     >
       <ChoiceGrid
+        title={t('aiChat.paipanFlows.qimen.panTypeTitle')}
+        value={String(getValueAtPath(draft, ['panType']) ?? '转盘')}
+        options={[
+          { value: '转盘', label: t('aiChat.paipanFlows.qimen.rotating') },
+          { value: '鸣法', label: t('aiChat.paipanFlows.qimen.mingfa') },
+        ]}
+        onChange={(value) => onChange(['panType'], value)}
+      />
+      <ChoiceGrid
         title={t('aiChat.paipanFlows.qimen.timeTitle')}
         value={timeMode}
         options={[

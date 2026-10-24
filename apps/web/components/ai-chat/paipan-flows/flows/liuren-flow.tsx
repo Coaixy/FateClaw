@@ -7,6 +7,42 @@ import { useI18n } from '@/lib/i18n';
 
 type TranslateFn = ReturnType<typeof useI18n>['t'];
 
+function BranchField({
+  title,
+  value,
+  onChange,
+  emptyLabel,
+  required,
+}: {
+  title: string;
+  value: unknown;
+  onChange: (value: string | undefined) => void;
+  emptyLabel: string;
+  required?: boolean;
+}) {
+  return (
+    <label className="block space-y-2 text-sm font-medium text-ink">
+      <span>
+        {title}
+        {required && <span className="ml-1 text-error">*</span>}
+      </span>
+      <select
+        required={required}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(event) => onChange(event.target.value || undefined)}
+        className="h-11 w-full min-w-0 rounded-xl border border-hairline bg-canvas px-3 text-[16px] text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:text-[14px]"
+      >
+        <option value="">{emptyLabel}</option>
+        {Array.from('子丑寅卯辰巳午未申酉戌亥').map((branch) => (
+          <option key={branch} value={branch}>
+            {branch}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 const LIUREN_RANDOM_SHICHEN_START_HOURS = [
   23, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21,
 ];
@@ -76,6 +112,8 @@ export function LiurenFlow({
   const { t } = useI18n();
   const { DateField, TimeField, ChoiceGrid, FieldTextInput } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts } = helpers;
+  const method =
+    getValueAtPath(draft, ['method']) === 'yuejiang' ? 'yuejiang' : 'time';
   const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
   const timeMode =
     typeof getValueAtPath(draft, ['$liurenTimeMode']) === 'string'
@@ -100,157 +138,211 @@ export function LiurenFlow({
       resultContent={resultContent}
     >
       <ChoiceGrid
-        title={t('aiChat.paipanFlows.liuren.timeTitle')}
-        value={timeMode}
+        title={t('aiChat.paipanFlows.liuren.methodTitle')}
+        value={method}
         options={[
+          { value: 'time', label: t('aiChat.paipanFlows.liuren.timeMethod') },
           {
-            value: 'now',
-            label: t('aiChat.paipanFlows.common.currentTimeSolar'),
-            hint: t('aiChat.paipanFlows.liuren.nowHint'),
-          },
-          {
-            value: 'random',
-            label: t('aiChat.paipanFlows.liuren.randomToday'),
-            hint: t('aiChat.paipanFlows.liuren.randomHint'),
-          },
-          {
-            value: 'custom',
-            label: t('aiChat.paipanFlows.common.customTimeSolar'),
-            hint: t('aiChat.paipanFlows.liuren.customHint'),
+            value: 'yuejiang',
+            label: t('aiChat.paipanFlows.liuren.ancientMethod'),
           },
         ]}
-        onChange={(value) => {
-          if (value === 'now') {
-            onManyChanges([
-              { path: ['$liurenTimeMode'], value: 'now' },
-              { path: ['timeMode'], value: undefined },
-              { path: ['$useCurrentTime'], value: true },
-              { path: ['solarDate'], value: undefined },
-              { path: ['hour'], value: undefined },
-              { path: ['minute'], value: undefined },
-              { path: ['randomNumber'], value: undefined },
-            ]);
-            return;
-          }
-          const now = getCurrentLocalDateParts();
-          if (value === 'random') {
-            onManyChanges([
-              { path: ['$liurenTimeMode'], value: 'random' },
-              { path: ['timeMode'], value: 'random' },
-              { path: ['$useCurrentTime'], value: false },
-              { path: ['solarDate'], value: now.date },
-              {
-                path: ['hour'],
-                value: getRandomLiurenShichenHour(randomNumber),
-              },
-              { path: ['minute'], value: 0 },
-            ]);
-            return;
-          }
-          onManyChanges([
-            { path: ['$liurenTimeMode'], value: 'custom' },
-            { path: ['timeMode'], value: 'custom' },
-            { path: ['$useCurrentTime'], value: false },
-            { path: ['randomNumber'], value: undefined },
-            {
-              path: ['solarDate'],
-              value:
-                typeof getValueAtPath(draft, ['solarDate']) === 'string'
-                  ? getValueAtPath(draft, ['solarDate'])
-                  : now.date,
-            },
-            {
-              path: ['hour'],
-              value:
-                typeof getValueAtPath(draft, ['hour']) === 'number'
-                  ? getValueAtPath(draft, ['hour'])
-                  : now.hour,
-            },
-            {
-              path: ['minute'],
-              value:
-                typeof getValueAtPath(draft, ['minute']) === 'number'
-                  ? getValueAtPath(draft, ['minute'])
-                  : now.minute,
-            },
-          ]);
-        }}
+        onChange={(value) => onChange(['method'], value)}
       />
-
-      {timeMode === 'random' && (
-        <div className="space-y-3">
+      {method === 'yuejiang' ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <BranchField
+              title={t('aiChat.paipanFlows.liuren.yueJiang')}
+              required
+              emptyLabel={t('aiChat.paipanFlows.liuren.selectBranch')}
+              value={getValueAtPath(draft, ['yueJiang'])}
+              onChange={(value) => onChange(['yueJiang'], value)}
+            />
+            <BranchField
+              title={t('aiChat.paipanFlows.liuren.shiChen')}
+              required
+              emptyLabel={t('aiChat.paipanFlows.liuren.selectBranch')}
+              value={getValueAtPath(draft, ['shiChen'])}
+              onChange={(value) => onChange(['shiChen'], value)}
+            />
+          </div>
           <FieldTextInput
-            title={t('aiChat.paipanFlows.liuren.randomNumber')}
-            description={t('aiChat.paipanFlows.liuren.randomNumberDescription')}
-            value={randomNumber === undefined ? '' : String(randomNumber)}
-            placeholder={t('aiChat.paipanFlows.liuren.randomNumberPlaceholder')}
+            title={t('aiChat.paipanFlows.liuren.riGanZhi')}
+            required
+            value={String(getValueAtPath(draft, ['riGanZhi']) ?? '')}
+            placeholder={t('aiChat.paipanFlows.liuren.riGanZhiPlaceholder')}
+            onChange={(value) =>
+              onChange(['riGanZhi'], value?.trim() || undefined)
+            }
+          />
+          <BranchField
+            title={t('aiChat.paipanFlows.liuren.yueLing')}
+            emptyLabel={t('aiChat.paipanFlows.liuren.deriveYueLing')}
+            value={getValueAtPath(draft, ['yueLing'])}
+            onChange={(value) => onChange(['yueLing'], value)}
+          />
+        </div>
+      ) : (
+        <>
+          <ChoiceGrid
+            title={t('aiChat.paipanFlows.liuren.timeTitle')}
+            value={timeMode}
+            options={[
+              {
+                value: 'now',
+                label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+                hint: t('aiChat.paipanFlows.liuren.nowHint'),
+              },
+              {
+                value: 'random',
+                label: t('aiChat.paipanFlows.liuren.randomToday'),
+                hint: t('aiChat.paipanFlows.liuren.randomHint'),
+              },
+              {
+                value: 'custom',
+                label: t('aiChat.paipanFlows.common.customTimeSolar'),
+                hint: t('aiChat.paipanFlows.liuren.customHint'),
+              },
+            ]}
             onChange={(value) => {
+              if (value === 'now') {
+                onManyChanges([
+                  { path: ['$liurenTimeMode'], value: 'now' },
+                  { path: ['timeMode'], value: undefined },
+                  { path: ['$useCurrentTime'], value: true },
+                  { path: ['solarDate'], value: undefined },
+                  { path: ['hour'], value: undefined },
+                  { path: ['minute'], value: undefined },
+                  { path: ['randomNumber'], value: undefined },
+                ]);
+                return;
+              }
               const now = getCurrentLocalDateParts();
-              const nextRandomNumber = normalizeRandomNumber(value);
+              if (value === 'random') {
+                onManyChanges([
+                  { path: ['$liurenTimeMode'], value: 'random' },
+                  { path: ['timeMode'], value: 'random' },
+                  { path: ['$useCurrentTime'], value: false },
+                  { path: ['solarDate'], value: now.date },
+                  {
+                    path: ['hour'],
+                    value: getRandomLiurenShichenHour(randomNumber),
+                  },
+                  { path: ['minute'], value: 0 },
+                ]);
+                return;
+              }
               onManyChanges([
-                { path: ['randomNumber'], value: nextRandomNumber },
-                { path: ['timeMode'], value: 'random' },
-                { path: ['solarDate'], value: now.date },
+                { path: ['$liurenTimeMode'], value: 'custom' },
+                { path: ['timeMode'], value: 'custom' },
+                { path: ['$useCurrentTime'], value: false },
+                { path: ['randomNumber'], value: undefined },
+                {
+                  path: ['solarDate'],
+                  value:
+                    typeof getValueAtPath(draft, ['solarDate']) === 'string'
+                      ? getValueAtPath(draft, ['solarDate'])
+                      : now.date,
+                },
                 {
                   path: ['hour'],
-                  value: getRandomLiurenShichenHour(nextRandomNumber),
+                  value:
+                    typeof getValueAtPath(draft, ['hour']) === 'number'
+                      ? getValueAtPath(draft, ['hour'])
+                      : now.hour,
                 },
-                { path: ['minute'], value: 0 },
+                {
+                  path: ['minute'],
+                  value:
+                    typeof getValueAtPath(draft, ['minute']) === 'number'
+                      ? getValueAtPath(draft, ['minute'])
+                      : now.minute,
+                },
               ]);
             }}
           />
-          <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-[11px] font-medium text-muted">
-                {t('aiChat.paipanFlows.liuren.selectedShichen')}
-              </div>
-              <div className="mt-1 text-[14px] font-semibold text-ink">
-                {startDate || getCurrentLocalDateParts().date} ·{' '}
-                {formatLiurenShichen(selectedHour, t)}
+
+          {timeMode === 'random' && (
+            <div className="space-y-3">
+              <FieldTextInput
+                title={t('aiChat.paipanFlows.liuren.randomNumber')}
+                description={t(
+                  'aiChat.paipanFlows.liuren.randomNumberDescription',
+                )}
+                value={randomNumber === undefined ? '' : String(randomNumber)}
+                placeholder={t(
+                  'aiChat.paipanFlows.liuren.randomNumberPlaceholder',
+                )}
+                onChange={(value) => {
+                  const now = getCurrentLocalDateParts();
+                  const nextRandomNumber = normalizeRandomNumber(value);
+                  onManyChanges([
+                    { path: ['randomNumber'], value: nextRandomNumber },
+                    { path: ['timeMode'], value: 'random' },
+                    { path: ['solarDate'], value: now.date },
+                    {
+                      path: ['hour'],
+                      value: getRandomLiurenShichenHour(nextRandomNumber),
+                    },
+                    { path: ['minute'], value: 0 },
+                  ]);
+                }}
+              />
+              <div className="flex flex-col gap-2 rounded-xl border border-hairline bg-surface-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[11px] font-medium text-muted">
+                    {t('aiChat.paipanFlows.liuren.selectedShichen')}
+                  </div>
+                  <div className="mt-1 text-[14px] font-semibold text-ink">
+                    {startDate || getCurrentLocalDateParts().date} ·{' '}
+                    {formatLiurenShichen(selectedHour, t)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = getCurrentLocalDateParts();
+                    onManyChanges([
+                      { path: ['randomNumber'], value: undefined },
+                      { path: ['timeMode'], value: 'random' },
+                      { path: ['solarDate'], value: now.date },
+                      { path: ['hour'], value: getRandomLiurenShichenHour() },
+                      { path: ['minute'], value: 0 },
+                    ]);
+                  }}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 sm:rounded-lg"
+                >
+                  <Shuffle size={14} />
+                  {t('aiChat.paipanFlows.liuren.reroll')}
+                </button>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const now = getCurrentLocalDateParts();
-                onManyChanges([
-                  { path: ['randomNumber'], value: undefined },
-                  { path: ['timeMode'], value: 'random' },
-                  { path: ['solarDate'], value: now.date },
-                  { path: ['hour'], value: getRandomLiurenShichenHour() },
-                  { path: ['minute'], value: 0 },
-                ]);
-              }}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-primary/25 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 sm:rounded-lg"
-            >
-              <Shuffle size={14} />
-              {t('aiChat.paipanFlows.liuren.reroll')}
-            </button>
-          </div>
-        </div>
-      )}
+          )}
 
-      {!useCurrentTime && (
-        <>
-          <DateField
-            title={t('aiChat.paipanFlows.liuren.dateTitle')}
-            required
-            value={startDate}
-            onChange={(value) => onChange(['solarDate'], value)}
-          />
+          {!useCurrentTime && (
+            <>
+              <DateField
+                title={t('aiChat.paipanFlows.liuren.dateTitle')}
+                required
+                value={startDate}
+                onChange={(value) => onChange(['solarDate'], value)}
+              />
 
-          <TimeField
-            title={t('aiChat.paipanFlows.liuren.timeFieldTitle')}
-            required
-            hour={getValueAtPath(draft, ['hour'])}
-            minute={getValueAtPath(draft, ['minute'])}
-            onChange={(next) =>
-              onManyChanges([
-                { path: ['hour'], value: next.hour },
-                { path: ['minute'], value: next.minute ?? 0 },
-              ])
-            }
-          />
+              <TimeField
+                title={t('aiChat.paipanFlows.liuren.timeFieldTitle')}
+                required
+                hour={getValueAtPath(draft, ['hour'])}
+                minute={getValueAtPath(draft, ['minute'])}
+                onChange={(next) =>
+                  onManyChanges([
+                    { path: ['hour'], value: next.hour },
+                    { path: ['minute'], value: next.minute ?? 0 },
+                  ])
+                }
+              />
+            </>
+          )}
         </>
       )}
     </PaipanForm>

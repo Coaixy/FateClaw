@@ -1,12 +1,78 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('#infrastructure/db', () => ({
-  getResolvedEnabledOfficialSkillNames: vi.fn(async () => ['八字排盘']),
+  getResolvedEnabledOfficialSkillNames: vi.fn(async () => [
+    '八字排盘',
+    '奇门遁甲排盘',
+    '大六壬排盘',
+  ]),
 }));
 
 import { executeDirectPaipan } from '#modules/chat/paipan-runtime';
 
 describe('executeDirectPaipan', () => {
+  it.each([
+    {
+      skillDir: 'qimen-paipan',
+      input: { panType: '鸣法', solarDate: '2024-12-13', hour: 9, minute: 31 },
+      artifact: { 盘式: '鸣法', 暗支: expect.any(Object) },
+      text: '盘式：鸣法',
+    },
+    {
+      skillDir: 'liuren-paipan',
+      input: {
+        method: 'yuejiang',
+        yueJiang: '亥',
+        shiChen: '未',
+        riGanZhi: '丁巳',
+      },
+      artifact: {
+        input: { mode: 'yuejiang', riGanZhi: '丁巳' },
+        dateInfo: { date: '' },
+      },
+      text: '起课方式：古籍式',
+    },
+  ])(
+    'preserves the selected method through catalog validation and saved context: $skillDir',
+    async ({ skillDir, input, artifact, text }) => {
+      const result = await executeDirectPaipan({
+        accountId: 'web:user-1',
+        userId: 'user-1',
+        skillDir,
+        input,
+      });
+
+      expect(result.skillContextEntry.artifactData).toMatchObject(artifact);
+      expect(result.skillContextEntry.output).toContain(text);
+    },
+  );
+
+  it.each([
+    { method: 'yuejiang', yueJiang: '亥', shiChen: '未', riGanZhi: '丁午' },
+    {
+      method: 'yuejiang',
+      yueJiang: '亥',
+      shiChen: '未',
+      riGanZhi: '丁巳',
+      hour: 12,
+    },
+  ])(
+    'reports invalid or mixed ancient inputs as parameter errors: %j',
+    async (input) => {
+      await expect(
+        executeDirectPaipan({
+          accountId: 'web:user-1',
+          userId: 'user-1',
+          skillDir: 'liuren-paipan',
+          input,
+        }),
+      ).rejects.toMatchObject({
+        code: 'PAIPAN.PARAM_INVALID',
+        statusCode: 400,
+      });
+    },
+  );
+
   it('keeps structured artifactData and stores formatter text as output', async () => {
     const result = await executeDirectPaipan({
       accountId: 'web:user-1',

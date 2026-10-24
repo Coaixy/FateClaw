@@ -268,7 +268,9 @@ function setValueAtPath(
   return pruneEmptyObjects(next);
 }
 
-function pruneEmptyObjects(value: Record<string, unknown>): Record<string, unknown> {
+function pruneEmptyObjects(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
   const next: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(value)) {
     if (raw === undefined) {
@@ -290,7 +292,9 @@ function pruneEmptyObjects(value: Record<string, unknown>): Record<string, unkno
   return next;
 }
 
-function stripPrivateFields(value: Record<string, unknown>): Record<string, unknown> {
+function stripPrivateFields(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
   const next: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(value)) {
     if (key.startsWith('$')) {
@@ -399,7 +403,10 @@ function buildDateTimePickerValue(next: {
   return `${next.date} ${pad2(next.hour)}:${pad2(next.minute ?? 0)}`;
 }
 
-function translateIfPresent(t: TranslateFn | undefined, key: string): string | undefined {
+function translateIfPresent(
+  t: TranslateFn | undefined,
+  key: string,
+): string | undefined {
   if (!t) return undefined;
   const translated = t(key);
   return translated === key ? undefined : translated;
@@ -460,7 +467,7 @@ function buildInitialDraftForSkill(
   const base = buildDefaultValuesFromSchema(schema);
 
   if (skillDir === 'qimen-paipan' || skillDir === 'liuren-paipan') {
-    return { $useCurrentTime: true };
+    return { ...base, $useCurrentTime: true };
   }
 
   if (skillDir === 'bazi-paipan' || skillDir === 'ziwei-paipan') {
@@ -509,9 +516,32 @@ function buildSubmitInputForSkill(
   const normalized = pruneEmptyObjects(stripPrivateFields(input));
 
   if (skillDir === 'qimen-paipan' || skillDir === 'liuren-paipan') {
+    if (skillDir === 'liuren-paipan') {
+      if (normalized.method === 'yuejiang') {
+        return Object.fromEntries(
+          Object.entries(normalized).filter(([key]) =>
+            ['method', 'yueJiang', 'shiChen', 'riGanZhi', 'yueLing'].includes(
+              key,
+            ),
+          ),
+        );
+      }
+      for (const key of ['yueJiang', 'shiChen', 'riGanZhi', 'yueLing']) {
+        delete normalized[key];
+      }
+    }
     const useCurrentTime = getValueAtPath(input, ['$useCurrentTime']) !== false;
     if (useCurrentTime) {
-      return {};
+      for (const key of [
+        'solarDate',
+        'hour',
+        'minute',
+        'randomNumber',
+        'timeMode',
+      ]) {
+        delete normalized[key];
+      }
+      return normalized;
     }
     if (skillDir === 'liuren-paipan') {
       const timeMode = getValueAtPath(input, ['$liurenTimeMode']);
@@ -523,7 +553,8 @@ function buildSubmitInputForSkill(
   }
 
   if (skillDir === 'iching-paipan' || skillDir === 'jingzhan-paipan') {
-    const method = typeof normalized.method === 'string' ? normalized.method : 'dayan';
+    const method =
+      typeof normalized.method === 'string' ? normalized.method : 'dayan';
     const useCurrentTime = getValueAtPath(input, ['$useCurrentTime']) !== false;
     if (method !== 'manual') {
       delete normalized.yao;
@@ -571,54 +602,115 @@ function validateDraftForSkill(
 ): string | null {
   if (skillDir === 'bazi-paipan' || skillDir === 'ziwei-paipan') {
     if (typeof getValueAtPath(draft, ['solarDate']) !== 'string') {
-      return t?.('aiChat.paipanSheet.validation.missingBirthDate') ?? '请先选择出生日期（公历）';
+      return (
+        t?.('aiChat.paipanSheet.validation.missingBirthDate') ??
+        '请先选择出生日期（公历）'
+      );
     }
     if (typeof getValueAtPath(draft, ['hour']) !== 'number') {
-      return t?.('aiChat.paipanSheet.validation.missingBirthTime') ?? '请先选择出生时间（公历）';
+      return (
+        t?.('aiChat.paipanSheet.validation.missingBirthTime') ??
+        '请先选择出生时间（公历）'
+      );
     }
     if (!normalizeGenderValue(getValueAtPath(draft, ['gender']))) {
-      return t?.('aiChat.paipanSheet.validation.missingGender') ?? '请先选择性别';
+      return (
+        t?.('aiChat.paipanSheet.validation.missingGender') ?? '请先选择性别'
+      );
     }
     return null;
   }
 
   if (skillDir === 'qimen-paipan' || skillDir === 'liuren-paipan') {
+    if (skillDir === 'liuren-paipan' && draft.method === 'yuejiang') {
+      const branches = '子丑寅卯辰巳午未申酉戌亥';
+      const isBranch = (value: unknown) =>
+        typeof value === 'string' &&
+        value.length === 1 &&
+        branches.includes(value);
+      if (!isBranch(draft.yueJiang)) {
+        return (
+          t?.('aiChat.paipanSheet.validation.missingYueJiang') ??
+          '请选择月将地支'
+        );
+      }
+      if (!isBranch(draft.shiChen)) {
+        return (
+          t?.('aiChat.paipanSheet.validation.missingShiChen') ??
+          '请选择占时地支'
+        );
+      }
+      const day = typeof draft.riGanZhi === 'string' ? draft.riGanZhi : '';
+      const stemIndex = '甲乙丙丁戊己庚辛壬癸'.indexOf(day[0] ?? ' ');
+      const branchIndex = branches.indexOf(day[1] ?? ' ');
+      if (
+        day.length !== 2 ||
+        stemIndex < 0 ||
+        branchIndex < 0 ||
+        stemIndex % 2 !== branchIndex % 2
+      ) {
+        return (
+          t?.('aiChat.paipanSheet.validation.invalidRiGanZhi') ??
+          '请填写有效的日干支，例如丁巳'
+        );
+      }
+      if (draft.yueLing !== undefined && !isBranch(draft.yueLing)) {
+        return (
+          t?.('aiChat.paipanSheet.validation.invalidYueLing') ??
+          '请选择有效月令，或留空按月将推算'
+        );
+      }
+      return null;
+    }
     const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
     if (useCurrentTime) {
       return null;
     }
     if (typeof getValueAtPath(draft, ['solarDate']) !== 'string') {
       return skillDir === 'liuren-paipan'
-        ? t?.('aiChat.paipanSheet.validation.missingLiurenDate') ?? '请先选择起课日期（公历）'
-        : t?.('aiChat.paipanSheet.validation.missingQimenDate') ?? '请先选择起盘日期（公历）';
+        ? (t?.('aiChat.paipanSheet.validation.missingLiurenDate') ??
+            '请先选择起课日期（公历）')
+        : (t?.('aiChat.paipanSheet.validation.missingQimenDate') ??
+            '请先选择起盘日期（公历）');
     }
     if (typeof getValueAtPath(draft, ['hour']) !== 'number') {
       return skillDir === 'liuren-paipan'
-        ? t?.('aiChat.paipanSheet.validation.missingLiurenTime') ?? '请先选择起课时间（公历）'
-        : t?.('aiChat.paipanSheet.validation.missingQimenTime') ?? '请先选择起盘时间（公历）';
+        ? (t?.('aiChat.paipanSheet.validation.missingLiurenTime') ??
+            '请先选择起课时间（公历）')
+        : (t?.('aiChat.paipanSheet.validation.missingQimenTime') ??
+            '请先选择起盘时间（公历）');
     }
     return null;
   }
 
   if (skillDir === 'iching-paipan' || skillDir === 'jingzhan-paipan') {
-    const method = typeof getValueAtPath(draft, ['method']) === 'string'
-      ? String(getValueAtPath(draft, ['method']))
-      : 'dayan';
+    const method =
+      typeof getValueAtPath(draft, ['method']) === 'string'
+        ? String(getValueAtPath(draft, ['method']))
+        : 'dayan';
     const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
-    const yao = typeof getValueAtPath(draft, ['yao']) === 'string'
-      ? String(getValueAtPath(draft, ['yao'])).trim()
-      : '';
+    const yao =
+      typeof getValueAtPath(draft, ['yao']) === 'string'
+        ? String(getValueAtPath(draft, ['yao'])).trim()
+        : '';
     const numbers = getValueAtPath(draft, ['numbers']);
-    const datetime = typeof getValueAtPath(draft, ['datetime']) === 'string'
-      ? String(getValueAtPath(draft, ['datetime'])).trim()
-      : '';
+    const datetime =
+      typeof getValueAtPath(draft, ['datetime']) === 'string'
+        ? String(getValueAtPath(draft, ['datetime'])).trim()
+        : '';
 
     if (!useCurrentTime && !datetime) {
-      return t?.('aiChat.paipanSheet.validation.missingDivinationTime') ?? '请先选择起卦时间（公历）';
+      return (
+        t?.('aiChat.paipanSheet.validation.missingDivinationTime') ??
+        '请先选择起卦时间（公历）'
+      );
     }
 
     if (method === 'manual' && !/^[6789]{6}$/.test(yao)) {
-      return t?.('aiChat.paipanSheet.validation.invalidManualYao') ?? '手动起卦需要输入 6 位爻值，例如 789678';
+      return (
+        t?.('aiChat.paipanSheet.validation.invalidManualYao') ??
+        '手动起卦需要输入 6 位爻值，例如 789678'
+      );
     }
 
     if (method === 'three') {
@@ -627,7 +719,10 @@ function validateDraftForSkill(
         numbers.length !== 3 ||
         numbers.some((value) => !isValidInteger(value))
       ) {
-        return t?.('aiChat.paipanSheet.validation.invalidThreeNumbers') ?? '请填写全部 3 个数字，每个框内填写一个整数';
+        return (
+          t?.('aiChat.paipanSheet.validation.invalidThreeNumbers') ??
+          '请填写全部 3 个数字，每个框内填写一个整数'
+        );
       }
     }
 
@@ -637,7 +732,10 @@ function validateDraftForSkill(
         numbers.length < 2 ||
         numbers.some((value) => !isValidInteger(value))
       ) {
-        return t?.('aiChat.paipanSheet.validation.invalidNumberArray') ?? '请填写至少 2 个数字，并补全所有数字框';
+        return (
+          t?.('aiChat.paipanSheet.validation.invalidNumberArray') ??
+          '请填写至少 2 个数字，并补全所有数字框'
+        );
       }
     }
   }
@@ -661,33 +759,51 @@ function validateDraftForSkill(
 
     if (method === 'time') {
       if (!useCurrentTime && !datetime) {
-        return t?.('aiChat.paipanSheet.validation.missingDivinationTime') ?? '请先选择起卦时间（公历）';
+        return (
+          t?.('aiChat.paipanSheet.validation.missingDivinationTime') ??
+          '请先选择起卦时间（公历）'
+        );
       }
       return null;
     }
 
     if (method === 'counts') {
       if (typeof upper !== 'number' || !Number.isInteger(upper)) {
-        return t?.('aiChat.paipanSheet.validation.missingUpper') ?? '请先填写上卦取数';
+        return (
+          t?.('aiChat.paipanSheet.validation.missingUpper') ??
+          '请先填写上卦取数'
+        );
       }
       if (typeof lower !== 'number' || !Number.isInteger(lower)) {
-        return t?.('aiChat.paipanSheet.validation.missingLower') ?? '请先填写下卦取数';
+        return (
+          t?.('aiChat.paipanSheet.validation.missingLower') ??
+          '请先填写下卦取数'
+        );
       }
       if (
         moving !== undefined &&
         (typeof moving !== 'number' || !Number.isInteger(moving))
       ) {
-        return t?.('aiChat.paipanSheet.validation.invalidMoving') ?? '动爻取数需要填写整数';
+        return (
+          t?.('aiChat.paipanSheet.validation.invalidMoving') ??
+          '动爻取数需要填写整数'
+        );
       }
       return null;
     }
 
     if (method === 'trigrams') {
       if (typeof upperTrigram !== 'string') {
-        return t?.('aiChat.paipanSheet.validation.missingUpperTrigram') ?? '请先选择上卦';
+        return (
+          t?.('aiChat.paipanSheet.validation.missingUpperTrigram') ??
+          '请先选择上卦'
+        );
       }
       if (typeof lowerTrigram !== 'string') {
-        return t?.('aiChat.paipanSheet.validation.missingLowerTrigram') ?? '请先选择下卦';
+        return (
+          t?.('aiChat.paipanSheet.validation.missingLowerTrigram') ??
+          '请先选择下卦'
+        );
       }
       if (
         typeof movingLine !== 'number' ||
@@ -695,7 +811,10 @@ function validateDraftForSkill(
         movingLine < 1 ||
         movingLine > 6
       ) {
-        return t?.('aiChat.paipanSheet.validation.missingMovingLine') ?? '请先选择动爻';
+        return (
+          t?.('aiChat.paipanSheet.validation.missingMovingLine') ??
+          '请先选择动爻'
+        );
       }
       return null;
     }
@@ -711,8 +830,20 @@ function getSimpleHiddenFieldPaths(skillDir: string): string[] {
     case 'ziwei-paipan':
       return ['solarDate', 'hour', 'minute', 'gender', 'horoscope'];
     case 'qimen-paipan':
+      return ['panType', 'solarDate', 'hour', 'minute'];
     case 'liuren-paipan':
-      return ['solarDate', 'hour', 'minute', 'randomNumber', 'timeMode'];
+      return [
+        'method',
+        'yueJiang',
+        'shiChen',
+        'riGanZhi',
+        'yueLing',
+        'solarDate',
+        'hour',
+        'minute',
+        'randomNumber',
+        'timeMode',
+      ];
     case 'iching-paipan':
     case 'jingzhan-paipan':
       return ['method', 'datetime', 'yao', 'numbers'];

@@ -185,6 +185,7 @@ export const formatLiurenPaipan: PaipanFormatter = (artifactData) => {
   if (!root) return formatGenericPaipan(artifactData);
 
   const dateInfo = recordField(root, 'dateInfo');
+  const input = recordField(root, 'input');
   const siKe = recordField(root, 'siKe');
   const sanChuan = recordField(root, 'sanChuan');
   const tianDiPan = recordField(root, 'tianDiPan');
@@ -199,9 +200,24 @@ export const formatLiurenPaipan: PaipanFormatter = (artifactData) => {
   const lines: string[] = [];
 
   pushSection(lines, '起课概要', [
-    textField(dateInfo, 'date') ? `时间：${textField(dateInfo, 'date')}` : undefined,
-    textField(dateInfo, 'bazi') ? `四柱：${textField(dateInfo, 'bazi')}` : undefined,
-    textField(dateInfo, 'yuejiang') ? `月将：${textField(dateInfo, 'yuejiang')}` : undefined,
+    input?.mode === 'yuejiang'
+      ? '起课方式：古籍式（月将、占时、日干支）'
+      : undefined,
+    input?.mode === 'yuejiang' && textField(input, 'shiChen')
+      ? `占时：${textField(input, 'shiChen')}`
+      : undefined,
+    input?.mode === 'yuejiang' && textField(input, 'yueLing')
+      ? `月令：${textField(input, 'yueLing')}`
+      : undefined,
+    textField(dateInfo, 'date')
+      ? `时间：${textField(dateInfo, 'date')}`
+      : undefined,
+    textField(dateInfo, 'bazi')
+      ? `四柱：${textField(dateInfo, 'bazi')}`
+      : undefined,
+    textField(dateInfo, 'yuejiang')
+      ? `月将：${textField(dateInfo, 'yuejiang')}`
+      : undefined,
     arrayField(dateInfo, 'kong').length > 0
       ? `旬空：${arrayField(dateInfo, 'kong').join('、')}`
       : undefined,
@@ -218,7 +234,9 @@ export const formatLiurenPaipan: PaipanFormatter = (artifactData) => {
   ]);
 
   pushSection(lines, '三传', [
-    textField(sanChuan, 'keTi') ? `课体：${textField(sanChuan, 'keTi')}` : undefined,
+    textField(sanChuan, 'keTi')
+      ? `课体：${textField(sanChuan, 'keTi')}`
+      : undefined,
     formatChuan(sanChuan.chuChuan, '初传', context),
     formatChuan(sanChuan.zhongChuan, '中传', context),
     formatChuan(sanChuan.moChuan, '末传', context),

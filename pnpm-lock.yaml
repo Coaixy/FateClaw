@@ -132,8 +132,8 @@ importers:
         specifier: ^8.20.0
         version: 8.20.0
       tyme4ts:
-        specifier: ^1.4.5
-        version: 1.5.0
+        specifier: ^1.5.3
+        version: 1.5.3
       typebox:
         specifier: ^1.3.23
         version: 1.3.23
@@ -208,17 +208,17 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1
       iztro:
-        specifier: ^2.5.8
-        version: 2.5.8
+        specifier: ^2.6.3
+        version: 2.6.3
       jsdom:
         specifier: 27.4.0
         version: 27.4.0
       kinqimen:
-        specifier: ^0.3.1
-        version: 0.3.1
+        specifier: ^0.4.0
+        version: 0.4.0
       liuren-ts-lib:
-        specifier: ^3.0.0
-        version: 3.0.0
+        specifier: ^3.1.0
+        version: 3.1.0
       meihua-ts-lib:
         specifier: ^0.1.0
         version: 0.1.0
@@ -241,8 +241,8 @@ importers:
         specifier: ^0.12.0
         version: 0.12.0
       tyme4ts:
-        specifier: ^1.4.6
-        version: 1.4.6
+        specifier: ^1.5.3
+        version: 1.5.3
       vega:
         specifier: 6.4.0
         version: 6.4.0
@@ -2617,9 +2617,6 @@ packages:
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
 
-  dayjs@1.11.20:
-    resolution: {integrity: sha512-YbwwqR/uYpeoP4pu043q+LTDLFBLApUP6VxRihdfNTqu4ubqMlGDLd6ErXhEgsyvY0K6nCs7nggYumAN+9uEuQ==}
-
   dayjs@1.11.23:
     resolution: {integrity: sha512-QDTCU0M0MxR3hQfnlDJfwekQiaanm1ubOD231u73WBckQ/fsamwRLiE2GBz6D3a/xF1NgfiDLJjXBa1hYOYTtQ==}
 
@@ -3479,8 +3476,8 @@ packages:
     resolution: {integrity: sha512-H0dkQoCa3b2VEeKQBOxFph+JAbcrQdE7KC0UkqwpLmv2EC4P41QXP+rqo9wYodACiG5/WM5s9oDApTU8utwj9g==}
     engines: {node: '>= 0.4'}
 
-  iztro@2.5.8:
-    resolution: {integrity: sha512-kgyyvxdSEvgJxi6zvHpvzGbXZLGXCdhTHYK2Pe/sRdBIQ7RfCArvupmg2ChUMQCSQGomW7XCI0gWwUuKJwPENg==}
+  iztro@2.6.3:
+    resolution: {integrity: sha512-yFY+ytb1ryOZkL3yx6LKeGQ3ZWo7GOoJIg3lU1yRWxJRKBgVRNNM+Ap1ZfhgWIs3A2WqW7WaSRPjCHi8C60rYg==}
 
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
@@ -3568,8 +3565,8 @@ packages:
   khroma@2.1.0:
     resolution: {integrity: sha512-Ls993zuzfayK269Svk9hzpeGUKob/sIgZzyHYdjQoAdQetRKpOLj+k/QQQ/6Qi0Yz65mlROrfd+Ev+1+7dz9Kw==}
 
-  kinqimen@0.3.1:
-    resolution: {integrity: sha512-QxOe+RmytQdRsvAfFPiKxT2CRDG4aK/yFUX1T8Vr215o412Y6Rxgjum/je8QmRYUREzUaYMcOEgB4txPzBBIBQ==}
+  kinqimen@0.4.0:
+    resolution: {integrity: sha512-NGomDoR7hyb0nEUf/NOBzGb5giPICJ7MiIB+/DMykZm7i2NETlq/ctuDgVB9ob5VrrzCoTgVCOAvDETfivVNCg==}
 
   kitx@2.2.0:
     resolution: {integrity: sha512-tBMwe6AALTBQJb0woQDD40734NKzb0Kzi3k7wQj9ar3AbP9oqhoVrdXPh7rk2r00/glIgd0YbToIUJsnxWMiIg==}
@@ -3742,8 +3739,8 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
-  liuren-ts-lib@3.0.0:
-    resolution: {integrity: sha512-h2RARyy+Xpsfj4xmlrpjRmz69BaHam9Dopc2V/2yuNI2HfCgBt2GrPGYgnyA6L/BDWZcYK4YzU+mKc+EkyFifw==}
+  liuren-ts-lib@3.1.0:
+    resolution: {integrity: sha512-YiT2HB0jEPSaHGH1g+TKAPhXBlj0T+ccr4YHY6AhpOw5byIKgo6TB/0IUzNGFoQFagGCebxs6yItaanKJfxaIQ==}
 
   locate-path@5.0.0:
     resolution: {integrity: sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g==}
@@ -4864,17 +4861,8 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  tyme4ts@1.4.6:
-    resolution: {integrity: sha512-6uiAlUxS4BNu2FGsKg0KdUr329jJjhnEURhURR8v5GKXnv1B7Z4kAZHjOByhGcCJ+jhuQskR5kmGSvZJ7fE/VA==}
-
-  tyme4ts@1.5.0:
-    resolution: {integrity: sha512-SqmlNyDtYb3bsnSkjX8lxyMcCt9xBaBkF8xWs/2ORiysWXftEoTGHEi/zxWEJ8s7aANe5veMcLcOuMK6Z+kzbw==}
-
-  tyme4ts@1.5.1:
-    resolution: {integrity: sha512-GzL9rP4k5vFdj/8iLnlGrC3jPop4Og2oAE9aBTj2JbOKuZ22+iMlpD+4Ekke4FylHn5BO9V6XRJOgJtFVDFDqQ==}
-
-  tyme4ts@1.5.2:
-    resolution: {integrity: sha512-vVAjUv1ieXleS7hCOgjAoHaZ0BdNJIza0uDOhXNpndegqWQh9ytKMR0fjkG869yqLtpXAHnzNSouBg28nrIaAg==}
+  tyme4ts@1.5.3:
+    resolution: {integrity: sha512-3Jm9Ylbj0rxUbmH0DJLO8r3phT0J3FsseWuWD7/6UeloqkRKchEmTJG+pD36VLsM5QCfh4nI5NRO3DwYYewOig==}
 
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
@@ -7416,7 +7404,7 @@ snapshots:
 
   bazi-ts-lib@1.0.2:
     dependencies:
-      tyme4ts: 1.5.0
+      tyme4ts: 1.5.3
 
   bcryptjs@3.0.3: {}
 
@@ -8763,7 +8751,7 @@ snapshots:
 
   iching-shifa@1.8.0:
     dependencies:
-      tyme4ts: 1.5.2
+      tyme4ts: 1.5.3
 
   iconv-lite@0.6.3:
     dependencies:
@@ -8981,9 +8969,9 @@ snapshots:
       has-symbols: 1.1.0
       set-function-name: 2.0.2
 
-  iztro@2.5.8:
+  iztro@2.6.3:
     dependencies:
-      dayjs: 1.11.20
+      dayjs: 1.11.23
       i18next: 23.16.8
       lunar-lite: 0.2.8
       lunar-typescript: 1.8.6
@@ -9087,9 +9075,9 @@ snapshots:
 
   khroma@2.1.0: {}
 
-  kinqimen@0.3.1:
+  kinqimen@0.4.0:
     dependencies:
-      tyme4ts: 1.5.1
+      tyme4ts: 1.5.3
 
   kitx@2.2.0:
     dependencies:
@@ -9215,9 +9203,9 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
 
-  liuren-ts-lib@3.0.0:
+  liuren-ts-lib@3.1.0:
     dependencies:
-      tyme4ts: 1.5.0
+      tyme4ts: 1.5.3
 
   locate-path@5.0.0:
     dependencies:
@@ -9448,7 +9436,7 @@ snapshots:
 
   meihua-ts-lib@0.1.0:
     dependencies:
-      tyme4ts: 1.5.1
+      tyme4ts: 1.5.3
 
   merge2@1.4.1: {}
 

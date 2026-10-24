@@ -161,10 +161,6 @@ function normalizeAgeDivide(value: unknown): ZiweiAgeDivide {
   throw new Error(`非法 ageDivide: ${String(value)}`);
 }
 
-function restoreZiweiConfig(config: ReturnType<typeof astro.getConfig>): void {
-  astro.config(config as unknown as ZiweiConfig);
-}
-
 function formatHoroscope(
   horoscope: ZiweiHoroscope,
   scopes: HoroscopeScope[],
@@ -422,40 +418,34 @@ export async function runZiweiPaipan(
   }
 
   const timeIndex = hourToTimeIndex(hour, minute);
-  const previousConfig = astro.getConfig();
-  astro.config({
-    dayDivide: normalizeDayDivide(dayDivide),
-    yearDivide: normalizeYearDivide(yearDivide),
-    horoscopeDivide: normalizeHoroscopeDivide(horoscopeDivide),
-    ageDivide: normalizeAgeDivide(ageDivide),
+  const astrolabe = astro.withOptions({
+    type: 'solar',
+    dateStr: solarDate,
+    timeIndex,
+    gender: normalizeGender(gender),
+    fixLeap,
+    language: 'zh-CN',
+    config: {
+      dayDivide: normalizeDayDivide(dayDivide),
+      yearDivide: normalizeYearDivide(yearDivide),
+      horoscopeDivide: normalizeHoroscopeDivide(horoscopeDivide),
+      ageDivide: normalizeAgeDivide(ageDivide),
+    },
   });
 
-  try {
-    const astrolabe = astro.bySolar(
-      solarDate,
-      timeIndex,
-      normalizeGender(gender),
-      fixLeap,
-      'zh-CN',
-    );
-    const result = formatAstrolabe(astrolabe);
+  const result = formatAstrolabe(astrolabe);
 
-    if (horoscope?.date) {
-      const scopes = horoscope.scopes ?? ['decadal', 'yearly'];
-      const invalid = scopes.filter((scope) =>
-        !HOROSCOPE_SCOPES.includes(scope)
-      );
-      if (invalid.length) {
-        throw new Error(`非法 horoscope scope: ${invalid.join(',')}`);
-      }
-      result.horoscope = formatHoroscope(
-        astrolabe.horoscope(horoscope.date),
-        scopes,
-      );
+  if (horoscope?.date) {
+    const scopes = horoscope.scopes ?? ['decadal', 'yearly'];
+    const invalid = scopes.filter((scope) => !HOROSCOPE_SCOPES.includes(scope));
+    if (invalid.length) {
+      throw new Error(`非法 horoscope scope: ${invalid.join(',')}`);
     }
-
-    return result;
-  } finally {
-    restoreZiweiConfig(previousConfig);
+    result.horoscope = formatHoroscope(
+      astrolabe.horoscope(horoscope.date),
+      scopes,
+    );
   }
+
+  return result;
 }

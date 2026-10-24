@@ -4,6 +4,8 @@
 
 import type { TextResponse } from '../common/api.js';
 
+export { fullQimenGodName } from './qimen.js';
+
 /** 工具/检索结果的来源条目（搜索、知识检索类工具的单条结果）。 */
 export interface ToolResultItemDto {
   /** 结果标题。 */

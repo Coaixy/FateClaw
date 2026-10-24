@@ -1,3 +1,5 @@
+import { EarthBranch, SixtyCycle } from 'tyme4ts';
+
 import { runBaziPaipan } from '#modules/chat/paipan-runners/bazi';
 import { runIchingPaipan } from '#modules/chat/paipan-runners/iching';
 import { runJingzhanPaipan } from '#modules/chat/paipan-runners/jingzhan';
@@ -297,13 +299,19 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
   'qimen-paipan': {
     displayName: '奇门遁甲排盘',
     description:
-      '奇门遁甲排盘：按指定时间或当前时间生成时家奇门拆补盘与九宫数据。',
+      '奇门遁甲排盘：按指定时间或当前时间生成转盘或鸣法飞盘，均采用拆补定局。',
     trigger:
-      '用户询问奇门遁甲、时家奇门、值符值使、八门九星、天地盘相关问题，或需要按指定时间起奇门局',
+      '用户询问奇门遁甲、时家奇门、鸣法飞盘、值符值使、八门九星、天地盘相关问题，或需要按指定时间起奇门局',
     runner: runQimenPaipan,
     parameters: {
       type: 'object',
       properties: {
+        panType: {
+          type: 'string',
+          description: '盘式：转盘或鸣法飞盘；两者均采用拆补定局',
+          enum: ['转盘', '鸣法'],
+          default: '转盘',
+        },
         solarDate: {
           type: 'string',
           description: '阳历日期 YYYY-MM-DD。不传则用当前时间',
@@ -329,6 +337,15 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
           value: {},
         },
         {
+          name: '鸣法飞盘',
+          value: {
+            panType: '鸣法',
+            solarDate: '2024-12-13',
+            hour: 9,
+            minute: 31,
+          },
+        },
+        {
           name: '指定时间起盘',
           value: {
             solarDate: '2026-04-17',
@@ -342,16 +359,45 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
   'liuren-paipan': {
     displayName: '大六壬排盘',
     description:
-      '大六壬排盘：按当前、指定或随机时辰生成天地盘、四课、三传、遁干和神煞。',
+      '大六壬排盘：支持按公历时间或古籍记载的月将、占时、日干支起课，生成天地盘、四课、三传、课格、遁干和神煞。',
     trigger:
       '用户询问大六壬、六壬、天地盘、四课、三传、月将、贵人天将等六壬相关问题，或需要按时间起六壬课',
     runner: runLiurenPaipan,
     parameters: {
       type: 'object',
       properties: {
+        method: {
+          type: 'string',
+          description:
+            '起课方式：time 按公历时间；yuejiang 按古籍月将、占时和日干支，不能混用公历或随机时辰参数',
+          enum: ['time', 'yuejiang'],
+          default: 'time',
+        },
+        yueJiang: {
+          type: 'string',
+          description: '古籍式起盘的月将地支，例如亥；method=yuejiang 时必填',
+          enum: EarthBranch.NAMES,
+        },
+        shiChen: {
+          type: 'string',
+          description: '古籍式起盘的占时地支，例如未；method=yuejiang 时必填',
+          enum: EarthBranch.NAMES,
+        },
+        riGanZhi: {
+          type: 'string',
+          description: '古籍式起盘的日干支，例如丁巳；method=yuejiang 时必填',
+          enum: SixtyCycle.NAMES,
+        },
+        yueLing: {
+          type: 'string',
+          description:
+            '古籍式起盘的月令地支，用于计算天马；可省略，省略时由月将六合位反推',
+          enum: EarthBranch.NAMES,
+        },
         solarDate: {
           type: 'string',
-          description: '阳历日期 YYYY-MM-DD。不传则用当前时间；只传日期和 randomNumber 时按今日/该日随机时辰',
+          description:
+            '阳历日期 YYYY-MM-DD。不传则用当前时间；只传日期和 randomNumber 时按今日/该日随机时辰',
         },
         hour: {
           type: 'integer',
@@ -364,11 +410,11 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
           description: '分钟 0-59；与 solarDate/hour 一起传时默认 0',
           minimum: 0,
           maximum: 59,
-          default: 0,
         },
         randomNumber: {
           type: 'integer',
-          description: '可选随机数种子；传入后稳定映射到 12 个时辰之一，不传则真实随机',
+          description:
+            '可选随机数种子；传入后稳定映射到 12 个时辰之一，不传则真实随机',
         },
         timeMode: {
           type: 'string',
@@ -376,7 +422,23 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
           enum: ['now', 'custom', 'random'],
         },
       },
+      conditionalRequired: [
+        {
+          when: { field: 'method', equals: 'yuejiang' },
+          required: ['yueJiang', 'shiChen', 'riGanZhi'],
+          description: '古籍式起盘必须同时填写月将、占时和日干支',
+        },
+      ],
       examples: [
+        {
+          name: '古籍式月将起课',
+          value: {
+            method: 'yuejiang',
+            yueJiang: '亥',
+            shiChen: '未',
+            riGanZhi: '丁巳',
+          },
+        },
         {
           name: '默认当前时间起课',
           value: {},
@@ -435,7 +497,8 @@ const PAIPAN_REGISTRY_CONFIG: Record<string, PaipanRegistryConfig> = {
         },
         dayDivide: {
           type: 'string',
-          description: '晚子时换日规则：forward=晚子时算次日；current=晚子时算当日',
+          description:
+            '晚子时换日规则：forward=晚子时算次日；current=晚子时算当日',
           enum: ['forward', 'current'],
           default: 'forward',
         },

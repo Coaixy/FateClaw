@@ -153,7 +153,7 @@ export function buildCalendarDetailsFromSolarTime(
         minute: lunarHour.getMinute(),
         second: lunarHour.getSecond(),
         isLeapMonth: lunarMonth.isLeap(),
-        monthWithLeap: lunarMonth.getMonthWithLeap(),
+        monthWithLeap: lunarMonth.getMonthValue(),
       },
       ganzhi: {
         year: eightChar.getYear().toString(),

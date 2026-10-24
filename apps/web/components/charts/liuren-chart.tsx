@@ -107,7 +107,9 @@ interface LiurenData {
     tianma?: string;
   };
   input?: {
-    mode?: 'now' | 'custom' | 'random';
+    mode?: 'now' | 'custom' | 'random' | 'yuejiang';
+    shiChen?: string;
+    yueLing?: string;
     randomNumber?: number;
   };
   tianDiPan?: {
@@ -166,15 +168,25 @@ function shortRelation(value?: string): string {
 }
 
 function displayMode(mode?: string): string {
+  if (mode === 'yuejiang') return '古籍式';
   return mode === 'random' ? '随机' : '正时';
 }
 
-function ColoredText({ value, className }: { value?: string; className?: string }) {
+function ColoredText({
+  value,
+  className,
+}: {
+  value?: string;
+  className?: string;
+}) {
   if (!value) return <span className={cn(CHART.mutedSoft, className)}>○</span>;
   return (
     <>
       {Array.from(value).map((char, index) => (
-        <span key={`${char}-${index}`} className={cn(valueColor(char), className)}>
+        <span
+          key={`${char}-${index}`}
+          className={cn(valueColor(char), className)}
+        >
           {char}
         </span>
       ))}
@@ -189,7 +201,10 @@ function ShenShaLines({ items }: { items?: LiurenData['shenSha'] }) {
   return (
     <div className="mx-auto mt-2.5 flex max-w-[46rem] flex-wrap justify-center gap-x-2.5 gap-y-1 text-[11px] font-semibold leading-4 @[480px]/artifact:text-[12px]">
       {visibleItems.map((item) => (
-        <span key={`${item.name}-${item.value}`} className="whitespace-nowrap text-muted">
+        <span
+          key={`${item.name}-${item.value}`}
+          className="whitespace-nowrap text-muted"
+        >
           {item.name}
           <span className="text-muted-soft">-</span>
           <span className={valueColor(item.value)}>{item.value || '○'}</span>
@@ -209,7 +224,10 @@ function PassageTable({ data }: { data: LiurenData }) {
   return (
     <div className="mx-auto grid w-full max-w-[34rem] grid-cols-[repeat(5,minmax(3.1rem,1fr))] items-center gap-x-3 gap-y-1.5 text-center">
       {['昼将', '夜将', '六亲', '遁干', '三传'].map((label) => (
-        <div key={label} className="text-[12px] font-semibold text-muted @[480px]/artifact:text-[13px]">
+        <div
+          key={label}
+          className="text-[12px] font-semibold text-muted @[480px]/artifact:text-[13px]"
+        >
           {label}
         </div>
       ))}
@@ -245,12 +263,7 @@ function PassageTable({ data }: { data: LiurenData }) {
 }
 
 function orderedCourses(data: LiurenData): Array<string[] | undefined> {
-  return [
-    data.siKe?.ke2,
-    data.siKe?.ke3,
-    data.siKe?.ke4,
-    data.siKe?.ke1,
-  ];
+  return [data.siKe?.ke2, data.siKe?.ke3, data.siKe?.ke4, data.siKe?.ke1];
 }
 
 function coursePair(course?: string[]): string[] {
@@ -313,7 +326,10 @@ function CourseTable({ data }: { data: LiurenData }) {
         {courses.map((course, index) => {
           const [top, bottom] = coursePair(course);
           return (
-            <div key={`course-${index}`} className="grid justify-items-center gap-0.5">
+            <div
+              key={`course-${index}`}
+              className="grid justify-items-center gap-0.5"
+            >
               <div className="text-[19px] font-bold leading-none @[480px]/artifact:text-[22px]">
                 <ColoredText value={top} />
               </div>
@@ -367,17 +383,23 @@ function PlateTable({ data }: { data: LiurenData }) {
     },
     {
       label: '昼将',
-      values: BRANCH_KEYS.map((key) => shortJiang(getValue(data.yinYangGuiRen?.yangGuiRen, key))),
+      values: BRANCH_KEYS.map((key) =>
+        shortJiang(getValue(data.yinYangGuiRen?.yangGuiRen, key)),
+      ),
       muted: true,
     },
     {
       label: '夜将',
-      values: BRANCH_KEYS.map((key) => shortJiang(getValue(data.yinYangGuiRen?.yinGuiRen, key))),
+      values: BRANCH_KEYS.map((key) =>
+        shortJiang(getValue(data.yinYangGuiRen?.yinGuiRen, key)),
+      ),
       muted: true,
     },
     {
       label: '天盘',
-      values: BRANCH_KEYS.map((key) => getValue(data.tianDiPan?.tianPan, key) || '○'),
+      values: BRANCH_KEYS.map(
+        (key) => getValue(data.tianDiPan?.tianPan, key) || '○',
+      ),
       muted: false,
     },
     {
@@ -434,18 +456,26 @@ export default function LiurenChart({ data }: { data: LiurenData }) {
         </div>
 
         <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[13px] font-semibold leading-5 @[480px]/artifact:text-[15px]">
+          {data.input?.mode === 'yuejiang' && data.input.shiChen && (
+            <span>占时:{data.input.shiChen}</span>
+          )}
+          {data.input?.mode === 'yuejiang' && data.input.yueLing && (
+            <span>月令:{data.input.yueLing}</span>
+          )}
+          {data.sanChuan?.keTi && <span>课体:{data.sanChuan.keTi}</span>}
           <span>{data.dateInfo?.xun || '○'}</span>
+          <span>{data.dateInfo?.kong?.join('') || '○'}空</span>
           <span>
-            {data.dateInfo?.kong?.join('') || '○'}空
+            驿马:
+            <ColoredText value={data.dateInfo?.yima} />
           </span>
           <span>
-            驿马:<ColoredText value={data.dateInfo?.yima} />
+            丁马:
+            <ColoredText value={data.dateInfo?.dingma} />
           </span>
           <span>
-            丁马:<ColoredText value={data.dateInfo?.dingma} />
-          </span>
-          <span>
-            天马:<ColoredText value={data.dateInfo?.tianma} />
+            天马:
+            <ColoredText value={data.dateInfo?.tianma} />
           </span>
           {data.input?.randomNumber !== undefined && (
             <span className="text-muted">随机数:{data.input.randomNumber}</span>

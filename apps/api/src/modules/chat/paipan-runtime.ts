@@ -14,25 +14,13 @@ import {
   type SkillParametersSchema,
 } from './paipan-registry.js';
 import { formatOfficialPaipan } from './paipan-formatters.js';
+import { DirectPaipanError } from './paipan-errors.js';
+
+export { DirectPaipanError } from './paipan-errors.js';
 
 const PAIPAN_SKILL_DIRS = new Set(
   listPaipanRegistry().map((skill) => skill.dir),
 );
-
-export class DirectPaipanError extends Error {
-  constructor(
-    public code:
-      | 'PAIPAN.SKILL_NOT_FOUND'
-      | 'PAIPAN.SKILL_NOT_ENABLED'
-      | 'PAIPAN.SKILL_UNSUPPORTED'
-      | 'PAIPAN.PARAM_INVALID'
-      | 'PAIPAN.EXECUTION_FAILED',
-    message: string,
-    public statusCode: number,
-  ) {
-    super(message);
-  }
-}
 
 function getPaipanSkillCatalogEntry(
   skillDir: string,
@@ -332,6 +320,7 @@ async function executeInternalPaipan(args: {
   try {
     return await args.skill.runner(validatedInput);
   } catch (error) {
+    if (error instanceof DirectPaipanError) throw error;
     throw new DirectPaipanError(
       'PAIPAN.EXECUTION_FAILED',
       error instanceof Error ? error.message : '排盘执行失败',

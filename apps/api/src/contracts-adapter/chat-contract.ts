@@ -9,6 +9,38 @@ import type {
 
 import type { ChatSession, NewMessage } from '#shared/types';
 import { normalizeOwnedChatSessionTitle } from '#shared/chat-session-title-policy';
+import { formatOfficialPaipan } from '#modules/chat/paipan-formatters';
+
+function refreshQimenToolContext(
+  context: string | null | undefined,
+): string | null {
+  if (!context) return context ?? null;
+  let entries: unknown;
+  try {
+    entries = JSON.parse(context);
+  } catch (error) {
+    if (error instanceof SyntaxError) return context;
+    throw error;
+  }
+  if (!Array.isArray(entries)) return context;
+  let changed = false;
+  const refreshed = entries.map((entry) => {
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      entry.skill !== 'qimen-paipan' ||
+      entry.artifactData == null
+    ) {
+      return entry;
+    }
+    // AI board reads rebuild text from stored facts; clipboard exports must use the same formatter.
+    const output = formatOfficialPaipan(entry.skill, entry.artifactData);
+    if (!output || output === entry.output) return entry;
+    changed = true;
+    return { ...entry, output };
+  });
+  return changed ? JSON.stringify(refreshed) : context;
+}
 
 /**
  * 聊天域 DTO 映射。
@@ -32,7 +64,7 @@ export function toMessageDto(message: NewMessage): MessageDto {
     is_from_me: Boolean(message.is_from_me),
     is_bot_message: Boolean(message.is_bot_message),
     metadata,
-    tool_context: message.tool_context ?? null,
+    tool_context: refreshQimenToolContext(message.tool_context),
   };
 }
 
@@ -110,7 +142,7 @@ function toSharedMessageDto(message: NewMessage): MessageDto {
     is_from_me: Boolean(message.is_from_me),
     is_bot_message: Boolean(message.is_bot_message),
     metadata,
-    tool_context: message.tool_context ?? null,
+    tool_context: refreshQimenToolContext(message.tool_context),
   };
 }
 

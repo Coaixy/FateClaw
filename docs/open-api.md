@@ -99,6 +99,49 @@ but remain subject to API-key authentication, the arrears gate, and rate limits.
 library versions. `text` is the formatted interpretation input. The API converts
 external snake_case parameters to the registry's internal camelCase names.
 
+Qimen accepts `pan_type: "转盘"` (default) or `"鸣法"`. Both use Chabu ju
+calculation. For a Mingfa chart:
+
+```json
+{
+  "pan_type": "鸣法",
+  "solar_date": "2024-12-13",
+  "hour": 9,
+  "minute": 31
+}
+```
+
+Mingfa preserves all nine palaces, including the center, and returns separate
+Tianrui/Tianqin stars, nine gods, dark stems, and dark branches. The artifact's
+`盘式` identifies the chart type; `排盘方式` remains the ju calculation method.
+
+Qimen god names are written in full in both `data` and `text`. Text exports
+include leadership and palace assignments, Tianyi, all palace layers,
+door-pressure elements, punishment instruments, and both heaven/earth growth
+states. Rotating charts retain hosted stems and list original center data
+separately. Clipboard exports and AI board text use the same formatter; saved
+Qimen messages rebuild their export text from stored chart facts when read.
+
+Liuren defaults to Gregorian time charting (`method: "time"`). Use
+`method: "yuejiang"` for classical records that provide a monthly general,
+divination hour branch, and day stem-branch:
+
+```json
+{
+  "method": "yuejiang",
+  "yue_jiang": "亥",
+  "shi_chen": "未",
+  "ri_gan_zhi": "丁巳"
+}
+```
+
+An optional `yue_ling` branch determines Tianma; omission derives it from the
+monthly general's Liuhe counterpart. Classical inputs must not be mixed with
+Gregorian time or random-time parameters. No Gregorian date is inferred:
+`dateInfo.date` is empty and unknown year/month pillars remain `-- --`.
+When applicable, `sanChuan.keTi` includes the Sanhe or all-earth course pattern,
+such as `元首·润下`.
+
 ## Agent sessions
 
 | Method | Path | Behavior |
