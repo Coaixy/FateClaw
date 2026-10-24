@@ -57,6 +57,11 @@ import {
   VisualizationPlaceholder,
 } from '@/components/chat/visualization-context';
 
+// 楷体笔画比无衬线细，宽屏下需要更大的字号才有同等的阅读体量；窄屏则收紧字号与
+// 行距，避免一屏只能放下两句话。Markdown 内的标题走 em，会随这档字号一起缩放。
+const MESSAGE_BODY_TEXT =
+  'text-[14px] leading-[1.75] sm:text-base lg:text-[18px]';
+
 export const AiChatMessageList = memo(function AiChatMessageList({
   messages,
   loading,
@@ -484,9 +489,9 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
             className={`min-w-0 [overflow-wrap:anywhere] ${
               isBot
                 ? isErrorMessage
-                  ? 'rounded-xl border border-error/30 bg-error/8 px-3.5 py-2.5 text-base leading-8 text-error'
-                  : 'text-base leading-8 text-ink'
-                : 'rounded-2xl bg-surface-soft px-4 py-2.5 text-[15px] leading-7 text-ink'
+                  ? `rounded-xl border border-error/30 bg-error/8 px-3.5 py-2.5 ${MESSAGE_BODY_TEXT} text-error`
+                  : `${MESSAGE_BODY_TEXT} text-ink`
+                : `rounded-2xl bg-surface-soft px-4 py-2.5 ${MESSAGE_BODY_TEXT} text-ink`
             }`}
           >
             <CollapsibleMessage

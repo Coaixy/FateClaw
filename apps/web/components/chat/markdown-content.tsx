@@ -98,7 +98,7 @@ function createComponents(isBot: boolean): Components {
       }
       return (
         <pre
-          className={`${codeBg} ${borderColor} border rounded-lg px-4 py-3 mb-4 overflow-x-auto text-[13px] font-mono leading-relaxed`}
+          className={`${codeBg} ${borderColor} border rounded-lg px-4 py-3 mb-4 overflow-x-auto text-[13px] sm:text-[14px] lg:text-[15px] font-mono leading-relaxed`}
         >
           <CodeBlockContext value>{children}</CodeBlockContext>
         </pre>
@@ -129,7 +129,7 @@ function createComponents(isBot: boolean): Components {
     table: ({ children }) => (
       <div className="max-w-full overflow-x-auto mb-4">
         <table
-          className={`w-full text-[14px] leading-7 border-collapse ${borderColor}`}
+          className={`w-full text-[13px] leading-6 sm:text-[14px] sm:leading-7 lg:text-[16px] border-collapse ${borderColor}`}
         >
           {children}
         </table>
