@@ -1184,6 +1184,7 @@ export const zhTWMessages = {
         female: '女',
         remark: '備註',
         optional: '可不填',
+        selectPlaceholder: '請選擇',
       },
       bazi: {
         solarMode: '公曆填寫',
@@ -1331,8 +1332,8 @@ export const zhTWMessages = {
       },
       qimen: {
         panTypeTitle: '盤式',
-        rotating: '轉盤',
-        mingfa: '鳴法飛盤',
+        rotating: '轉盤拆補',
+        mingfa: '鳴法拆補',
         timeTitle: '起盤時間（公曆）',
         timeDescription:
           '新手直接用目前公曆時間即可；想隨機取今日時辰或回看某個時刻時再切換。',

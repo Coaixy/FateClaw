@@ -144,7 +144,7 @@ export function MeihuaFlow({
   resultContent,
 }: PaipanFlowProps) {
   const { t } = useI18n();
-  const { DateTimeField, ChoiceGrid, FieldTextInput } = fieldKit;
+  const { DateTimeField, ChoiceGrid, SelectField, FieldTextInput } = fieldKit;
   const { getValueAtPath, getCurrentLocalDateParts, fromDateTimeLocalValue } =
     helpers;
   const method =
@@ -283,29 +283,45 @@ export function MeihuaFlow({
       ) : null}
       {method === 'trigrams' ? (
         <>
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.meihua.upperTrigram')}
-            required
-            value={typeof upperTrigram === 'string' ? upperTrigram : undefined}
-            options={trigramOptions}
-            onChange={(value) => onChange(['upperTrigram'], value)}
-          />
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.meihua.lowerTrigram')}
-            required
-            value={typeof lowerTrigram === 'string' ? lowerTrigram : undefined}
-            options={trigramOptions}
-            onChange={(value) => onChange(['lowerTrigram'], value)}
-          />
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.meihua.movingLine')}
-            required
-            value={movingLineValue}
-            options={movingLineOptions}
-            onChange={(value) =>
-              onChange(['movingLine'], Number.parseInt(value, 10))
-            }
-          />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SelectField
+              title={t('aiChat.paipanFlows.meihua.upperTrigram')}
+              required
+              value={
+                typeof upperTrigram === 'string' ? upperTrigram : undefined
+              }
+              placeholder={t('aiChat.paipanFlows.common.selectPlaceholder')}
+              options={trigramOptions}
+              onChange={(value) => onChange(['upperTrigram'], value)}
+            />
+            <SelectField
+              title={t('aiChat.paipanFlows.meihua.lowerTrigram')}
+              required
+              value={
+                typeof lowerTrigram === 'string' ? lowerTrigram : undefined
+              }
+              placeholder={t('aiChat.paipanFlows.common.selectPlaceholder')}
+              options={trigramOptions}
+              onChange={(value) => onChange(['lowerTrigram'], value)}
+            />
+            <SelectField
+              title={t('aiChat.paipanFlows.meihua.movingLine')}
+              required
+              value={movingLineValue}
+              placeholder={t('aiChat.paipanFlows.common.selectPlaceholder')}
+              // 动爻的 hint 与 label 语义重复，下拉里只保留爻名。
+              options={movingLineOptions.map(({ value, label }) => ({
+                value,
+                label,
+              }))}
+              onChange={(value) =>
+                onChange(
+                  ['movingLine'],
+                  value === undefined ? undefined : Number.parseInt(value, 10),
+                )
+              }
+            />
+          </div>
           <FieldTextInput
             title={t('aiChat.paipanFlows.common.remark')}
             value={label}

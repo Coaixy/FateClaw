@@ -1244,6 +1244,7 @@ export const enMessages = {
         female: 'Female',
         remark: 'Note',
         optional: 'Optional',
+        selectPlaceholder: 'Select',
       },
       bazi: {
         solarMode: 'Gregorian input',
@@ -1420,8 +1421,8 @@ export const enMessages = {
       },
       qimen: {
         panTypeTitle: 'Chart type',
-        rotating: 'Rotating chart',
-        mingfa: 'Mingfa flying chart',
+        rotating: 'Rotating (Chaibu)',
+        mingfa: 'Mingfa flying (Chaibu)',
         timeTitle: 'Chart time (Gregorian)',
         timeDescription:
           'Beginners can use current Gregorian time. Switch for a random shichen today or a specific moment.',

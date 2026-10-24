@@ -1206,6 +1206,7 @@ export const zhCNMessages = {
         female: '女',
         remark: '备注',
         optional: '可不填',
+        selectPlaceholder: '请选择',
       },
       bazi: {
         solarMode: '公历填写',
@@ -1353,8 +1354,8 @@ export const zhCNMessages = {
       },
       qimen: {
         panTypeTitle: '盘式',
-        rotating: '转盘',
-        mingfa: '鸣法飞盘',
+        rotating: '转盘拆补',
+        mingfa: '鸣法拆补',
         timeTitle: '起盘时间（公历）',
         timeDescription:
           '新手直接用当前公历时间即可；想随机取今日时辰或回看某个时刻时再切换。',

@@ -82,6 +82,7 @@ const PAIPAN_FLOW_FIELD_KIT: PaipanFlowFieldKit = {
   TimeField,
   DateTimeField,
   ChoiceGrid,
+  SelectField,
   FieldTextInput,
 };
 
@@ -341,6 +342,51 @@ function ChoiceGrid({
           );
         })}
       </div>
+      <PropertyDescription text={description} />
+    </FormField>
+  );
+}
+
+function SelectField({
+  title,
+  description,
+  required,
+  value,
+  placeholder,
+  options,
+  onChange,
+}: {
+  title: string;
+  description?: string;
+  required?: boolean;
+  value: string | undefined;
+  placeholder?: string;
+  options: Array<{
+    value: string;
+    label: string;
+    hint?: string;
+  }>;
+  onChange: (value: string | undefined) => void;
+}) {
+  return (
+    <FormField>
+      <FieldLabel title={title} required={required} />
+      <select
+        aria-label={title}
+        required={required}
+        value={value ?? ''}
+        onChange={(event) =>
+          onChange(event.currentTarget.value || undefined)
+        }
+        className="h-11 w-full min-w-0 rounded-xl border border-hairline bg-canvas px-3 text-[16px] text-ink focus:border-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 sm:text-[14px]"
+      >
+        {placeholder ? <option value="">{placeholder}</option> : null}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.hint ? `${option.label} · ${option.hint}` : option.label}
+          </option>
+        ))}
+      </select>
       <PropertyDescription text={description} />
     </FormField>
   );

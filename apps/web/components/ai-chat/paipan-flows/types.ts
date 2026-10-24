@@ -65,6 +65,16 @@ export interface PaipanFlowFieldKit {
     options: ChoiceGridOption[];
     onChange: (value: string) => void;
   }>;
+  /** 选项较多时用下拉框代替按钮网格，避免单个字段横向占满整屏。 */
+  SelectField: ComponentType<{
+    title: string;
+    description?: string;
+    required?: boolean;
+    value: string | undefined;
+    placeholder?: string;
+    options: ChoiceGridOption[];
+    onChange: (value: string | undefined) => void;
+  }>;
   FieldTextInput: ComponentType<{
     title: string;
     required?: boolean;
