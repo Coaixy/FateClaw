@@ -52,8 +52,7 @@ export function ClientProfileSelector({
     (type: 'success' | 'error', message: string) => toast(type, message),
     [toast],
   );
-  const { profiles, loading, loadProfiles, create } =
-    useClientProfiles(notify);
+  const { profiles, loading, loadProfiles, create } = useClientProfiles(notify);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -101,34 +100,27 @@ export function ClientProfileSelector({
   };
 
   return (
-    <div className="rounded-2xl border border-hairline bg-surface-card/45 p-3 sm:p-4">
-      <div className="mb-2 flex items-center gap-1">
-        <UserCheck size={13} className="text-primary" />
-        <span className="text-[11px] sm:text-[12px] font-medium text-ink">
-          {t('clients.selector.label')}
-        </span>
-      </div>
-
+    <div className="min-w-0">
       <div className="relative">
         <button
           type="button"
           onClick={() => setPickerOpen((value) => !value)}
-          className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl border border-hairline bg-canvas px-3 py-2 text-left transition-all duration-150 hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-inset"
+          className="inline-flex h-9 max-w-full items-center gap-1.5 rounded-lg px-2 text-left text-[12px] text-muted hover:bg-surface-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          title={
+            selectedProfile
+              ? `${t('clients.selector.label')}：${selectedProfile.name}`
+              : undefined
+          }
           aria-haspopup="listbox"
           aria-expanded={pickerOpen}
         >
-          <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-1.5">
             <Users size={14} className="shrink-0 text-muted" />
-            <span className="min-w-0 truncate text-[13px] text-ink">
+            <span className="min-w-0 truncate">
               {selectedProfile
                 ? selectedProfile.name
                 : t('clients.selector.placeholder')}
             </span>
-            {selectedProfile && buildBirthSummary(selectedProfile) && (
-              <span className="min-w-0 truncate text-[11px] text-muted">
-                {buildBirthSummary(selectedProfile)}
-              </span>
-            )}
           </span>
           <ChevronDown
             size={14}
@@ -140,7 +132,7 @@ export function ClientProfileSelector({
 
         {pickerOpen && (
           <div
-            className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-hairline bg-canvas shadow-[0_14px_36px_rgba(0,0,0,0.16)]"
+            className="absolute right-0 top-full z-20 mt-1 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-hairline bg-canvas shadow-[0_14px_36px_rgba(0,0,0,0.16)]"
             role="listbox"
           >
             <div className="max-h-64 overflow-y-auto p-1.5">
@@ -192,9 +184,7 @@ export function ClientProfileSelector({
                           </span>
                         )}
                       </span>
-                      {selected && (
-                        <UserCheck size={13} className="shrink-0" />
-                      )}
+                      {selected && <UserCheck size={13} className="shrink-0" />}
                     </button>
                   );
                 })

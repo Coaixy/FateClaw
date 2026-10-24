@@ -2,9 +2,12 @@
 
 import { Coins, Plus, RotateCcw, X } from 'lucide-react';
 
-import { PaipanStepFrame } from '../shared/paipan-step-frame';
-import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
-import type { ChoiceGridOption, PaipanFlowChange, PaipanFlowProps } from '../types';
+import { PaipanForm } from '../shared/paipan-form';
+import type {
+  ChoiceGridOption,
+  PaipanFlowChange,
+  PaipanFlowProps,
+} from '../types';
 import { useI18n } from '@/lib/i18n';
 
 type TranslateFn = ReturnType<typeof useI18n>['t'];
@@ -76,12 +79,18 @@ function NumberSlotsInput({
   return (
     <fieldset className="min-w-0 rounded-2xl border border-hairline bg-surface-card/45 p-3 sm:p-4">
       <legend className="sr-only">
-        {t(`aiChat.paipanFlows.iching.${resizable ? 'numberList' : 'threeNumbers'}`)}
+        {t(
+          `aiChat.paipanFlows.iching.${resizable ? 'numberList' : 'threeNumbers'}`,
+        )}
       </legend>
       <p className="mb-3 text-[11px] leading-5 text-muted">
-        {t(`aiChat.paipanFlows.iching.${resizable ? 'numberListDescription' : 'threeNumbersDescription'}`)}
+        {t(
+          `aiChat.paipanFlows.iching.${resizable ? 'numberListDescription' : 'threeNumbersDescription'}`,
+        )}
       </p>
-      <div className={`grid gap-3 ${resizable ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3'}`}>
+      <div
+        className={`grid gap-3 ${resizable ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3'}`}
+      >
         {slots.map((value, index) => {
           const label = t('aiChat.paipanFlows.iching.numberSlot', {
             index: index + 1,
@@ -90,12 +99,16 @@ function NumberSlotsInput({
           return (
             <div key={index} className="min-w-0">
               <div className="mb-1.5 flex min-h-7 items-center justify-between gap-1">
-                <span className="text-[11px] font-medium text-ink">{label}</span>
+                <span className="text-[11px] font-medium text-ink">
+                  {label}
+                </span>
                 {resizable && slots.length > 2 && (
                   <button
                     type="button"
                     onClick={() =>
-                      onChange(slots.filter((_, slotIndex) => slotIndex !== index))
+                      onChange(
+                        slots.filter((_, slotIndex) => slotIndex !== index),
+                      )
                     }
                     aria-label={t('aiChat.paipanFlows.iching.removeNumber', {
                       index: index + 1,
@@ -149,7 +162,6 @@ function buildIchingMethodOptions(t: TranslateFn): ChoiceGridOption[] {
       value: 'dayan',
       label: t('aiChat.paipanFlows.iching.methods.dayan.label'),
       hint: t('aiChat.paipanFlows.iching.methods.dayan.hint'),
-      recommended: true,
     },
     {
       value: 'lueshifa',
@@ -246,8 +258,9 @@ function getNextYaoValue(current: ManualYaoSlot): YaoValue {
 
 function rollYaoByThreeCoins(): YaoValue {
   // 三枚铜钱法等价于 3 次独立抛掷：每枚取 2 或 3，合计自然落在 6/7/8/9。
-  const total = Array.from({ length: 3 }, () => (Math.random() < 0.5 ? 2 : 3))
-    .reduce((sum, value) => sum + value, 0);
+  const total = Array.from({ length: 3 }, () =>
+    Math.random() < 0.5 ? 2 : 3,
+  ).reduce((sum, value) => sum + value, 0);
   return String(total) as YaoValue;
 }
 
@@ -356,9 +369,7 @@ function ManualYaoInput({
                   copy?.helper ?? t('aiChat.paipanFlows.iching.undetermined'),
               })}
             >
-              <span className="text-[11px] font-medium">
-                {positionLabel}
-              </span>
+              <span className="text-[11px] font-medium">{positionLabel}</span>
               <span className="flex min-w-0 justify-center">
                 <YaoLineGlyph value={value} />
               </span>
@@ -388,12 +399,6 @@ function ManualYaoInput({
   );
 }
 
-/**
- * 六爻排盘的新手引导填写 flow。
- *
- * @param props 外层弹窗注入的 draft、字段组件、辅助函数和变更回调。
- * @returns 分步骤填写起卦方式、起卦时间和条件参数的排盘表单。
- */
 export function IchingFlow({
   draft,
   fieldKit,
@@ -403,25 +408,17 @@ export function IchingFlow({
   finalContent,
   finalAction,
   resultContent,
-  resultAction,
-  onResultStepChange,
 }: PaipanFlowProps) {
   const { t } = useI18n();
   const { DateTimeField, ChoiceGrid } = fieldKit;
-  const {
-    getValueAtPath,
-    getCurrentLocalDateParts,
-    fromDateTimeLocalValue,
-  } = helpers;
+  const { getValueAtPath, getCurrentLocalDateParts, fromDateTimeLocalValue } =
+    helpers;
   const method =
     typeof getValueAtPath(draft, ['method']) === 'string'
       ? String(getValueAtPath(draft, ['method']))
       : 'dayan';
   const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
-  const datetime =
-    typeof getValueAtPath(draft, ['datetime']) === 'string'
-      ? String(getValueAtPath(draft, ['datetime'])).trim()
-      : '';
+
   const yao =
     typeof getValueAtPath(draft, ['yao']) === 'string'
       ? String(getValueAtPath(draft, ['yao'])).trim()
@@ -433,138 +430,98 @@ export function IchingFlow({
   const numbers = getValueAtPath(draft, ['numbers']);
   const rawNumberSlots = getValueAtPath(draft, ['$numberSlots']);
   const numberSlots = normalizeNumberSlots(rawNumberSlots, numbers, method);
-  const hasValidMethodParams =
-    method === 'manual'
-      ? /^[6789]{6}$/.test(yao)
-      : method === 'three'
-        ? Array.isArray(numbers) &&
-          numbers.length === 3 &&
-          numbers.every((value) => typeof value === 'number' && Number.isInteger(value))
-        : method === 'array'
-          ? Array.isArray(numbers) &&
-            numbers.length >= 2 &&
-            numbers.every((value) => typeof value === 'number' && Number.isInteger(value))
-          : true;
+
   const methodOptions = buildIchingMethodOptions(t);
 
-  const steps: PaipanStep[] = [
-    {
-      id: 'method',
-      title: t('aiChat.paipanFlows.iching.methodTitle'),
-      description: t('aiChat.paipanFlows.iching.methodDescription'),
-      status: method ? 'complete' : 'incomplete',
-      content: (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.iching.methodTitle')}>
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.iching.methodTitle')}
-            value={method}
-            options={methodOptions}
-            onChange={(value) => {
-              if (value === 'three' || value === 'array') {
-                onManyChanges([
-                  { path: ['method'], value },
-                  ...buildNumberSlotChanges(normalizeNumberSlots(rawNumberSlots, numbers, value)),
-                ]);
-                return;
-              }
-              onChange(['method'], value);
-            }}
-          />
-        </PaipanStepFrame>
-      ),
-    },
-    {
-      id: 'time',
-      title: t('aiChat.paipanFlows.iching.timeTitle'),
-      description: t('aiChat.paipanFlows.iching.timeDescription'),
-      status: useCurrentTime || datetime ? 'complete' : 'incomplete',
-      content: (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.iching.timeTitle')}>
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.iching.timeTitle')}
-            value={useCurrentTime ? 'now' : 'custom'}
-            options={[
-              {
-                value: 'now',
-                label: t('aiChat.paipanFlows.common.currentTimeSolar'),
-                hint: t('aiChat.paipanFlows.common.nowRecommended'),
-                recommended: true,
-              },
-              {
-                value: 'custom',
-                label: t('aiChat.paipanFlows.common.customTimeSolar'),
-                hint: t('aiChat.paipanFlows.iching.customTimeHint'),
-              },
-            ]}
-            onChange={(value) => {
-              if (value === 'now') {
-                onManyChanges([
-                  { path: ['$useCurrentTime'], value: true },
-                  { path: ['datetime'], value: undefined },
-                ]);
-                return;
-              }
-              const now = getCurrentLocalDateParts();
-              onManyChanges([
-                { path: ['$useCurrentTime'], value: false },
-                {
-                  path: ['datetime'],
-                  value:
-                    typeof getValueAtPath(draft, ['datetime']) === 'string'
-                      ? getValueAtPath(draft, ['datetime'])
-                      : fromDateTimeLocalValue(now.dateTime),
-                },
-              ]);
-            }}
-          />
-
-          {!useCurrentTime && (
-            <DateTimeField
-              title={t('aiChat.paipanFlows.iching.customTimeField')}
-              required
-              description={t('aiChat.paipanFlows.iching.customTimeDescription')}
-              value={getValueAtPath(draft, ['datetime'])}
-              onChange={(value) => onChange(['datetime'], value)}
-            />
-          )}
-        </PaipanStepFrame>
-      ),
-    },
-    {
-      id: 'method-params',
-      title: t('aiChat.paipanFlows.iching.paramsTitle'),
-      description: t('aiChat.paipanFlows.iching.paramsDescription'),
-      status: hasValidMethodParams ? 'complete' : 'incomplete',
-      content:
-        method === 'three' || method === 'array' || method === 'manual' ? (
-          <PaipanStepFrame title={t('aiChat.paipanFlows.iching.paramsTitle')}>
-            {(method === 'three' || method === 'array') && (
-              <NumberSlotsInput
-                slots={numberSlots}
-                resizable={method === 'array'}
-                onChange={(slots) => onManyChanges(buildNumberSlotChanges(slots))}
-              />
-            )}
-
-            {method === 'manual' && (
-              <ManualYaoInput
-                slots={manualYaoSlots}
-                onChange={(slots) => onManyChanges(buildManualYaoChanges(slots))}
-              />
-            )}
-          </PaipanStepFrame>
-        ) : null,
-    },
-  ];
-
   return (
-    <PaipanStepper
-      steps={steps}
+    <PaipanForm
       finalContent={finalContent}
       finalAction={finalAction}
       resultContent={resultContent}
-      resultAction={resultAction}
-      onResultStepChange={onResultStepChange}
-    />
+    >
+      <ChoiceGrid
+        title={t('aiChat.paipanFlows.iching.methodTitle')}
+        value={method}
+        options={methodOptions}
+        onChange={(value) => {
+          if (value === 'three' || value === 'array') {
+            onManyChanges([
+              { path: ['method'], value },
+              ...buildNumberSlotChanges(
+                normalizeNumberSlots(rawNumberSlots, numbers, value),
+              ),
+            ]);
+            return;
+          }
+          onChange(['method'], value);
+        }}
+      />
+
+      <ChoiceGrid
+        title={t('aiChat.paipanFlows.iching.timeTitle')}
+        value={useCurrentTime ? 'now' : 'custom'}
+        options={[
+          {
+            value: 'now',
+            label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+            hint: t('aiChat.paipanFlows.common.nowRecommended'),
+          },
+          {
+            value: 'custom',
+            label: t('aiChat.paipanFlows.common.customTimeSolar'),
+            hint: t('aiChat.paipanFlows.iching.customTimeHint'),
+          },
+        ]}
+        onChange={(value) => {
+          if (value === 'now') {
+            onManyChanges([
+              { path: ['$useCurrentTime'], value: true },
+              { path: ['datetime'], value: undefined },
+            ]);
+            return;
+          }
+          const now = getCurrentLocalDateParts();
+          onManyChanges([
+            { path: ['$useCurrentTime'], value: false },
+            {
+              path: ['datetime'],
+              value:
+                typeof getValueAtPath(draft, ['datetime']) === 'string'
+                  ? getValueAtPath(draft, ['datetime'])
+                  : fromDateTimeLocalValue(now.dateTime),
+            },
+          ]);
+        }}
+      />
+
+      {!useCurrentTime && (
+        <DateTimeField
+          title={t('aiChat.paipanFlows.iching.customTimeField')}
+          required
+          description={t('aiChat.paipanFlows.iching.customTimeDescription')}
+          value={getValueAtPath(draft, ['datetime'])}
+          onChange={(value) => onChange(['datetime'], value)}
+        />
+      )}
+
+      {method === 'three' || method === 'array' || method === 'manual' ? (
+        <>
+          {(method === 'three' || method === 'array') && (
+            <NumberSlotsInput
+              slots={numberSlots}
+              resizable={method === 'array'}
+              onChange={(slots) => onManyChanges(buildNumberSlotChanges(slots))}
+            />
+          )}
+
+          {method === 'manual' && (
+            <ManualYaoInput
+              slots={manualYaoSlots}
+              onChange={(slots) => onManyChanges(buildManualYaoChanges(slots))}
+            />
+          )}
+        </>
+      ) : null}
+    </PaipanForm>
   );
 }

@@ -3,8 +3,7 @@
 import { Check, Loader2, Search } from 'lucide-react';
 import { useReducer, useState } from 'react';
 
-import { PaipanStepFrame } from '../shared/paipan-step-frame';
-import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
+import { PaipanForm } from '../shared/paipan-form';
 import type { PaipanFlowProps } from '../types';
 import {
   paipanApi,
@@ -161,17 +160,18 @@ function BaziModeSwitch({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-1 rounded-2xl border border-hairline bg-surface-card/45 p-1">
+    <div className="inline-flex shrink-0 gap-1 rounded-lg bg-surface-soft p-0.5">
       {options.map((option) => {
         const active = option.value === mode;
         return (
           <button
             key={option.value}
             type="button"
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`h-9 rounded-xl text-[12px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${
+            className={`h-8 rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${
               active
-                ? 'bg-primary text-on-primary shadow-[0_8px_18px_rgba(0,0,0,0.08)]'
+                ? 'bg-canvas text-ink'
                 : 'text-muted hover:bg-surface-card hover:text-ink'
             }`}
           >
@@ -183,12 +183,7 @@ function BaziModeSwitch({
   );
 }
 
-/**
- * 八字排盘的新手引导填写 flow。
- *
- * @param props 外层弹窗注入的 draft、字段组件、辅助函数和变更回调。
- * @returns 分步骤填写出生日期、出生时间和性别的排盘表单。
- */
+/** Shared birth form for Bazi and Ziwei, with optional Ganzhi lookup. */
 interface BaziFlowProps extends PaipanFlowProps {
   enableGanzhiReverse?: boolean;
 }
@@ -199,11 +194,10 @@ export function BaziFlow({
   helpers,
   onChange,
   onManyChanges,
+  prefillContent,
   finalContent,
   finalAction,
   resultContent,
-  resultAction,
-  onResultStepChange,
   enableGanzhiReverse = true,
 }: BaziFlowProps) {
   const { t } = useI18n();
@@ -237,7 +231,6 @@ export function BaziFlow({
       : '';
   const birthHour = getValueAtPath(draft, ['hour']);
   const birthMinute = getValueAtPath(draft, ['minute']);
-  const hasBirthHour = typeof getValueAtPath(draft, ['hour']) === 'number';
   const selectedReverseLabel =
     birthDate && typeof birthHour === 'number'
       ? `${birthDate} ${pad2(birthHour)}:${pad2(
@@ -317,81 +310,37 @@ export function BaziFlow({
     ]);
   };
 
-  const genderStep: PaipanStep = {
-    id: 'gender',
-    title: t('aiChat.paipanFlows.bazi.genderTitle'),
-    description: t('aiChat.paipanFlows.bazi.genderDescription'),
-    status: gender ? 'complete' : 'incomplete',
-    content: (
-      <PaipanStepFrame title={t('aiChat.paipanFlows.bazi.genderTitle')}>
-        <ChoiceGrid
-          title={t('aiChat.paipanFlows.bazi.genderTitle')}
-          required
-          value={gender}
-          options={[
-            { value: '男', label: t('aiChat.paipanFlows.common.male') },
-            { value: '女', label: t('aiChat.paipanFlows.common.female') },
-          ]}
-          onChange={(value) => onChange(['gender'], value)}
-        />
-      </PaipanStepFrame>
-    ),
-  };
+  const genderField = (
+    <ChoiceGrid
+      title={t('aiChat.paipanFlows.bazi.genderTitle')}
+      required
+      value={gender}
+      options={[
+        { value: '男', label: t('aiChat.paipanFlows.common.male') },
+        { value: '女', label: t('aiChat.paipanFlows.common.female') },
+      ]}
+      onChange={(value) => onChange(['gender'], value)}
+    />
+  );
 
-  const solarSteps: PaipanStep[] = [
-    {
-      id: 'birth-date',
-      title: t('aiChat.paipanFlows.bazi.birthDateTitle'),
-      description: t('aiChat.paipanFlows.bazi.birthDateDescription'),
-      status: birthDate ? 'complete' : 'incomplete',
-      content: (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.bazi.birthDateTitle')}>
-          <DateField
-            title={t('aiChat.paipanFlows.bazi.birthDateTitle')}
-            required
-            value={birthDate}
-            onChange={(value) => onChange(['solarDate'], value)}
-          />
-        </PaipanStepFrame>
-      ),
-    },
-    {
-      id: 'birth-time',
-      title: t('aiChat.paipanFlows.bazi.birthTimeTitle'),
-      description: t('aiChat.paipanFlows.bazi.birthTimeDescription'),
-      status: hasBirthHour ? 'complete' : 'incomplete',
-      content: (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.bazi.birthTimeTitle')}>
-          <TimeField
-            title={t('aiChat.paipanFlows.bazi.birthTimeTitle')}
-            required
-            description={t('aiChat.paipanFlows.bazi.birthTimeFieldDescription')}
-            hour={birthHour}
-            minute={birthMinute}
-            onChange={(next) =>
-              onManyChanges([
-                { path: ['hour'], value: next.hour },
-                { path: ['minute'], value: next.minute ?? 0 },
-              ])
-            }
-          />
-        </PaipanStepFrame>
-      ),
-    },
-    genderStep,
-  ];
-
-  const ganzhiSteps: PaipanStep[] = [
-    {
-      id: 'ganzhi-reverse',
-      title: t('aiChat.paipanFlows.bazi.reverseTitle'),
-      description: t('aiChat.paipanFlows.bazi.reverseDescription'),
-      status: birthDate && hasBirthHour ? 'complete' : 'incomplete',
-      content: (
-        <PaipanStepFrame
-          title={t('aiChat.paipanFlows.bazi.reverseTitle')}
-          description={t('aiChat.paipanFlows.bazi.reverseFrameDescription')}
-        >
+  return (
+    <PaipanForm
+      finalContent={finalContent}
+      finalAction={finalAction}
+      resultContent={resultContent}
+    >
+      {(enableGanzhiReverse || prefillContent) && (
+        <div className="flex items-center justify-between gap-2">
+          {enableGanzhiReverse ? (
+            <BaziModeSwitch mode={inputMode} onChange={setInputMode} />
+          ) : (
+            <span />
+          )}
+          {prefillContent}
+        </div>
+      )}
+      {enableGanzhiReverse && inputMode === 'ganzhi' ? (
+        <div className="space-y-3">
           <div className="rounded-2xl border border-hairline bg-surface-card/55 p-3">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <PillarInput
@@ -501,28 +450,32 @@ export function BaziFlow({
               })}
             </div>
           )}
-        </PaipanStepFrame>
-      ),
-    },
-    genderStep,
-  ];
+          {genderField}
+        </div>
+      ) : (
+        <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_auto]">
+          <DateField
+            title={t('aiChat.paipanFlows.bazi.birthDateTitle')}
+            required
+            value={birthDate}
+            onChange={(value) => onChange(['solarDate'], value)}
+          />
 
-  const steps =
-    enableGanzhiReverse && inputMode === 'ganzhi' ? ganzhiSteps : solarSteps;
-
-  return (
-    <div className="space-y-4">
-      {enableGanzhiReverse && (
-        <BaziModeSwitch mode={inputMode} onChange={setInputMode} />
+          <TimeField
+            title={t('aiChat.paipanFlows.bazi.birthTimeTitle')}
+            required
+            hour={birthHour}
+            minute={birthMinute}
+            onChange={(next) =>
+              onManyChanges([
+                { path: ['hour'], value: next.hour },
+                { path: ['minute'], value: next.minute ?? 0 },
+              ])
+            }
+          />
+          <div className="col-span-2 sm:col-span-1">{genderField}</div>
+        </div>
       )}
-      <PaipanStepper
-        steps={steps}
-        finalContent={finalContent}
-        finalAction={finalAction}
-        resultContent={resultContent}
-        resultAction={resultAction}
-        onResultStepChange={onResultStepChange}
-      />
-    </div>
+    </PaipanForm>
   );
 }

@@ -376,33 +376,6 @@ function isValidInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value);
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
-}
-
-function parseDateValue(value: unknown): { year: number; month: number; day: number } | null {
-  if (typeof value !== 'string') return null;
-  const matched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!matched) return null;
-  const year = Number.parseInt(matched[1], 10);
-  const month = Number.parseInt(matched[2], 10);
-  const day = Number.parseInt(matched[3], 10);
-  if (!year || month < 1 || month > 12) return null;
-  const maxDay = getDaysInMonth(year, month);
-  if (day < 1 || day > maxDay) return null;
-  return { year, month, day };
-}
-
-function buildDateValue(year: number, month: number, day: number): string {
-  const safeMonth = clampNumber(month, 1, 12);
-  const safeDay = clampNumber(day, 1, getDaysInMonth(year, safeMonth));
-  return `${year}-${pad2(safeMonth)}-${pad2(safeDay)}`;
-}
-
 function parseDateTimePickerValue(value: unknown): {
   date?: string;
   hour?: number;
@@ -814,13 +787,10 @@ export const PAIPAN_FLOW_HELPERS: PaipanFlowHelpers = {
  */
 export const PAIPAN_SHEET_HELPERS = {
   buildDateTimePickerValue,
-  buildDateValue,
   buildInitialDraftForSkill,
   buildSubmitInputForSkill,
-  clampNumber,
   formatArrayInputValue,
   getCurrentLocalDateParts,
-  getDaysInMonth,
   getFieldCopy,
   getOptionLabel,
   getPrimaryType,
@@ -830,7 +800,6 @@ export const PAIPAN_SHEET_HELPERS = {
   isValidInteger,
   pad2,
   parseDateTimePickerValue,
-  parseDateValue,
   parseDelimitedArrayInput,
   setValueAtPath,
   validateDraftForSkill,

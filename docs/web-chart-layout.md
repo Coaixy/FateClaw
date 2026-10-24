@@ -17,6 +17,20 @@ a desktop conversation column.
 See [Agent architecture](agent-architecture.md#conversation-visualizations) for
 the persistence contract and rendering limits.
 
+## Manual chart forms
+
+`PaipanSheet` owns the draft and preview for all seven chart types. Common fields
+and parameters for the selected method appear together in a compact form,
+followed by optional advanced settings and the preview action. Birth date, time,
+and gender share one field group, without individual cards, step navigation, or
+separate application picker sheets. Client prefill is an optional menu beside the
+input mode, and option hints remain available as tooltips.
+
+The preview shows the chart and session actions. Editing clears the preview while
+retaining the draft and client association; a new preview is required before
+continuing. Native date and time fields preserve the existing API date strings,
+24-hour values, and local-time semantics.
+
 ## Fitted charts
 
 Every chart goes through `ResponsiveArtifactFrame`. Mark its bounded scroll region with `data-artifact-viewport`. The chat workspace, shared conversations, preview sheets, and full-screen viewer supply this boundary. Its height must be independent of the fitted chart's height. Preview results use `BottomSheet.fillHeight` to establish a definite desktop height as well as a definite mobile height.

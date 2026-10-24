@@ -1,7 +1,6 @@
 'use client';
 
-import { PaipanStepFrame } from '../shared/paipan-step-frame';
-import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
+import { PaipanForm } from '../shared/paipan-form';
 import type { ChoiceGridOption, PaipanFlowProps } from '../types';
 import { useI18n } from '@/lib/i18n';
 
@@ -13,7 +12,6 @@ function buildMeihuaMethodOptions(t: TranslateFn): ChoiceGridOption[] {
       value: 'time',
       label: t('aiChat.paipanFlows.meihua.methods.time.label'),
       hint: t('aiChat.paipanFlows.meihua.methods.time.hint'),
-      recommended: true,
     },
     {
       value: 'counts',
@@ -34,7 +32,6 @@ function buildCountMethodOptions(t: TranslateFn): ChoiceGridOption[] {
       value: 'number',
       label: t('aiChat.paipanFlows.meihua.countMethods.number.label'),
       hint: t('aiChat.paipanFlows.meihua.countMethods.number.hint'),
-      recommended: true,
     },
     {
       value: 'word',
@@ -136,16 +133,6 @@ function normalizeMovingLineValue(value: unknown): string | undefined {
     : undefined;
 }
 
-function isValidCountNumber(value: unknown): boolean {
-  return typeof value === 'number' && Number.isInteger(value);
-}
-
-/**
- * 梅花易数排盘的新手引导填写 flow。
- *
- * @param props 外层弹窗注入的 draft、字段组件、辅助函数和变更回调。
- * @returns 分步骤填写时间起卦、数值起卦或指定上下卦参数的排盘表单。
- */
 export function MeihuaFlow({
   draft,
   fieldKit,
@@ -155,8 +142,6 @@ export function MeihuaFlow({
   finalContent,
   finalAction,
   resultContent,
-  resultAction,
-  onResultStepChange,
 }: PaipanFlowProps) {
   const { t } = useI18n();
   const { DateTimeField, ChoiceGrid, FieldTextInput } = fieldKit;
@@ -167,10 +152,7 @@ export function MeihuaFlow({
       ? String(getValueAtPath(draft, ['method']))
       : 'time';
   const useCurrentTime = getValueAtPath(draft, ['$useCurrentTime']) !== false;
-  const datetime =
-    typeof getValueAtPath(draft, ['datetime']) === 'string'
-      ? String(getValueAtPath(draft, ['datetime'])).trim()
-      : '';
+
   const upper = getValueAtPath(draft, ['upper']);
   const lower = getValueAtPath(draft, ['lower']);
   const moving = getValueAtPath(draft, ['moving']);
@@ -187,201 +169,153 @@ export function MeihuaFlow({
     typeof getValueAtPath(draft, ['label']) === 'string'
       ? String(getValueAtPath(draft, ['label']))
       : '';
-  const hasValidTime = useCurrentTime || Boolean(datetime);
-  const hasValidCounts =
-    isValidCountNumber(upper) &&
-    isValidCountNumber(lower) &&
-    (moving === undefined || isValidCountNumber(moving));
-  const hasValidTrigrams =
-    typeof upperTrigram === 'string' &&
-    typeof lowerTrigram === 'string' &&
-    Boolean(movingLineValue);
+
   const methodOptions = buildMeihuaMethodOptions(t);
   const countMethodOptions = buildCountMethodOptions(t);
   const trigramOptions = buildTrigramOptions(t);
   const movingLineOptions = buildMovingLineOptions(t);
 
-  const steps: PaipanStep[] = [
-    {
-      id: 'method',
-      title: t('aiChat.paipanFlows.meihua.methodTitle'),
-      description: t('aiChat.paipanFlows.meihua.methodDescription'),
-      status: method ? 'complete' : 'incomplete',
-      content: (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.methodTitle')}>
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.meihua.methodTitle')}
-            value={method}
-            options={methodOptions}
-            onChange={(value) => onChange(['method'], value)}
-          />
-        </PaipanStepFrame>
-      ),
-    },
-    {
-      id: 'time',
-      title: t('aiChat.paipanFlows.meihua.timeTitle'),
-      description: t('aiChat.paipanFlows.meihua.timeDescription'),
-      status: hasValidTime ? 'complete' : 'incomplete',
-      content:
-        method === 'time' ? (
-          <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.timeTitle')}>
-            <ChoiceGrid
-              title={t('aiChat.paipanFlows.meihua.timeTitle')}
-              value={useCurrentTime ? 'now' : 'custom'}
-              options={[
-                {
-                  value: 'now',
-                  label: t('aiChat.paipanFlows.common.currentTimeSolar'),
-                  hint: t('aiChat.paipanFlows.meihua.nowHint'),
-                  recommended: true,
-                },
-                {
-                  value: 'custom',
-                  label: t('aiChat.paipanFlows.common.customTimeSolar'),
-                  hint: t('aiChat.paipanFlows.meihua.customHint'),
-                },
-              ]}
-              onChange={(value) => {
-                if (value === 'now') {
-                  onManyChanges([
-                    { path: ['$useCurrentTime'], value: true },
-                    { path: ['datetime'], value: undefined },
-                  ]);
-                  return;
-                }
-                const now = getCurrentLocalDateParts();
-                onManyChanges([
-                  { path: ['$useCurrentTime'], value: false },
-                  {
-                    path: ['datetime'],
-                    value:
-                      typeof getValueAtPath(draft, ['datetime']) === 'string'
-                        ? getValueAtPath(draft, ['datetime'])
-                        : fromDateTimeLocalValue(now.dateTime),
-                  },
-                ]);
-              }}
-            />
-
-            {!useCurrentTime && (
-              <DateTimeField
-                title={t('aiChat.paipanFlows.meihua.customTimeField')}
-                required
-                value={getValueAtPath(draft, ['datetime'])}
-                onChange={(value) => onChange(['datetime'], value)}
-              />
-            )}
-          </PaipanStepFrame>
-        ) : null,
-    },
-    {
-      id: 'counts',
-      title: t('aiChat.paipanFlows.meihua.countsTitle'),
-      description: t('aiChat.paipanFlows.meihua.countsDescription'),
-      status: hasValidCounts ? 'complete' : 'incomplete',
-      content:
-        method === 'counts' ? (
-          <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.countsFrameTitle')}>
-            <ChoiceGrid
-              title={t('aiChat.paipanFlows.meihua.countSource')}
-              value={countMethod}
-              options={countMethodOptions}
-              columns={3}
-              onChange={(value) => onChange(['countMethod'], value)}
-            />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <FieldTextInput
-                title={t('aiChat.paipanFlows.meihua.upper')}
-                required
-                value={formatIntegerValue(upper)}
-                placeholder={t('aiChat.paipanFlows.meihua.upperPlaceholder')}
-                onChange={(value) =>
-                  onChange(['upper'], parseIntegerValue(value))
-                }
-              />
-              <FieldTextInput
-                title={t('aiChat.paipanFlows.meihua.lower')}
-                required
-                value={formatIntegerValue(lower)}
-                placeholder={t('aiChat.paipanFlows.meihua.lowerPlaceholder')}
-                onChange={(value) =>
-                  onChange(['lower'], parseIntegerValue(value))
-                }
-              />
-              <FieldTextInput
-                title={t('aiChat.paipanFlows.meihua.moving')}
-                value={formatIntegerValue(moving)}
-                placeholder={t('aiChat.paipanFlows.meihua.movingPlaceholder')}
-                onChange={(value) =>
-                  onChange(['moving'], parseIntegerValue(value))
-                }
-              />
-            </div>
-            <FieldTextInput
-              title={t('aiChat.paipanFlows.common.remark')}
-              value={label}
-              placeholder={t('aiChat.paipanFlows.meihua.countRemarkPlaceholder')}
-              onChange={(value) => onChange(['label'], value)}
-            />
-          </PaipanStepFrame>
-        ) : null,
-    },
-    {
-      id: 'trigrams',
-      title: t('aiChat.paipanFlows.meihua.trigramsTitle'),
-      description: t('aiChat.paipanFlows.meihua.trigramsDescription'),
-      status: hasValidTrigrams ? 'complete' : 'incomplete',
-      content:
-        method === 'trigrams' ? (
-          <PaipanStepFrame title={t('aiChat.paipanFlows.meihua.trigramsFrameTitle')}>
-            <ChoiceGrid
-              title={t('aiChat.paipanFlows.meihua.upperTrigram')}
-              required
-              value={
-                typeof upperTrigram === 'string' ? upperTrigram : undefined
-              }
-              options={trigramOptions}
-              onChange={(value) => onChange(['upperTrigram'], value)}
-            />
-            <ChoiceGrid
-              title={t('aiChat.paipanFlows.meihua.lowerTrigram')}
-              required
-              value={
-                typeof lowerTrigram === 'string' ? lowerTrigram : undefined
-              }
-              options={trigramOptions}
-              onChange={(value) => onChange(['lowerTrigram'], value)}
-            />
-            <ChoiceGrid
-              title={t('aiChat.paipanFlows.meihua.movingLine')}
-              required
-              value={movingLineValue}
-              options={movingLineOptions}
-              columns={3}
-              onChange={(value) =>
-                onChange(['movingLine'], Number.parseInt(value, 10))
-              }
-            />
-            <FieldTextInput
-              title={t('aiChat.paipanFlows.common.remark')}
-              value={label}
-              placeholder={t('aiChat.paipanFlows.meihua.trigramRemarkPlaceholder')}
-              onChange={(value) => onChange(['label'], value)}
-            />
-          </PaipanStepFrame>
-        ) : null,
-    },
-  ];
-
   return (
-    <PaipanStepper
-      steps={steps}
+    <PaipanForm
       finalContent={finalContent}
       finalAction={finalAction}
       resultContent={resultContent}
-      resultAction={resultAction}
-      onResultStepChange={onResultStepChange}
-    />
+    >
+      <ChoiceGrid
+        title={t('aiChat.paipanFlows.meihua.methodTitle')}
+        value={method}
+        options={methodOptions}
+        onChange={(value) => onChange(['method'], value)}
+      />
+
+      {method === 'time' ? (
+        <>
+          <ChoiceGrid
+            title={t('aiChat.paipanFlows.meihua.timeTitle')}
+            value={useCurrentTime ? 'now' : 'custom'}
+            options={[
+              {
+                value: 'now',
+                label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+                hint: t('aiChat.paipanFlows.meihua.nowHint'),
+              },
+              {
+                value: 'custom',
+                label: t('aiChat.paipanFlows.common.customTimeSolar'),
+                hint: t('aiChat.paipanFlows.meihua.customHint'),
+              },
+            ]}
+            onChange={(value) => {
+              if (value === 'now') {
+                onManyChanges([
+                  { path: ['$useCurrentTime'], value: true },
+                  { path: ['datetime'], value: undefined },
+                ]);
+                return;
+              }
+              const now = getCurrentLocalDateParts();
+              onManyChanges([
+                { path: ['$useCurrentTime'], value: false },
+                {
+                  path: ['datetime'],
+                  value:
+                    typeof getValueAtPath(draft, ['datetime']) === 'string'
+                      ? getValueAtPath(draft, ['datetime'])
+                      : fromDateTimeLocalValue(now.dateTime),
+                },
+              ]);
+            }}
+          />
+
+          {!useCurrentTime && (
+            <DateTimeField
+              title={t('aiChat.paipanFlows.meihua.customTimeField')}
+              required
+              value={getValueAtPath(draft, ['datetime'])}
+              onChange={(value) => onChange(['datetime'], value)}
+            />
+          )}
+        </>
+      ) : null}
+      {method === 'counts' ? (
+        <>
+          <ChoiceGrid
+            title={t('aiChat.paipanFlows.meihua.countSource')}
+            value={countMethod}
+            options={countMethodOptions}
+            onChange={(value) => onChange(['countMethod'], value)}
+          />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <FieldTextInput
+              title={t('aiChat.paipanFlows.meihua.upper')}
+              required
+              value={formatIntegerValue(upper)}
+              placeholder={t('aiChat.paipanFlows.meihua.upperPlaceholder')}
+              onChange={(value) =>
+                onChange(['upper'], parseIntegerValue(value))
+              }
+            />
+            <FieldTextInput
+              title={t('aiChat.paipanFlows.meihua.lower')}
+              required
+              value={formatIntegerValue(lower)}
+              placeholder={t('aiChat.paipanFlows.meihua.lowerPlaceholder')}
+              onChange={(value) =>
+                onChange(['lower'], parseIntegerValue(value))
+              }
+            />
+            <FieldTextInput
+              title={t('aiChat.paipanFlows.meihua.moving')}
+              value={formatIntegerValue(moving)}
+              placeholder={t('aiChat.paipanFlows.meihua.movingPlaceholder')}
+              onChange={(value) =>
+                onChange(['moving'], parseIntegerValue(value))
+              }
+            />
+          </div>
+          <FieldTextInput
+            title={t('aiChat.paipanFlows.common.remark')}
+            value={label}
+            placeholder={t('aiChat.paipanFlows.meihua.countRemarkPlaceholder')}
+            onChange={(value) => onChange(['label'], value)}
+          />
+        </>
+      ) : null}
+      {method === 'trigrams' ? (
+        <>
+          <ChoiceGrid
+            title={t('aiChat.paipanFlows.meihua.upperTrigram')}
+            required
+            value={typeof upperTrigram === 'string' ? upperTrigram : undefined}
+            options={trigramOptions}
+            onChange={(value) => onChange(['upperTrigram'], value)}
+          />
+          <ChoiceGrid
+            title={t('aiChat.paipanFlows.meihua.lowerTrigram')}
+            required
+            value={typeof lowerTrigram === 'string' ? lowerTrigram : undefined}
+            options={trigramOptions}
+            onChange={(value) => onChange(['lowerTrigram'], value)}
+          />
+          <ChoiceGrid
+            title={t('aiChat.paipanFlows.meihua.movingLine')}
+            required
+            value={movingLineValue}
+            options={movingLineOptions}
+            onChange={(value) =>
+              onChange(['movingLine'], Number.parseInt(value, 10))
+            }
+          />
+          <FieldTextInput
+            title={t('aiChat.paipanFlows.common.remark')}
+            value={label}
+            placeholder={t(
+              'aiChat.paipanFlows.meihua.trigramRemarkPlaceholder',
+            )}
+            onChange={(value) => onChange(['label'], value)}
+          />
+        </>
+      ) : null}
+    </PaipanForm>
   );
 }

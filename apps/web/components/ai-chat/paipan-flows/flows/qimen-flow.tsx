@@ -1,7 +1,6 @@
 'use client';
 
-import { PaipanStepFrame } from '../shared/paipan-step-frame';
-import { PaipanStepper, type PaipanStep } from '../shared/paipan-stepper';
+import { PaipanForm } from '../shared/paipan-form';
 import type { PaipanFlowProps } from '../types';
 import { useI18n } from '@/lib/i18n';
 
@@ -16,12 +15,6 @@ function getRandomQimenShichenHour(): number {
   ];
 }
 
-/**
- * 奇门遁甲排盘的新手引导填写 flow。
- *
- * @param props 外层弹窗注入的 draft、字段组件、辅助函数和变更回调。
- * @returns 分步骤填写当前时间或指定起盘时间的奇门排盘表单。
- */
 export function QimenFlow({
   draft,
   fieldKit,
@@ -31,8 +24,6 @@ export function QimenFlow({
   finalContent,
   finalAction,
   resultContent,
-  resultAction,
-  onResultStepChange,
 }: PaipanFlowProps) {
   const { t } = useI18n();
   const { DateField, TimeField, ChoiceGrid } = fieldKit;
@@ -48,100 +39,85 @@ export function QimenFlow({
     typeof getValueAtPath(draft, ['solarDate']) === 'string'
       ? String(getValueAtPath(draft, ['solarDate']))
       : '';
-  const hasStartHour = typeof getValueAtPath(draft, ['hour']) === 'number';
 
-  const steps: PaipanStep[] = [
-    {
-      id: 'time-mode',
-      title: t('aiChat.paipanFlows.qimen.timeTitle'),
-      description: t('aiChat.paipanFlows.qimen.timeDescription'),
-      status: useCurrentTime ? 'complete' : 'optional',
-      content: (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.qimen.timeTitle')}>
-          <ChoiceGrid
-            title={t('aiChat.paipanFlows.qimen.timeTitle')}
-            value={timeMode}
-            columns={3}
-            options={[
-              {
-                value: 'now',
-                label: t('aiChat.paipanFlows.common.currentTimeSolar'),
-                hint: t('aiChat.paipanFlows.qimen.nowHint'),
-                recommended: true,
-              },
-              {
-                value: 'random',
-                label: t('aiChat.paipanFlows.qimen.randomToday'),
-                hint: t('aiChat.paipanFlows.qimen.randomHint'),
-              },
-              {
-                value: 'custom',
-                label: t('aiChat.paipanFlows.common.customTimeSolar'),
-                hint: t('aiChat.paipanFlows.qimen.customHint'),
-              },
-            ]}
-            onChange={(value) => {
-              if (value === 'now') {
-                onManyChanges([
-                  { path: ['$qimenTimeMode'], value: 'now' },
-                  { path: ['$useCurrentTime'], value: true },
-                  { path: ['solarDate'], value: undefined },
-                  { path: ['hour'], value: undefined },
-                  { path: ['minute'], value: undefined },
-                ]);
-                return;
-              }
-              const now = getCurrentLocalDateParts();
-              if (value === 'random') {
-                onManyChanges([
-                  { path: ['$qimenTimeMode'], value: 'random' },
-                  { path: ['$useCurrentTime'], value: false },
-                  { path: ['solarDate'], value: now.date },
-                  { path: ['hour'], value: getRandomQimenShichenHour() },
-                  { path: ['minute'], value: 0 },
-                ]);
-                return;
-              }
-              onManyChanges([
-                { path: ['$qimenTimeMode'], value: 'custom' },
-                { path: ['$useCurrentTime'], value: false },
-                {
-                  path: ['solarDate'],
-                  value:
-                    typeof getValueAtPath(draft, ['solarDate']) === 'string'
-                      ? getValueAtPath(draft, ['solarDate'])
-                      : now.date,
-                },
-                {
-                  path: ['hour'],
-                  value:
-                    typeof getValueAtPath(draft, ['hour']) === 'number'
-                      ? getValueAtPath(draft, ['hour'])
-                      : now.hour,
-                },
-                {
-                  path: ['minute'],
-                  value:
-                    typeof getValueAtPath(draft, ['minute']) === 'number'
-                      ? getValueAtPath(draft, ['minute'])
-                      : now.minute,
-                },
-              ]);
-            }}
-          />
-        </PaipanStepFrame>
-      ),
-    },
-    {
-      id: 'custom-time',
-      title: t('aiChat.paipanFlows.qimen.customTitle'),
-      description:
-        timeMode === 'random'
-          ? t('aiChat.paipanFlows.qimen.customRandomDescription')
-          : t('aiChat.paipanFlows.qimen.customDescription'),
-      status: startDate && hasStartHour ? 'complete' : 'incomplete',
-      content: useCurrentTime ? null : (
-        <PaipanStepFrame title={t('aiChat.paipanFlows.qimen.customTitle')}>
+  return (
+    <PaipanForm
+      finalContent={finalContent}
+      finalAction={finalAction}
+      resultContent={resultContent}
+    >
+      <ChoiceGrid
+        title={t('aiChat.paipanFlows.qimen.timeTitle')}
+        value={timeMode}
+        options={[
+          {
+            value: 'now',
+            label: t('aiChat.paipanFlows.common.currentTimeSolar'),
+            hint: t('aiChat.paipanFlows.qimen.nowHint'),
+          },
+          {
+            value: 'random',
+            label: t('aiChat.paipanFlows.qimen.randomToday'),
+            hint: t('aiChat.paipanFlows.qimen.randomHint'),
+          },
+          {
+            value: 'custom',
+            label: t('aiChat.paipanFlows.common.customTimeSolar'),
+            hint: t('aiChat.paipanFlows.qimen.customHint'),
+          },
+        ]}
+        onChange={(value) => {
+          if (value === 'now') {
+            onManyChanges([
+              { path: ['$qimenTimeMode'], value: 'now' },
+              { path: ['$useCurrentTime'], value: true },
+              { path: ['solarDate'], value: undefined },
+              { path: ['hour'], value: undefined },
+              { path: ['minute'], value: undefined },
+            ]);
+            return;
+          }
+          const now = getCurrentLocalDateParts();
+          if (value === 'random') {
+            onManyChanges([
+              { path: ['$qimenTimeMode'], value: 'random' },
+              { path: ['$useCurrentTime'], value: false },
+              { path: ['solarDate'], value: now.date },
+              { path: ['hour'], value: getRandomQimenShichenHour() },
+              { path: ['minute'], value: 0 },
+            ]);
+            return;
+          }
+          onManyChanges([
+            { path: ['$qimenTimeMode'], value: 'custom' },
+            { path: ['$useCurrentTime'], value: false },
+            {
+              path: ['solarDate'],
+              value:
+                typeof getValueAtPath(draft, ['solarDate']) === 'string'
+                  ? getValueAtPath(draft, ['solarDate'])
+                  : now.date,
+            },
+            {
+              path: ['hour'],
+              value:
+                typeof getValueAtPath(draft, ['hour']) === 'number'
+                  ? getValueAtPath(draft, ['hour'])
+                  : now.hour,
+            },
+            {
+              path: ['minute'],
+              value:
+                typeof getValueAtPath(draft, ['minute']) === 'number'
+                  ? getValueAtPath(draft, ['minute'])
+                  : now.minute,
+            },
+          ]);
+        }}
+      />
+
+      {!useCurrentTime && (
+        <>
           <DateField
             title={t('aiChat.paipanFlows.qimen.dateTitle')}
             required
@@ -161,19 +137,8 @@ export function QimenFlow({
               ])
             }
           />
-        </PaipanStepFrame>
-      ),
-    },
-  ];
-
-  return (
-    <PaipanStepper
-      steps={steps}
-      finalContent={finalContent}
-      finalAction={finalAction}
-      resultContent={resultContent}
-      resultAction={resultAction}
-      onResultStepChange={onResultStepChange}
-    />
+        </>
+      )}
+    </PaipanForm>
   );
 }

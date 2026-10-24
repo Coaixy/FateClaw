@@ -31,14 +31,9 @@ export interface ChoiceGridOption {
   value: string;
   label: string;
   hint?: string;
-  recommended?: boolean;
 }
 
-/**
- * 从旧排盘弹窗注入给 flow 的字段组件集合。
- *
- * 第一阶段通过依赖注入复用现有字段控件，避免拆 flow 时同时重写基础输入组件。
- */
+/** The sheet supplies shared controls so every flow uses the same input rules. */
 export interface PaipanFlowFieldKit {
   DateField: ComponentType<{
     title: string;
@@ -68,7 +63,6 @@ export interface PaipanFlowFieldKit {
     required?: boolean;
     value: string | undefined;
     options: ChoiceGridOption[];
-    columns?: 2 | 3;
     onChange: (value: string) => void;
   }>;
   FieldTextInput: ComponentType<{
@@ -103,25 +97,17 @@ export interface PaipanFlowHelpers {
   ) => unknown[] | undefined;
 }
 
-/**
- * 每个术数引导 flow 的公共 props。
- *
- * flow 只负责常用参数填写，不负责预览、提交、弹窗开关或高级参数。
- */
+/** Common fields stay together; the sheet owns preview and submission state. */
 export interface PaipanFlowProps {
   draft: Record<string, unknown>;
   fieldKit: PaipanFlowFieldKit;
   helpers: PaipanFlowHelpers;
   onChange: (path: string[], value: unknown) => void;
   onManyChanges: (changes: PaipanFlowChange[]) => void;
+  prefillContent?: ReactNode;
   finalContent?: ReactNode;
   finalAction?: ReactNode;
   resultContent?: ReactNode;
-  resultAction?: ReactNode;
-  /**
-   * 通知外层当前是否停在预览结果步骤，供弹层固定展示结果主操作。
-   */
-  onResultStepChange?: (isActive: boolean) => void;
 }
 
 /**
