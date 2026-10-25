@@ -1,5 +1,13 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github-dark.css';
+@import 'fateclaw-web/chat.css';
+
+@source '../../web/components/ai-chat/ai-chat-message-list.tsx';
+@source '../../web/components/chat';
+@source '../../web/components/charts';
+@source '../../web/components/ui/button.tsx';
+@source '../../web/components/brand/brand-marks.tsx';
+@source '../../web/utils/chart';
 
 @theme {
   /* Brand */

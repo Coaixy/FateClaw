@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
   },
+  transpilePackages: ['@fateclaw/contracts', 'fateclaw-web'],
   // 生产环境：静态导出后交给独立 admin 静态站点托管。
   // 使用 trailingSlash 让导出结果落成 route/index.html，
   // 对部署环境的静态目录托管更稳，不依赖 {path}.html 特判。

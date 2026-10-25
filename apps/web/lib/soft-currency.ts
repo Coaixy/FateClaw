@@ -1,4 +1,4 @@
-import type { Locale } from '@/lib/i18n';
+import type { Locale } from './i18n';
 
 function resolveNumberLocale(locale?: Locale): string {
   return locale === 'zh-TW' ? 'zh-TW' : locale === 'en' ? 'en' : 'zh-CN';

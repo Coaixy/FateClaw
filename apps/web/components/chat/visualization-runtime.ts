@@ -14,7 +14,7 @@ export async function mountVisualization(
   artifact: VisualizationArtifact,
   onError: () => void,
 ): Promise<() => void> {
-  const style = getComputedStyle(document.documentElement);
+  const style = getComputedStyle(host);
   const ink = style.getPropertyValue('--color-ink').trim() || '#141413';
   const muted = style.getPropertyValue('--color-muted').trim() || '#6c6a64';
   const border = style.getPropertyValue('--color-hairline').trim() || '#e6dfd8';

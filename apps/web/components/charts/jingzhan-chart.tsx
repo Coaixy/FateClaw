@@ -5,7 +5,7 @@ import type {
   GaoDaoYiDuan,
   IchingGua,
   IchingYao,
-} from '@/utils/chart/iching-utils';
+} from '../../utils/chart/iching-utils';
 import { CHART } from './chart-theme';
 import { ChartDetails } from './chart-details';
 

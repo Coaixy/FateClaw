@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { cn } from '@/utils/chart/cn';
+import { cn } from '../../utils/chart/cn';
 import {
   getShiYingLabel,
   type IchingGua,
   type IchingYao,
-} from '@/utils/chart/iching-utils';
+} from '../../utils/chart/iching-utils';
 import { CHART } from './chart-theme';
 import { ChartDetails } from './chart-details';
 

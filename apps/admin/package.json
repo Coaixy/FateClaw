@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fateclaw/contracts": "workspace:*",
+    "fateclaw-web": "workspace:*",
     "highlight.js": "^11.11.1",
     "lucide-react": "^1.7.0",
     "next": "^16.4.2",

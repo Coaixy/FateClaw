@@ -1,11 +1,6 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github-dark.css';
-
-.visualization-canvas svg { display: block; max-width: 100%; height: auto; }
-.visualization-canvas .vega-bindings { display: flex; flex-wrap: wrap; gap: 0.75rem; padding-top: 0.75rem; color: var(--color-muted); font-size: 13px; }
-.visualization-canvas .vega-bind { display: flex; align-items: center; gap: 0.5rem; }
-.visualization-canvas select { border: 1px solid var(--color-hairline); border-radius: 6px; background: var(--color-canvas); padding: 0.25rem 0.5rem; color: var(--color-ink); }
-.visualization-canvas input { accent-color: var(--color-primary); }
+@import '../components/chat/chat.css';
 
 @theme {
   /* ==== 暖白陶土主题：清爽现代，正文与标题统一楷体 ====

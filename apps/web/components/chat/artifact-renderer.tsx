@@ -6,12 +6,12 @@ import { createPortal } from 'react-dom';
 
 import { Copy, Maximize2 } from 'lucide-react';
 
-import type { SkillContextEntry } from '@/features/chat/api';
-import { ChartErrorBoundary } from '@/components/charts/chart-error-boundary';
-import { Button } from '@/components/ui/button';
-import { useI18n } from '@/lib/i18n';
-import { useToast } from '@/lib/use-toast';
-import { cn } from '@/utils/chart/cn';
+import type { SkillContextEntryDto as SkillContextEntry } from '@fateclaw/contracts/chat';
+import { ChartErrorBoundary } from '../charts/chart-error-boundary';
+import { Button } from '../ui/button';
+import { useI18n } from '../../lib/i18n';
+import { useToast } from '../../lib/use-toast';
+import { cn } from '../../utils/chart/cn';
 import { ArtifactViewer } from './artifact-viewer';
 import { ResponsiveArtifactFrame } from './responsive-artifact-frame';
 import { parseVisualizationArtifact } from '@fateclaw/contracts/visualization';
@@ -20,26 +20,26 @@ const VisualizationCanvas = dynamic(() => import('./visualization-canvas'), {
   ssr: false,
 });
 
-const BaziChart = dynamic(() => import('@/components/charts/bazi-chart'), {
+const BaziChart = dynamic(() => import('../charts/bazi-chart'), {
   ssr: false,
 });
-const ZiWeiChart = dynamic(() => import('@/components/charts/ziwei-chart'), {
+const ZiWeiChart = dynamic(() => import('../charts/ziwei-chart'), {
   ssr: false,
 });
-const LiuyaoChart = dynamic(() => import('@/components/charts/liuyao-chart'), {
+const LiuyaoChart = dynamic(() => import('../charts/liuyao-chart'), {
   ssr: false,
 });
-const QimenChart = dynamic(() => import('@/components/charts/qimen-chart'), {
+const QimenChart = dynamic(() => import('../charts/qimen-chart'), {
   ssr: false,
 });
-const LiurenChart = dynamic(() => import('@/components/charts/liuren-chart'), {
+const LiurenChart = dynamic(() => import('../charts/liuren-chart'), {
   ssr: false,
 });
-const MeihuaChart = dynamic(() => import('@/components/charts/meihua-chart'), {
+const MeihuaChart = dynamic(() => import('../charts/meihua-chart'), {
   ssr: false,
 });
 const JingzhanChart = dynamic(
-  () => import('@/components/charts/jingzhan-chart'),
+  () => import('../charts/jingzhan-chart'),
   { ssr: false },
 );
 

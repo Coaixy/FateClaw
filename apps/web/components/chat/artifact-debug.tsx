@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Code } from 'lucide-react';
-import type { SkillContextEntry } from '@/features/chat/api';
+import type { SkillContextEntryDto as SkillContextEntry } from '@fateclaw/contracts/chat';
 
 interface ArtifactDebugProps {
   entries: SkillContextEntry[];

@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { fullQimenGodName } from '@fateclaw/contracts/chat';
-import { cn } from '@/utils/chart/cn';
+import { cn } from '../../utils/chart/cn';
 import { CHART, WUXING_TEXT } from './chart-theme';
 import {
   LUOSHU_ORDER,
@@ -13,7 +13,7 @@ import {
   STEM_WUXING_MAP,
   JIA_LIUYI_MAP,
   fullStarName,
-} from '@/utils/chart/qimen-map';
+} from '../../utils/chart/qimen-map';
 
 const SHEN_WUXING: Record<string, '金' | '木' | '水' | '火' | '土'> = {
   值符: '土',

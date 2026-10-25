@@ -61,6 +61,9 @@ importers:
       '@fateclaw/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      fateclaw-web:
+        specifier: workspace:*
+        version: link:../web
       highlight.js:
         specifier: ^11.11.1
         version: 11.11.1

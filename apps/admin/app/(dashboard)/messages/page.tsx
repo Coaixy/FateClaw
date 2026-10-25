@@ -38,6 +38,8 @@ import { AdminCopyButton } from '@/components/ui/admin-controls';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useConfirm } from '@/lib/use-confirm';
 import { useToast } from '@/lib/use-toast';
+import { useAdminSession } from '@/lib/admin-session';
+import type { MessageDto } from '@fateclaw/contracts/chat';
 
 const SESSION_MESSAGE_PAGE_SIZE = 200;
 const SESSION_FETCH_LIMIT = 200;
@@ -74,11 +76,13 @@ function AdminMessagesContent() {
   const searchParams = useSearchParams();
   const { confirm } = useConfirm();
   const { toast } = useToast();
+  const { role } = useAdminSession();
   const initialAccountId = searchParams.get('account_id') || '';
   const initialSessionId = searchParams.get('session_id') || '';
 
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [fullMessages, setFullMessages] = useState<MessageDto[]>([]);
   const [sessions, setSessions] = useState<AdminChatSession[]>([]);
   const [total, setTotal] = useState(0);
   const [sessionsTotal, setSessionsTotal] = useState(0);
@@ -114,6 +118,7 @@ function AdminMessagesContent() {
   const prevUserIdRef = useRef(selectedUserId);
   const prevAccountIdRef = useRef(selectedAccountId);
   const initialSessionIdRef = useRef(initialSessionId);
+  const messageRequestRef = useRef(0);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) || null,
@@ -152,24 +157,34 @@ function AdminMessagesContent() {
 
   const loadMessages = useCallback(
     async (sessionId: string) => {
+      const requestId = ++messageRequestRef.current;
       setMsgLoading(true);
+      setMessages([]);
+      setFullMessages([]);
       try {
-        const result = await admin.messages({
-          user_id: selectedUserId || undefined,
-          account_id: selectedAccountId || undefined,
-          session_id: sessionId,
-          limit: SESSION_MESSAGE_PAGE_SIZE,
-          offset: page * SESSION_MESSAGE_PAGE_SIZE,
-        });
+        // Keep the audit page and its deletion flags; only owners can enrich it with artifacts.
+        const [result, detail] = await Promise.all([
+          admin.messages({
+            user_id: selectedUserId || undefined,
+            account_id: selectedAccountId || undefined,
+            session_id: sessionId,
+            limit: SESSION_MESSAGE_PAGE_SIZE,
+            offset: page * SESSION_MESSAGE_PAGE_SIZE,
+          }),
+          role === 'owner' ? admin.chatSessionDetail(sessionId) : null,
+        ]);
+        if (requestId !== messageRequestRef.current) return;
         setMessages(result.messages);
+        setFullMessages(detail?.messages ?? []);
         setTotal(result.total);
       } catch (err) {
+        if (requestId !== messageRequestRef.current) return;
         setError(err instanceof Error ? err.message : '加载消息失败');
       } finally {
-        setMsgLoading(false);
+        if (requestId === messageRequestRef.current) setMsgLoading(false);
       }
     },
-    [page, selectedAccountId, selectedUserId],
+    [page, role, selectedAccountId, selectedUserId],
   );
 
   const loadSessions = useCallback(async () => {
@@ -243,10 +258,14 @@ function AdminMessagesContent() {
     if (loading) return;
     if (!selectedSessionId) {
       setMessages([]);
+      setFullMessages([]);
       setTotal(0);
       return;
     }
     void loadMessages(selectedSessionId);
+    return () => {
+      messageRequestRef.current += 1;
+    };
   }, [loadMessages, loading, selectedSessionId]);
 
   useEffect(() => {
@@ -705,16 +724,18 @@ function AdminMessagesContent() {
                       {/* session id 旁一键复制，方便排查时直接取用 */}
                       <AdminCopyButton text={selectedSession.id} />
                     </div>
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={() => setDetailSessionId(selectedSession.id)}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15"
-                      >
-                        <Eye size={13} />
-                        查看完整详情
-                      </button>
-                    </div>
+                    {role === 'owner' && (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setDetailSessionId(selectedSession.id)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-[12px] font-medium text-primary transition-colors hover:bg-primary/15"
+                        >
+                          <Eye size={13} />
+                          查看完整详情
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {msgLoading ? (
@@ -724,6 +745,7 @@ function AdminMessagesContent() {
                   ) : (
                     <MessageTimeline
                       messages={messages}
+                      fullMessages={fullMessages}
                       searchText={debouncedSearchText}
                       emptyText={
                         debouncedSearchText
@@ -762,7 +784,7 @@ function AdminMessagesContent() {
           ) : null}
         </>
       )}
-      {detailSessionId ? (
+      {role === 'owner' && detailSessionId ? (
         <AdminSessionDetailModal
           sessionId={detailSessionId}
           onClose={() => setDetailSessionId('')}

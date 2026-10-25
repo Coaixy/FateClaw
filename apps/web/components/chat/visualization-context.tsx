@@ -3,8 +3,8 @@
 import { createContext, useContext } from 'react';
 import { Loader2 } from 'lucide-react';
 import { VISUALIZATION_ID } from '@fateclaw/contracts/visualization';
-import type { SkillContextEntry } from '@/features/chat/api';
-import { useI18n } from '@/lib/i18n';
+import type { SkillContextEntryDto as SkillContextEntry } from '@fateclaw/contracts/chat';
+import { useI18n } from '../../lib/i18n';
 import { ArtifactRenderer } from './artifact-renderer';
 
 export const VisualizationContext = createContext<{

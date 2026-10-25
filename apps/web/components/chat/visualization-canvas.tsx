@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { VisualizationArtifact } from '@fateclaw/contracts/visualization';
-import { useI18n } from '@/lib/i18n';
+import { useI18n } from '../../lib/i18n';
 import { mountVisualization } from './visualization-runtime';
 
 export default function VisualizationCanvas({

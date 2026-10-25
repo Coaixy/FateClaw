@@ -2,10 +2,10 @@
 
 import { lazy, memo, Suspense } from 'react';
 import { replaceVisualizationReferences } from '@fateclaw/contracts/visualization';
-import { useI18n } from '@/lib/i18n';
+import { useI18n } from '../../lib/i18n';
 
 const MarkdownContent = lazy(() =>
-  import('@/components/chat/markdown-content').then((module) => ({
+  import('./markdown-content').then((module) => ({
     default: module.MarkdownContent,
   })),
 );

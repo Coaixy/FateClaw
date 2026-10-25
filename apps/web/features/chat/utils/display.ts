@@ -1,6 +1,6 @@
-import type { Message } from '@/features/chat/api';
+import type { MessageDto as Message } from '@fateclaw/contracts/chat';
 import { formatCoins } from '../../../lib/soft-currency';
-import type { Locale } from '@/lib/i18n';
+import type { Locale } from '../../../lib/i18n';
 
 export const AUTO_SCROLL_THRESHOLD = 80;
 
@@ -236,7 +236,7 @@ export function canHostToolTraceFooter(message: Message): boolean {
   );
 }
 
-export function filterProgressMessages(messages: Message[]) {
+export function filterProgressMessages<T extends Message>(messages: T[]): T[] {
   return messages.filter(
     (message) =>
       !isHiddenDisplayMessage(message) &&

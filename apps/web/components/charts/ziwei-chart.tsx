@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { cn } from '@/utils/chart/cn';
+import { cn } from '../../utils/chart/cn';
 import { CHART } from './chart-theme';
 
 interface Star {

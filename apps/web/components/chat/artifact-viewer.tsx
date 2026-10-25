@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Scan, X, ZoomIn, ZoomOut } from 'lucide-react';
-import { useI18n } from '@/lib/i18n';
+import { useI18n } from '../../lib/i18n';
 import { ResponsiveArtifactFrame } from './responsive-artifact-frame';
 
 export function ArtifactViewer({
@@ -46,7 +46,7 @@ export function ArtifactViewer({
       ref={dialogRef}
       aria-label={t(`${labelKey}.viewTitle`, { title })}
       onClose={onClose}
-      className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none overflow-hidden bg-canvas p-0 text-ink backdrop:bg-black/60"
+      className="chat-content fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none overflow-hidden bg-canvas p-0 text-ink backdrop:bg-black/60"
     >
       <div className="flex h-full min-h-0 flex-col pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
         <header className="flex shrink-0 items-center gap-2 border-b border-hairline px-3 py-2 sm:px-5">

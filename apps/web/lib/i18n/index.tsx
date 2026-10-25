@@ -111,20 +111,29 @@ function localeToHtmlLang(locale: Locale): string {
  * @param props.children 需要读取多语言状态的前端组件树。
  * @returns 多语言上下文 Provider。
  */
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+export function I18nProvider({
+  children,
+  locale: fixedLocale,
+}: {
+  children: React.ReactNode;
+  locale?: Locale;
+}) {
+  const [selectedLocale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+  const locale = fixedLocale ?? selectedLocale;
 
   useEffect(() => {
-    setLocaleState(getInitialLocale());
-  }, []);
+    if (fixedLocale === undefined) setLocaleState(getInitialLocale());
+  }, [fixedLocale]);
 
   const htmlLang = localeToHtmlLang(locale);
 
   useEffect(() => {
+    // Embedded readers must not change their host's language or stored preference.
+    if (fixedLocale !== undefined) return;
     document.documentElement.lang = htmlLang;
     document.documentElement.dataset.locale = locale;
     window.localStorage.setItem(STORAGE_KEY, locale);
-  }, [htmlLang, locale]);
+  }, [fixedLocale, htmlLang, locale]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);

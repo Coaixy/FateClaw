@@ -1,0 +1,14 @@
+.chat-content {
+  --tracking-tight: 0em;
+  --tracking-tighter: 0em;
+  --font-sans: 'Kaiti SC', 'STKaiti', 'KaiTi', 'BiauKai', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: 'Kaiti SC', 'STKaiti', 'KaiTi', 'BiauKai', 'Noto Serif SC', 'Songti SC', 'Noto Serif CJK SC', 'STSong', 'SimSun', ui-serif, serif;
+  --font-body: var(--font-sans);
+  font-family: var(--font-body);
+}
+
+.visualization-canvas svg { display: block; max-width: 100%; height: auto; }
+.visualization-canvas .vega-bindings { display: flex; flex-wrap: wrap; gap: 0.75rem; padding-top: 0.75rem; color: var(--color-muted); font-size: 13px; }
+.visualization-canvas .vega-bind { display: flex; align-items: center; gap: 0.5rem; }
+.visualization-canvas select { border: 1px solid var(--color-hairline); border-radius: 6px; background: var(--color-canvas); padding: 0.25rem 0.5rem; color: var(--color-ink); }
+.visualization-canvas input { accent-color: var(--color-primary); }

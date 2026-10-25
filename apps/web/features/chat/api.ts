@@ -126,33 +126,8 @@ export type ChatSessionStreamEvent = (
     }
 ) & { requestId?: string };
 
-/**
- * Skill artifact context（来自 agent-runtime 的 tool_context）。
- * 当前仍属于前端展示协议，后续可以继续下沉到 contracts。
- */
-export interface SkillContextEntry {
-  skill: string;
-  output: string;
-  artifactType?: string;
-  artifactTitle?: string;
-  artifactData?: unknown;
-}
-
-export function parseToolContext(raw?: string | null): SkillContextEntry[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // 过滤掉 null / 非对象元素：渲染层会直接访问 entry.skill / entry.output 等字段，
-    // 历史脏数据里混入 null 或基础类型会让渲染期抛 TypeError，这里在解析边界统一收紧。
-    return parsed.filter(
-      (entry): entry is SkillContextEntry =>
-        Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry),
-    );
-  } catch {
-    return [];
-  }
-}
+export type { SkillContextEntryDto as SkillContextEntry } from '@fateclaw/contracts/chat';
+export { parseToolContext } from './utils/tool-context';
 
 export function buildChatSessionStreamUrl(sessionId: string, ticket: string) {
   const base = getApiBase();

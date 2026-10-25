@@ -1,8 +1,8 @@
 'use client';
 
 import { Fragment } from 'react';
-import { cn } from '@/utils/chart/cn';
-import { STEM_WUXING_MAP } from '@/utils/chart/qimen-map';
+import { cn } from '../../utils/chart/cn';
+import { STEM_WUXING_MAP } from '../../utils/chart/qimen-map';
 import { CHART, WUXING_TEXT } from './chart-theme';
 
 const BRANCH_KEYS = [

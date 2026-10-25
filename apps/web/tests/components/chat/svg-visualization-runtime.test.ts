@@ -46,6 +46,17 @@ describe('SVG visualization mounts', () => {
     releases[1]();
   });
 
+  it('uses the embedded conversation font instead of the admin document font', async () => {
+    const host = document.createElement('div');
+    host.style.setProperty('--font-sans', 'KaiTi, serif');
+    document.body.append(host);
+
+    const release = await mountVisualization(host, artifact, () => {});
+
+    expect(host.querySelector('svg')!.style.fontFamily).toBe('KaiTi, serif');
+    release();
+  });
+
   it('revalidates untrusted historical markup before creating any DOM nodes', async () => {
     const host = document.createElement('div');
     document.body.append(host);

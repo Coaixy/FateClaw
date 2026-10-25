@@ -21,19 +21,19 @@ import {
   Search,
 } from 'lucide-react';
 
-import { BaguaRing } from '@/components/brand/brand-marks';
-import { ArtifactDebug } from '@/components/chat/artifact-debug';
-import { ArtifactRenderer } from '@/components/chat/artifact-renderer';
-import { ChatLoadingState } from '@/components/chat/chat-loading-state';
-import { CollapsibleMessage } from '@/components/chat/collapsible-message';
-import { MessageFooter } from '@/components/chat/message-footer';
-import { Message } from '@/features/chat/api';
+import { BaguaRing } from '../brand/brand-marks';
+import { ArtifactDebug } from '../chat/artifact-debug';
+import { ArtifactRenderer } from '../chat/artifact-renderer';
+import { ChatLoadingState } from '../chat/chat-loading-state';
+import { CollapsibleMessage } from '../chat/collapsible-message';
+import { MessageFooter } from '../chat/message-footer';
+import type { MessageDto as Message } from '@fateclaw/contracts/chat';
 import type {
   ToolResultItemDto,
   ToolResultPreviewDto,
 } from '@fateclaw/contracts/chat';
-import { useI18n } from '@/lib/i18n';
-import { sanitizeToolPath } from '@/features/chat/utils/tool-path';
+import { useI18n } from '../../lib/i18n';
+import { sanitizeToolPath } from '../../features/chat/utils/tool-path';
 import {
   PAIPAN_SKILLS,
   canHostToolTraceFooter,
@@ -44,9 +44,9 @@ import {
   isStreamingAssistantMessage,
   isThinkingMessage,
   isTrajectoryBlockMessage,
-} from '@/features/chat/utils/display';
-import { parseToolContext } from '@/features/chat/utils/tool-context';
-import { splitFinalTurnMarker } from '@/features/chat/utils/markers';
+} from '../../features/chat/utils/display';
+import { parseToolContext } from '../../features/chat/utils/tool-context';
+import { splitFinalTurnMarker } from '../../features/chat/utils/markers';
 import {
   parseVisualizationArtifact,
   replaceVisualizationReferences,
@@ -55,7 +55,7 @@ import {
 import {
   VisualizationContext,
   VisualizationPlaceholder,
-} from '@/components/chat/visualization-context';
+} from '../chat/visualization-context';
 
 // 楷体笔画比无衬线细，宽屏下需要更大的字号才有同等的阅读体量；窄屏则收紧字号与
 // 行距，避免一屏只能放下两句话。Markdown 内的标题走 em，会随这档字号一起缩放。
@@ -80,6 +80,8 @@ export const AiChatMessageList = memo(function AiChatMessageList({
   emptyStateHint,
   emptyStateFrameClassName,
   emptyStateMaxWidthClassName,
+  readOnly = false,
+  renderMessageContext,
 }: {
   messages: Message[];
   loading: boolean;
@@ -99,6 +101,8 @@ export const AiChatMessageList = memo(function AiChatMessageList({
   emptyStateHint?: string;
   emptyStateFrameClassName?: string;
   emptyStateMaxWidthClassName?: string;
+  readOnly?: boolean;
+  renderMessageContext?: (message: Message) => React.ReactNode;
 }) {
   const { t } = useI18n();
   const latestMessageNoticeRef = useRef<HTMLDivElement | null>(null);
@@ -141,12 +145,12 @@ export const AiChatMessageList = memo(function AiChatMessageList({
     hasCompletedAssistantTurn,
   } = useMemo(
     () => ({
-      ...buildDisplayRows(messages),
+      ...buildDisplayRows(messages, sending),
       hasStreamingAssistantMessage: messages.some(isStreamingAssistantMessage),
       hasThinkingMessage: messages.some(isThinkingMessage),
       hasCompletedAssistantTurn: hasFinalAssistantAfterLatestUser(messages),
     }),
-    [messages],
+    [messages, sending],
   );
 
   useEffect(() => {
@@ -223,7 +227,7 @@ export const AiChatMessageList = memo(function AiChatMessageList({
 
   return (
     <VisualizationContext value={visualizationContext}>
-      <div className="space-y-6 pb-4 sm:space-y-8">
+      <div className="chat-content space-y-6 pb-4 sm:space-y-8">
         {loadingOlder && (
           <div className="flex justify-center py-1.5">
             <Loader2 size={15} className="animate-spin text-muted" />
@@ -236,6 +240,9 @@ export const AiChatMessageList = memo(function AiChatMessageList({
               className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in"
             >
               <div className="flex min-w-0 w-full flex-col items-start">
+                {renderMessageContext && row.trajectory.map((message) => (
+                  <div key={message.id}>{renderMessageContext(message)}</div>
+                ))}
                 <TrajectoryTimeline blocks={row.trajectory} completed />
               </div>
             </div>
@@ -245,6 +252,8 @@ export const AiChatMessageList = memo(function AiChatMessageList({
               message={row.message}
               trajectory={row.trajectory}
               animationIndex={Math.min(index, 4)}
+              readOnly={readOnly}
+              renderMessageContext={renderMessageContext}
             />
           ),
         )}
@@ -280,7 +289,7 @@ type DisplayRow = {
 };
 
 /** Keep process messages with the next reply so streaming updates share one disclosure. */
-function buildDisplayRows(messages: Message[]) {
+function buildDisplayRows(messages: Message[], sending: boolean) {
   const rows: DisplayRow[] = [];
   const referenced = new Set(
     messages
@@ -325,6 +334,7 @@ function buildDisplayRows(messages: Message[]) {
     }
   }
 
+  if (!sending) flushPendingAsRow();
   return { rows, pendingTrajectory: pending };
 }
 
@@ -387,6 +397,8 @@ interface AiChatMessageRowProps {
   message: Message;
   trajectory: Message[];
   animationIndex: number;
+  readOnly: boolean;
+  renderMessageContext?: (message: Message) => React.ReactNode;
 }
 
 function areMessageRowsEqual(
@@ -396,6 +408,8 @@ function areMessageRowsEqual(
   return (
     previous.message === next.message &&
     previous.animationIndex === next.animationIndex &&
+    previous.readOnly === next.readOnly &&
+    previous.renderMessageContext === next.renderMessageContext &&
     previous.trajectory.length === next.trajectory.length &&
     previous.trajectory.every(
       (message, index) => message === next.trajectory[index],
@@ -407,6 +421,8 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
   message,
   trajectory,
   animationIndex,
+  readOnly,
+  renderMessageContext,
 }: AiChatMessageRowProps) {
   const { locale, t } = useI18n();
   const isBot = !!message.is_bot_message;
@@ -440,7 +456,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
   const hasChart =
     isBot && toolContext.some((entry) => PAIPAN_SKILLS.has(entry.skill));
   const showWalletRecovery =
-    isErrorMessage && shouldShowWalletRecovery(displayContent);
+    !readOnly && isErrorMessage && shouldShowWalletRecovery(displayContent);
   // Final replies settle any tool status still marked as running.
   const trajectoryNode =
     isBot && trajectory.length > 0 ? (
@@ -459,6 +475,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
         className="w-full max-w-6xl mx-auto px-2.5 sm:px-3 animate-message-in"
         style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
       >
+        {renderMessageContext?.(message)}
         {trajectoryNode && <div className="mb-2">{trajectoryNode}</div>}
         <ArtifactRenderer entries={toolContext} />
         <ArtifactDebug entries={toolContext} />
@@ -479,6 +496,7 @@ const AiChatMessageRow = memo(function AiChatMessageRow({
       style={{ animationDelay: `${Math.min(animationIndex * 50, 200)}ms` }}
     >
       <div className={`flex min-w-0 flex-col ${messageColumnClass}`}>
+        {renderMessageContext?.(message)}
         {trajectoryNode && <div className="mb-2 w-full">{trajectoryNode}</div>}
 
         <div
