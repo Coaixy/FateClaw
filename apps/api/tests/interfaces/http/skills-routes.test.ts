@@ -220,6 +220,149 @@ describe('skillsRoutes access invites', () => {
     });
   });
 
+  describe.each([
+    { method: 'POST', url: '/user' },
+    { method: 'PUT', url: '/user/skill-1' },
+  ] as const)('$method $url content uploads', ({ method, url }) => {
+    it('accepts a Chinese bundle at the configured character limit above 1 MiB', async () => {
+      const files = Array.from({ length: 5 }, (_, index) => ({
+        path: index === 0 ? 'SKILL.md' : `references/${index}.md`,
+        content: '中'.repeat(100_000),
+      }));
+      const payload = {
+        skill_name: 'Upload test',
+        ...(method === 'PUT' ? { base_revision_id: 'revision-1' } : {}),
+        files,
+      };
+      expect(Buffer.byteLength(JSON.stringify(payload))).toBeGreaterThan(
+        1024 * 1024,
+      );
+      const writer =
+        method === 'POST'
+          ? serviceMocks.createUserCustomSkill
+          : serviceMocks.updateUserCustomSkill;
+      writer.mockResolvedValueOnce(skillPreview);
+      if (method === 'POST') {
+        serviceMocks.getUserCustomSkillCount.mockResolvedValueOnce(0);
+      }
+      const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 1 });
+
+      const response = await app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${token}` },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(writer).toHaveBeenCalledTimes(1);
+    });
+
+    it('supports runtime limit increases and JSON escaping without restarting the server', async () => {
+      serviceMocks.getSkillBundleLimitsPolicy.mockResolvedValueOnce({
+        max_files: 50,
+        max_file_chars: 2_000_000,
+        max_total_chars: 10_000_000,
+        max_zip_bytes: 8 * 1024 * 1024,
+      });
+      const writer =
+        method === 'POST'
+          ? serviceMocks.createUserCustomSkill
+          : serviceMocks.updateUserCustomSkill;
+      writer.mockResolvedValueOnce(skillPreview);
+      if (method === 'POST') {
+        serviceMocks.getUserCustomSkillCount.mockResolvedValueOnce(0);
+      }
+      const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 1 });
+
+      const response = await app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          skill_name: 'Escaped upload',
+          ...(method === 'PUT' ? { base_revision_id: 'revision-1' } : {}),
+          files: Array.from({ length: 5 }, (_, index) => ({
+            path: index === 0 ? 'SKILL.md' : `references/${index}.txt`,
+            content: '\u0001'.repeat(2_000_000),
+          })),
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(writer).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      {
+        files: [{ path: 'SKILL.md', content: '中'.repeat(500_000) }],
+        error: '单个文件内容不超过 100000 字',
+      },
+      {
+        files: Array.from({ length: 6 }, (_, index) => ({
+          path: index === 0 ? 'SKILL.md' : `references/${index}.md`,
+          content: '中'.repeat(index === 5 ? 1 : 100_000),
+        })),
+        error: 'Bundle 总内容不超过 500000 字',
+      },
+    ])(
+      'still rejects content exceeding policy: $error',
+      async ({ files, error }) => {
+        const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 1 });
+        const response = await app.inject({
+          method,
+          url,
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            skill_name: 'Oversized upload',
+            ...(method === 'PUT' ? { base_revision_id: 'revision-1' } : {}),
+            files,
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toEqual({ error });
+        expect(serviceMocks.createUserCustomSkill).not.toHaveBeenCalled();
+        expect(serviceMocks.updateUserCustomSkill).not.toHaveBeenCalled();
+      },
+    );
+
+    it('keeps a finite request byte limit before calling the writer', async () => {
+      const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 1 });
+      const response = await app.inject({
+        method,
+        url,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+          'content-length': String(65 * 1024 * 1024),
+        },
+        payload: '{}',
+      });
+
+      expect(response.statusCode).toBe(413);
+      expect(serviceMocks.createUserCustomSkill).not.toHaveBeenCalled();
+      expect(serviceMocks.updateUserCustomSkill).not.toHaveBeenCalled();
+    });
+
+    it('authenticates before reading an oversized upload body', async () => {
+      const response = await app.inject({
+        method,
+        url,
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(65 * 1024 * 1024),
+        },
+        payload: '{}',
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(serviceMocks.getSkillBundleLimitsPolicy).not.toHaveBeenCalled();
+      expect(serviceMocks.createUserCustomSkill).not.toHaveBeenCalled();
+      expect(serviceMocks.updateUserCustomSkill).not.toHaveBeenCalled();
+    });
+  });
+
   it('returns a readable conflict when creating a duplicate own skill', async () => {
     const token = app.jwt.sign({ userId: 'user-1', authTokenVersion: 1 });
     serviceMocks.getUserCustomSkillCount.mockResolvedValueOnce(0);

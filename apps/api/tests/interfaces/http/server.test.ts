@@ -274,6 +274,20 @@ describe('createApiServer auth guard', () => {
     expect(logs).not.toContain('01234567');
   });
 
+  it('returns a readable JSON error for oversized bodies and retains the default limit outside Skill writes', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/invites/preview',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ padding: 'x'.repeat(1024 * 1024) }),
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toEqual({
+      error: '请求内容过大，请减少内容后重试',
+    });
+  });
+
   it('accepts a token whose auth version matches the current user', async () => {
     const token = app.jwt.sign({
       userId: 'user-1',

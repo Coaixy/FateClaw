@@ -18,6 +18,8 @@ The admin detail page browses those current-revision files in a read-only worksp
 
 The authoring UI shares one file workspace between skill creation and editing. A collapsible file navigator selects the raw text editor, including the complete `SKILL.md` frontmatter; switching files and opening Markdown previews retain unsaved content. Save submits the complete file array and category through the existing revision contract. File creation and renaming validate relative paths and reject file/directory conflicts; the required `SKILL.md` cannot be renamed or deleted.
 
+ZIP imports are decoded in the browser and sent as JSON file arrays. `POST /api/skills/user` and `PUT /api/skills/user/:id` reserve six bytes per character at the maximum supported runtime policy, plus 1 MiB for metadata. This transport ceiling accommodates UTF-8 text and JSON escaping even after administrators increase limits without restarting the API. Content writes authenticate before buffering the larger body. Each write still checks the current file count, per-file character limit, and total character limit from `runtime_config`; the ZIP byte limit applies to the browser's source archive. Other routes retain their existing request limits. Oversized request bodies return HTTP 413 with a Chinese JSON error. API reverse proxies must also allow the Skill request size; the [deployment example](deployment-split.md#nginx-example) permits 64 MiB.
+
 ## Invariants and validation
 
 - Store complete immutable content revisions separately from `user_custom_skills`; enforce revision ownership at the database pointer.

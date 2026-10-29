@@ -1,7 +1,8 @@
 import crypto from 'crypto';
 
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { RUNTIME_CONFIG_LIMITS } from '@fateclaw/contracts/model-settings';
 import type {
   CreateSkillAccessInviteRequestDto,
   SkillBundleLimitsDto,
@@ -64,6 +65,15 @@ import {
 import type { TextSkillBundleFile } from '#shared/types';
 
 const MAX_MARKET_OFFSET = 10_000;
+// Reserve six bytes per UTF-16 unit for JSON escaping, plus metadata.
+// Use the policy ceiling so runtime limit increases need no route restart.
+const skillContentRouteOptions = {
+  bodyLimit:
+    6 * RUNTIME_CONFIG_LIMITS.skill_bundle_max_total_chars.max + 1024 * 1024,
+  onRequest: async (request: FastifyRequest) => {
+    await request.requireAuth();
+  },
+};
 
 function createMarketPaginationSchema(defaultLimit: number, maxLimit: number) {
   return z.object({
@@ -191,8 +201,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/skills/user — 创建
-  app.post('/user', async (request, reply) => {
-    await request.requireAuth();
+  app.post('/user', skillContentRouteOptions, async (request, reply) => {
     const userId = request.user.userId;
     const body = request.body as {
       skill_name?: string;
@@ -262,8 +271,7 @@ export async function skillsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/skills/user/:id — 更新
-  app.put('/user/:id', async (request, reply) => {
-    await request.requireAuth();
+  app.put('/user/:id', skillContentRouteOptions, async (request, reply) => {
     const userId = request.user.userId;
     const { id } = request.params as { id: string };
     const body = request.body as {

@@ -27,6 +27,13 @@ export function normalizeHttpError(error: HttpErrorLike): NormalizedHttpError {
     };
   }
 
+  if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+    return {
+      statusCode: 413,
+      publicMessage: '请求内容过大，请减少内容后重试',
+    };
+  }
+
   // JSON 解析失败属于请求体错误，不应向前端暴露底层 SyntaxError 细节。
   if (
     error.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||

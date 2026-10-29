@@ -217,6 +217,7 @@ The admin package contains the independent admin site. Its login page is at `/`,
 server {
   listen 80;
   server_name api.example.com;
+  client_max_body_size 64m;
 
   location / {
     proxy_pass http://127.0.0.1:3000;
