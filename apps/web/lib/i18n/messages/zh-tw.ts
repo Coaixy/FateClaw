@@ -175,6 +175,16 @@ export const zhTWMessages = {
   history: {
     title: '對話歷史',
     description: '查看全部對話記錄，支援搜尋、按時間篩選和封存管理',
+    active: '未歸檔',
+    archivedDescription: '歸檔對話保留在這裡，恢復後會回到最近對話。',
+    archivedAt: '歸檔於{time}',
+    emptyArchived: '暫無歸檔對話',
+    loadArchivedFailed: '載入歸檔對話失敗，請重試',
+    retry: '重試',
+    restore: '恢復',
+    restoring: '恢復中…',
+    restoreFailed: '恢復對話失敗，請重試',
+    restoredToast: '已恢復到最近對話',
   },
   common: {
     appName: '守義AI',

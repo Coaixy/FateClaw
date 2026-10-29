@@ -108,6 +108,7 @@ import type {
 import {
   archiveChatSession,
   createChatSession,
+  getArchivedChatSessionsByUserId,
   getChatSession,
   getChatSessionByIdForAdmin,
   getChatSessionPiSessionArchive,
@@ -276,6 +277,7 @@ export {
   getSingleAccountIdIfOnlyOne,
   getBillingRequestReservationByRequestId,
   getBundleByToken,
+  getArchivedChatSessionsByUserId,
   getChatSession,
   getChatSessionByIdForAdmin,
   getChatSessionPiSessionArchive,

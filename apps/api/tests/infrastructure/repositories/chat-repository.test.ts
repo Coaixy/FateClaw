@@ -22,7 +22,9 @@ vi.mock('#infrastructure/logger', () => ({
 }));
 
 import {
+  getArchivedChatSessionsByUserId,
   getChatSessionPiSessionArchive,
+  getChatSessionsByUserId,
   getRecentMessages,
   resetUserMessages,
   restoreArchivedChatSession,
@@ -230,28 +232,74 @@ describe('chat repository', () => {
     }
   });
 
-  it('restores an archived chat session owned by a user', async () => {
-    const { calls } = createMockPool([
-      {
-        id: 'session-1',
-        user_id: 'user-1',
-        account_id: 'web:user-1',
-        title: '旧会话',
-        created_at: '2026-05-27T00:00:00.000Z',
-        updated_at: '2026-05-27T01:00:00.000Z',
-        deleted_at: null,
-      },
-    ]);
+  it('discovers owned archived web sessions without a client and returns restored sessions to the active list', async () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec(`CREATE TABLE chat_sessions (
+        id TEXT, user_id TEXT, client_id TEXT, deleted_at TEXT, updated_at TEXT
+      )`);
+      const insert = database.prepare(
+        'INSERT INTO chat_sessions VALUES (?, ?, ?, ?, ?)',
+      );
+      const earlier = '2026-10-28T00:00:00Z';
+      const later = '2026-10-29T00:00:00Z';
+      insert.run('unlinked', 'user-1', null, later, earlier);
+      insert.run('linked', 'user-1', 'client-1', earlier, later);
+      insert.run('active', 'user-1', null, null, earlier);
+      insert.run('other-owner', 'user-2', null, later, later);
+      insert.run('openapi:hidden', 'user-1', null, later, later);
+      let databaseNow = '2026-10-29T01:00:00Z';
+      mockGetDbPool.mockReturnValue({
+        async query(sql: string, params: SQLInputValue[]) {
+          const bindings = Object.fromEntries(
+            params.map((value, index) => [`$${index + 1}`, value]),
+          );
+          return {
+            rows: database
+              .prepare(sql.replaceAll('NOW()', `'${databaseNow}'`))
+              .all(bindings),
+          };
+        },
+      });
 
-    const restored = await restoreArchivedChatSession({
-      userId: 'user-1',
-      sessionId: 'session-1',
-    });
+      const archived = await getArchivedChatSessionsByUserId('user-1');
+      expect(archived.map((session) => session.id)).toEqual([
+        'unlinked',
+        'linked',
+      ]);
+      expect(
+        (await getChatSessionsByUserId('user-1')).map((session) => session.id),
+      ).toEqual(['active']);
+      expect(
+        await restoreArchivedChatSession({
+          userId: 'user-2',
+          sessionId: 'unlinked',
+        }),
+      ).toBeUndefined();
 
-    expect(restored?.id).toBe('session-1');
-    expect(calls[0]?.sql).toContain('SET deleted_at = NULL');
-    expect(calls[0]?.sql).toContain('AND deleted_at IS NOT NULL');
-    expect(calls[0]?.params).toEqual(['session-1', 'user-1']);
+      const restored = await restoreArchivedChatSession({
+        userId: 'user-1',
+        sessionId: 'unlinked',
+      });
+      expect(restored?.deleted_at).toBeNull();
+      databaseNow = '2026-10-30T01:00:00Z';
+      expect(
+        await restoreArchivedChatSession({
+          userId: 'user-1',
+          sessionId: 'unlinked',
+        }),
+      ).toEqual(restored);
+      expect(
+        (await getArchivedChatSessionsByUserId('user-1')).map(
+          (session) => session.id,
+        ),
+      ).toEqual(['linked']);
+      expect(
+        (await getChatSessionsByUserId('user-1')).map((session) => session.id),
+      ).toEqual(['unlinked', 'active']);
+    } finally {
+      database.close();
+    }
   });
 
   it('reads a Pi session archive payload even when archived_at is missing', async () => {

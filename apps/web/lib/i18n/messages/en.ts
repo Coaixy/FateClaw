@@ -187,6 +187,17 @@ export const enMessages = {
     title: 'Conversation history',
     description:
       'Browse all conversations with search, time filters, and archive management',
+    active: 'Unarchived',
+    archivedDescription:
+      'Archived conversations stay here. Restore one to return it to recent chats.',
+    archivedAt: 'Archived {time}',
+    emptyArchived: 'No archived conversations',
+    loadArchivedFailed: 'Failed to load archived conversations. Please try again.',
+    retry: 'Retry',
+    restore: 'Restore',
+    restoring: 'Restoring…',
+    restoreFailed: 'Failed to restore the conversation. Please try again.',
+    restoredToast: 'Restored to recent chats',
   },
   common: {
     appName: 'Shouyi AI',

@@ -385,6 +385,12 @@ All endpoints below except share previews require authentication and allow acces
 | POST | `/api/chat-sessions/s/:sessionId/stream-ticket` | Issue a single-use WebSocket stream ticket |
 | GET | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process` | Get a redacted execution timeline |
 
+### GET /api/chat-sessions/archived
+
+Returns up to 500 archived web conversations owned by the authenticated user, including conversations without a client profile. Results use the same session DTO as the active list, sorted by archive time descending. Open API fallback sessions are excluded. The regular `/api/chat-sessions` list continues to return only active conversations.
+
+The web history page provides separate active and archived views with title search, date filters, and local pagination. Archived date filters use `deleted_at` (the archive time). Archived rows offer restoration instead of opening or sharing; `POST /api/chat-sessions/s/:sessionId/restore` returns the session with `deleted_at: null`. The page removes it from the archive list and immediately adds it to recent chats. Failed archive queries show a retry action; failed restores keep the row available. Restoring an already active owned session returns it unchanged, allowing retries after a lost response.
+
 ### GET /api/chat-sessions/s/:sessionId/messages
 
 The message response includes `processing` and `processing_request_id`. The request ID is read from the existing session processing lock and is `null` while idle. Clients can correlate it with stream events and persisted message `metadata.request_id` when recovering a turn after a reload.

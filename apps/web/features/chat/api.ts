@@ -171,6 +171,11 @@ export const chatSessionsApi = {
     chatSessionListRequestCache.get(() =>
       requestJson<ChatSession[]>('/api/chat-sessions'),
     ),
+  archived: (options: ChatSessionRequestOptions = {}) =>
+    requestJson<ChatSession[]>('/api/chat-sessions/archived', {
+      signal: options.signal,
+      timeoutMs: 15_000,
+    }),
   /** 某客户名下的全部会话（活跃 + 已归档），客户档案历史视图用。 */
   byClient: (clientId: string) =>
     requestJson<ChatSession[]>(
@@ -191,7 +196,7 @@ export const chatSessionsApi = {
   restore: (sessionId: string) =>
     requestJson<ChatSession>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/restore`,
-      { method: 'POST' },
+      { method: 'POST', timeoutMs: 15_000 },
     ).finally(clearChatSessionsCache),
   share: (sessionId: string, options: ChatSessionRequestOptions = {}) =>
     requestJson<ChatSessionShareResponse>(

@@ -11,6 +11,7 @@ import {
   getOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource,
   getSharedChatSessionByShareToken,
+  listArchivedChatSessionsForOwnedUser,
   listChatSessionsByClientForOwnedUser,
   listChatSessionsForOwnedUser,
   listOwnedChatSessionBoards,
@@ -98,6 +99,17 @@ export async function chatSessionsRoutes(app: FastifyInstance): Promise<void> {
     const result = await listChatSessionsForOwnedUser(
       request.user.userId,
       clientId,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
+
+  app.get('/archived', async (request, reply) => {
+    await request.requireAuth();
+    const result = await listArchivedChatSessionsForOwnedUser(
+      request.user.userId,
     );
     if (!result.ok) {
       return reply.code(result.statusCode).send({ error: result.error });

@@ -175,6 +175,16 @@ export const zhCNMessages = {
   history: {
     title: '对话历史',
     description: '查看全部对话记录，支持搜索、按时间筛选和归档管理',
+    active: '未归档',
+    archivedDescription: '归档对话保留在这里，恢复后会回到最近对话。',
+    archivedAt: '归档于{time}',
+    emptyArchived: '暂无归档对话',
+    loadArchivedFailed: '加载归档对话失败，请重试',
+    retry: '重试',
+    restore: '恢复',
+    restoring: '恢复中…',
+    restoreFailed: '恢复对话失败，请重试',
+    restoredToast: '已恢复到最近对话',
   },
   common: {
     appName: '守义AI',

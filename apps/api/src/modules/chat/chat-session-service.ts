@@ -25,6 +25,7 @@ import type { SuccessResponse } from '@fateclaw/contracts/common';
 import {
   archiveChatSession,
   createChatSession,
+  getArchivedChatSessionsByUserId,
   getChatSession,
   getChatSessionPiSessionArchive,
   getChatSessionsByClientId,
@@ -426,6 +427,13 @@ export async function listChatSessionsForOwnedUser(
   clientId?: string,
 ): Promise<ServiceResult<ChatSessionDto[]>> {
   const sessions = await getChatSessionsByUserId(userId, undefined, clientId);
+  return ok(sessions.map(toChatSessionDto));
+}
+
+export async function listArchivedChatSessionsForOwnedUser(
+  userId: string,
+): Promise<ServiceResult<ChatSessionDto[]>> {
+  const sessions = await getArchivedChatSessionsByUserId(userId);
   return ok(sessions.map(toChatSessionDto));
 }
 

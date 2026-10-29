@@ -290,6 +290,22 @@ export async function getChatSessionsByUserId(
   return rows as ChatSession[];
 }
 
+export async function getArchivedChatSessionsByUserId(
+  userId: string,
+  limit = 500,
+): Promise<ChatSession[]> {
+  const { rows } = await getDbPool().query(
+    `SELECT * FROM chat_sessions
+     WHERE user_id = $1
+       AND deleted_at IS NOT NULL
+       AND id NOT LIKE 'openapi:%'
+     ORDER BY deleted_at DESC, id DESC
+     LIMIT $2`,
+    [userId, Math.min(Math.max(limit, 1), 500)],
+  );
+  return rows as ChatSession[];
+}
+
 /**
  * 读取某客户名下的全部会话（含活跃与已归档），用于客户档案历史视图。
  *
@@ -382,7 +398,8 @@ export async function archiveChatSession(id: string): Promise<void> {
  *
  * @param input.userId 会话归属用户 ID。
  * @param input.sessionId chat_sessions.id。
- * @returns 恢复后的会话；会话不存在、无权限或未归档时返回 undefined。
+ * @returns The owned session, or undefined if missing or owned by another user.
+ * @remarks Repeated restores preserve the active session's update time.
  */
 export async function restoreArchivedChatSession(input: {
   userId: string;
@@ -390,10 +407,10 @@ export async function restoreArchivedChatSession(input: {
 }): Promise<ChatSession | undefined> {
   const { rows } = await getDbPool().query(
     `UPDATE chat_sessions
-     SET deleted_at = NULL, updated_at = NOW()
+     SET deleted_at = NULL,
+         updated_at = CASE WHEN deleted_at IS NOT NULL THEN NOW() ELSE updated_at END
      WHERE id = $1
        AND user_id = $2
-       AND deleted_at IS NOT NULL
      RETURNING *`,
     [input.sessionId, input.userId],
   );

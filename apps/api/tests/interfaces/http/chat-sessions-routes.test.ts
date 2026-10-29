@@ -2,11 +2,15 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockGetOwnedChatSessionMessages, mockListOwnedChatSessionBoards } =
-  vi.hoisted(() => ({
-    mockGetOwnedChatSessionMessages: vi.fn(),
-    mockListOwnedChatSessionBoards: vi.fn(),
-  }));
+const {
+  mockGetOwnedChatSessionMessages,
+  mockListOwnedChatSessionBoards,
+  mockListArchivedChatSessionsForOwnedUser,
+} = vi.hoisted(() => ({
+  mockGetOwnedChatSessionMessages: vi.fn(),
+  mockListOwnedChatSessionBoards: vi.fn(),
+  mockListArchivedChatSessionsForOwnedUser: vi.fn(),
+}));
 
 vi.mock('#modules/chat/chat-session-service', () => ({
   archiveOwnedChatSession: vi.fn(),
@@ -15,6 +19,8 @@ vi.mock('#modules/chat/chat-session-service', () => ({
   getOwnedChatSessionMessages: mockGetOwnedChatSessionMessages,
   getOwnedChatSessionQueryProcessSource: vi.fn(),
   getSharedChatSessionByShareToken: vi.fn(),
+  listArchivedChatSessionsForOwnedUser:
+    mockListArchivedChatSessionsForOwnedUser,
   listChatSessionsByClientForOwnedUser: vi.fn(),
   listChatSessionsForOwnedUser: vi.fn(),
   listOwnedChatSessionBoards: mockListOwnedChatSessionBoards,
@@ -45,6 +51,40 @@ describe('chat session routes', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  it('requires authentication before listing archived sessions', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/chat-sessions/archived',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(mockListArchivedChatSessionsForOwnedUser).not.toHaveBeenCalled();
+  });
+
+  it('lists archived sessions for the authenticated user', async () => {
+    const sessions = [
+      { id: 'archived-session', deleted_at: '2026-10-29T00:00:00Z' },
+    ];
+    mockListArchivedChatSessionsForOwnedUser.mockResolvedValueOnce({
+      ok: true,
+      data: sessions,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/chat-sessions/archived?user_id=other-user',
+      headers: {
+        authorization: `Bearer ${app.jwt.sign({ userId: 'user-1' })}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(sessions);
+    expect(mockListArchivedChatSessionsForOwnedUser).toHaveBeenCalledWith(
+      'user-1',
+    );
   });
 
   it('forwards both history cursor fields so timestamp ties can continue', async () => {
