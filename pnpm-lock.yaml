@@ -4864,6 +4864,9 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
+  tyme4ts@1.5.2:
+    resolution: {integrity: sha512-vVAjUv1ieXleS7hCOgjAoHaZ0BdNJIza0uDOhXNpndegqWQh9ytKMR0fjkG869yqLtpXAHnzNSouBg28nrIaAg==}
+
   tyme4ts@1.5.3:
     resolution: {integrity: sha512-3Jm9Ylbj0rxUbmH0DJLO8r3phT0J3FsseWuWD7/6UeloqkRKchEmTJG+pD36VLsM5QCfh4nI5NRO3DwYYewOig==}
 
@@ -7407,7 +7410,7 @@ snapshots:
 
   bazi-ts-lib@1.0.2:
     dependencies:
-      tyme4ts: 1.5.3
+      tyme4ts: 1.5.2
 
   bcryptjs@3.0.3: {}
 
@@ -7806,8 +7809,6 @@ snapshots:
       is-data-view: 1.0.2
 
   dateformat@4.6.3: {}
-
-  dayjs@1.11.20: {}
 
   dayjs@1.11.23: {}
 
@@ -8754,7 +8755,7 @@ snapshots:
 
   iching-shifa@1.8.0:
     dependencies:
-      tyme4ts: 1.5.3
+      tyme4ts: 1.5.2
 
   iconv-lite@0.6.3:
     dependencies:
@@ -9080,7 +9081,7 @@ snapshots:
 
   kinqimen@0.4.0:
     dependencies:
-      tyme4ts: 1.5.3
+      tyme4ts: 1.5.2
 
   kitx@2.2.0:
     dependencies:
@@ -9208,7 +9209,7 @@ snapshots:
 
   liuren-ts-lib@3.1.0:
     dependencies:
-      tyme4ts: 1.5.3
+      tyme4ts: 1.5.2
 
   locate-path@5.0.0:
     dependencies:
@@ -9439,7 +9440,7 @@ snapshots:
 
   meihua-ts-lib@0.1.0:
     dependencies:
-      tyme4ts: 1.5.3
+      tyme4ts: 1.5.2
 
   merge2@1.4.1: {}
 
@@ -10662,13 +10663,9 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  tyme4ts@1.4.6: {}
-
-  tyme4ts@1.5.0: {}
-
-  tyme4ts@1.5.1: {}
-
   tyme4ts@1.5.2: {}
+
+  tyme4ts@1.5.3: {}
 
   type-check@0.4.0:
     dependencies:
