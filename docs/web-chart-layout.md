@@ -57,6 +57,14 @@ One React portal owns each chart. Its container moves between the inline frame a
 
 Escape closes the viewer and returns focus to its trigger. A viewer opened from a preview must consume Escape and Tab before the underlying sheet's handlers receive them. Opening the viewer must remain idempotent when React repeats effect setup in development.
 
+## Conversation scrolling
+
+The latest-message button floats over the conversation while scrolling away from
+the bottom. It hides after 1.5 seconds without scrolling, on reaching the bottom,
+or when switching sessions. Activating it jumps directly to the latest message
+and resumes automatic scrolling; hiding the button alone preserves the reading
+position.
+
 ## Composer
 
 The composer places chart and send actions beside the textarea, with the model selector below the text. A single-line textarea stays compact, grows with input to 128px, and collapses after clearing. Keep its 16px input font and the existing IME handling, editable draft during generation, and stop behavior.

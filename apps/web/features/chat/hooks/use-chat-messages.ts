@@ -43,6 +43,7 @@ const CHAT_POLL_INTERVAL_MS = 1200;
 const MESSAGE_PAGE_SIZE = CHAT_MESSAGE_PAGE_SIZE;
 // 滚动到距顶部多少像素内触发「加载更早消息」。
 const OLDER_LOAD_THRESHOLD_PX = 120;
+const SCROLL_IDLE_DELAY_MS = 1500;
 const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
 const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
 const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
@@ -414,6 +415,7 @@ export function useChatMessages(options: {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const ignoredRequestIdsRef = useRef(new Set<string>());
   const [followingLatest, setFollowingLatest] = useState(true);
+  const [scrolling, setScrolling] = useState(false);
   // 请求在途状态(loading/sending)合并到 reducer,切换会话时一次 dispatch 重置。
   const [{ loading, sending }, dispatchRequestStatus] = useReducer(
     requestStatusReducer,
@@ -928,6 +930,7 @@ export function useChatMessages(options: {
       transitionRun(options.selectedSession, 'idle', null);
       shouldAutoScrollRef.current = true;
       setFollowingLatest(true);
+      setScrolling(false);
     }
     lastPollAtRef.current = null;
     loadingOlderRef.current = false;
@@ -1771,12 +1774,22 @@ export function useChatMessages(options: {
     const element = scrollRef.current;
     if (!element) return;
 
-    const handleScroll = () => {
+    let scrollIdleTimeout: number | undefined;
+    const handleScroll = (event?: Event) => {
       const nearBottom = isNearBottom(element);
       shouldAutoScrollRef.current = nearBottom;
       setFollowingLatest((previous) =>
         previous === nearBottom ? previous : nearBottom,
       );
+      if (event) {
+        window.clearTimeout(scrollIdleTimeout);
+        setScrolling(!nearBottom);
+        if (!nearBottom) {
+          scrollIdleTimeout = window.setTimeout(() => {
+            setScrolling(false);
+          }, SCROLL_IDLE_DELAY_MS);
+        }
+      }
       // 接近顶部且仍有更早消息时,自动加载上一页历史。
       if (
         element.scrollTop <= OLDER_LOAD_THRESHOLD_PX &&
@@ -1792,6 +1805,7 @@ export function useChatMessages(options: {
 
     return () => {
       element.removeEventListener('scroll', handleScroll);
+      window.clearTimeout(scrollIdleTimeout);
     };
   }, [loadOlderMessages]);
 
@@ -2242,8 +2256,9 @@ export function useChatMessages(options: {
   const scrollToLatest = useCallback(() => {
     shouldAutoScrollRef.current = true;
     setFollowingLatest(true);
+    setScrolling(false);
     const element = scrollRef.current;
-    if (element) element.scrollTop = element.scrollHeight;
+    element?.scrollTo({ top: element.scrollHeight, behavior: 'instant' });
   }, []);
 
   return {
@@ -2253,6 +2268,7 @@ export function useChatMessages(options: {
     historyError,
     stopping,
     followingLatest,
+    showScrollToLatest: scrolling && !followingLatest,
     scrollToLatest,
     sending: isPending,
     loadedSessionId,

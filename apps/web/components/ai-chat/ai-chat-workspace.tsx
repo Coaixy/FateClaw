@@ -971,7 +971,7 @@ function AiChatWorkspaceContent() {
           )}
         </div>
 
-        {!showCenteredComposer && !chatMessages.followingLatest && (
+        {!showCenteredComposer && chatMessages.showScrollToLatest && (
           <div
             className={`pointer-events-none absolute inset-x-0 z-20 flex justify-center px-3 ${replyStatus ? 'bottom-12' : 'bottom-3'}`}
           >
