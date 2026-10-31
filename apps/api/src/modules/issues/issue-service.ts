@@ -1,11 +1,15 @@
 import type {
   AdminIssueDetailDto,
   AdminIssueListDto,
+  AdminIssueSummaryDto,
   IssueDto,
   IssueDetailDto,
-  IssueListDto,
+  IssueUnreadSummaryDto,
+  PublicIssueListDto,
 } from '@fateclaw/contracts';
 import {
+  countAwaitingReplyIssues,
+  countUnreadIssues,
   getIssueRows,
   listIssueRows,
   type IssueListFilter,
@@ -36,13 +40,14 @@ function publicIssue(row: IssueRow, viewer?: string): IssueDto {
 export async function listPublicIssues(
   filter: IssueListFilter,
   viewer?: string,
-): Promise<IssueListDto> {
-  const { rows, total } = await listIssueRows(filter, false);
+): Promise<PublicIssueListDto> {
+  const { rows, total } = await listIssueRows(filter, false, viewer ?? null);
   return {
     items: rows.map((row) => publicIssue(row, viewer)),
     total,
     page: filter.page,
     page_size: filter.page_size,
+    unread_ids: rows.filter((row) => row.unread).map((row) => row.id),
   };
 }
 
@@ -56,7 +61,20 @@ export async function listAdminIssues(
     page: filter.page,
     page_size: filter.page_size,
     hidden_ids: rows.filter((row) => row.hidden).map((row) => row.id),
+    awaiting_reply_ids: rows
+      .filter((row) => row.awaiting_reply)
+      .map((row) => row.id),
   };
+}
+
+export async function getIssueUnreadSummary(
+  userId: string,
+): Promise<IssueUnreadSummaryDto> {
+  return { unread_count: await countUnreadIssues(userId) };
+}
+
+export async function getAdminIssueSummary(): Promise<AdminIssueSummaryDto> {
+  return { awaiting_reply_count: await countAwaitingReplyIssues() };
 }
 
 function publicDetail(

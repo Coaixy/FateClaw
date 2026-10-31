@@ -30,6 +30,7 @@ import { benefitFailureBudgetMigration } from '#infrastructure/migrations/versio
 import { userDeletionOrdersMigration } from '#infrastructure/migrations/versions/0096-user-deletion-orders';
 import { runtimeIpcReceiptsMigration } from '#infrastructure/migrations/versions/0097-runtime-ipc-receipts';
 import { runtimeConfigMigration } from '#infrastructure/migrations/versions/0098-runtime-config';
+import { issueReadMarkersMigration } from '#infrastructure/migrations/versions/0099-issue-read-markers';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -63,6 +64,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   userDeletionOrdersMigration,
   runtimeIpcReceiptsMigration,
   runtimeConfigMigration,
+  issueReadMarkersMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

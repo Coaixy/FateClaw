@@ -8,6 +8,7 @@ import type { IssueDetailDto } from '@fateclaw/contracts';
 import { AppShell } from '@/components/app-shell';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { issuesApi } from '@/features/issues/api';
+import { refreshIssueUnread } from '@/features/issues/use-issue-unread';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { IssueMarkdown } from './issue-markdown';
 import {
@@ -61,7 +62,11 @@ export function IssueDetailWorkspace() {
     void issuesApi
       .detail(id, 0, controller.signal)
       .then((result) => {
-        if (!controller.signal.aborted) setData(result);
+        if (controller.signal.aborted) return;
+        setData(result);
+        // Loading the newest page stored the read marker; clear the sidebar badge now.
+        const viewer = user?.id;
+        if (viewer) void refreshIssueUnread(viewer);
       })
       .catch((error) => {
         if (!controller.signal.aborted)

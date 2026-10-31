@@ -5,16 +5,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
+  BellDot,
   ChevronDown,
   MessageSquare,
   Plus,
   Search,
   ShieldCheck,
 } from 'lucide-react';
-import type { IssueKind, IssueListDto } from '@fateclaw/contracts';
+import type { IssueKind, PublicIssueListDto } from '@fateclaw/contracts';
 import { AppShell } from '@/components/app-shell';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { issuesApi } from '@/features/issues/api';
+import { useIssueUnreadCount } from '@/features/issues/use-issue-unread';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import {
   IssueStateBadge,
@@ -30,7 +32,7 @@ const action =
 export function IssuesWorkspace() {
   const { user } = useAuth();
   const router = useRouter();
-  const [data, setData] = useState<IssueListDto | null>(null);
+  const [data, setData] = useState<PublicIssueListDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -39,6 +41,8 @@ export function IssuesWorkspace() {
   const [kind, setKind] = useState('');
   const [label, setLabel] = useState('');
   const [mine, setMine] = useState(false);
+  const [unread, setUnread] = useState(false);
+  const unreadCount = useIssueUnreadCount(user?.id);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
   const [composing, setComposing] = useState(false);
@@ -68,6 +72,7 @@ export function IssuesWorkspace() {
     if (kind) params.set('kind', kind);
     if (label) params.set('label', label);
     if (mine && user) params.set('mine', 'true');
+    if (unread && user) params.set('unread', 'true');
     void issuesApi
       .list(params, controller.signal)
       .then((result) => {
@@ -81,7 +86,7 @@ export function IssuesWorkspace() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, q, state, kind, label, mine, user?.id, revision]);
+  }, [page, q, state, kind, label, mine, unread, user?.id, revision]);
 
   async function submit() {
     if (busy || !user) return;
@@ -207,6 +212,29 @@ export function IssuesWorkspace() {
               {busy ? '正在提交…' : '发布'}
             </button>
           </form>
+        )}
+
+        {user && (unread || unreadCount > 0) && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm">
+            <span className="flex min-w-0 items-center gap-2 text-ink">
+              <BellDot size={15} className="shrink-0 text-primary" />
+              {unread
+                ? '正在查看有新动态的问题'
+                : `你参与的 ${unreadCount} 个问题有新回复或进展`}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 text-xs font-medium text-primary"
+              onClick={() => {
+                // Closing is itself an update, so the unread view must include closed issues.
+                if (!unread) setState('');
+                setUnread(!unread);
+                setPage(1);
+              }}
+            >
+              {unread ? '显示全部' : '查看'}
+            </button>
+          </div>
         )}
 
         <div className="rounded-xl border border-hairline bg-canvas">
@@ -350,6 +378,12 @@ export function IssuesWorkspace() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <IssueStateBadge issue={issue} />
+                    {data.unread_ids.includes(issue.id) && (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                        <span className="size-1.5 rounded-full bg-primary" />
+                        有新动态
+                      </span>
+                    )}
                     <span className="text-xs text-muted">
                       {ISSUE_KIND_TEXT[issue.kind]}
                     </span>

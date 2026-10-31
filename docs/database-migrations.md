@@ -127,3 +127,7 @@ These paths were verified on disposable PostgreSQL 18.4. Deployment and writes a
 ## Administrator runtime policy
 
 Migration `0098_runtime_config` preserves existing execution and Skill limits, adds revision fencing and the default-off WeChat switch, and removes obsolete model-selection and request-timeout columns after their historical consumers have run. Runtime policy saves and their audit records commit together. The separate `runtime_upgrade_tasks` receipt makes retired Redis LIST queue cleanup retryable and prevents repeating the deletion on every startup. See [Runtime configuration](runtime-configuration.md).
+
+## Issue read markers
+
+Migration `0099_issue_read_markers` adds `issue_participants.read_entry_id` and sets each existing participant to the issue's newest timeline entry, so upgrading does not report past official activity as new. Issues without entries keep zero. Issue content and account data are unchanged. See [Issues](issues.md#in-site-notifications).

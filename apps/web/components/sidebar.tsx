@@ -29,6 +29,7 @@ import { useReducer, useState, useEffect, useMemo } from 'react';
 import { isAiChatPath, useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useIssueUnreadCount } from '@/features/issues/use-issue-unread';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
@@ -238,7 +239,8 @@ export function Sidebar({
   const isHistoryPage = pathname === '/history' || pathname === '/history/';
   const router = useRouter();
   const { toast } = useToast();
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, user } = useAuth();
+  const issueUnread = useIssueUnreadCount(user?.id, true);
   const [open, setOpen] = useState(false);
   const toggleLabel = t(
     collapsed ? 'sidebar.expandSidebar' : 'sidebar.collapseSidebar',
@@ -444,7 +446,7 @@ export function Sidebar({
           <div className="flex items-center gap-1.5 min-w-0">
             <button
               onClick={() => setOpen((value) => !value)}
-              className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[12px] font-semibold shadow-sm transition-all duration-200 active:scale-95 ${
+              className={`relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[12px] font-semibold shadow-sm transition-all duration-200 active:scale-95 ${
                 open
                   ? 'border-primary/30 bg-primary/12 text-primary'
                   : 'border-hairline/70 bg-surface-card/80 text-ink hover:border-primary/30 hover:bg-primary/8'
@@ -461,6 +463,12 @@ export function Sidebar({
                 <Menu size={16} strokeWidth={1.8} />
               )}
               <span>{open ? t('sidebar.collapse') : t('sidebar.menu')}</span>
+              {issueUnread > 0 && !open && (
+                <span
+                  aria-hidden="true"
+                  className="absolute -right-1 -top-1 size-2.5 rounded-full bg-primary ring-2 ring-canvas"
+                />
+              )}
             </button>
           </div>
           <TopBar compact onLogout={onLogout} />
@@ -838,14 +846,32 @@ export function Sidebar({
               href="/issues"
               onClick={closeSidebar}
               className={`flex h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg text-[10px] font-medium text-muted transition-colors hover:bg-canvas/70 hover:text-ink ${collapsed ? 'lg:h-10 lg:w-10' : ''}`}
-              aria-label={t('sidebar.issues')}
-              title={t('sidebar.issues')}
+              aria-label={
+                issueUnread > 0
+                  ? t('sidebar.issuesUnread', { count: issueUnread })
+                  : t('sidebar.issues')
+              }
+              title={
+                issueUnread > 0
+                  ? t('sidebar.issuesUnread', { count: issueUnread })
+                  : t('sidebar.issues')
+              }
             >
-              <CircleDot
-                size={14}
-                strokeWidth={1.8}
-                className={collapsed ? 'lg:size-[18px]' : ''}
-              />
+              <span className="relative inline-flex">
+                <CircleDot
+                  size={14}
+                  strokeWidth={1.8}
+                  className={collapsed ? 'lg:size-[18px]' : ''}
+                />
+                {issueUnread > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-2.5 -top-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-on-primary ring-2 ring-canvas"
+                  >
+                    {issueUnread > 99 ? '99+' : issueUnread}
+                  </span>
+                )}
+              </span>
               <span className={collapsed ? 'lg:hidden' : ''}>
                 {t('sidebar.issues')}
               </span>

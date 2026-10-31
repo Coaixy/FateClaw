@@ -39,6 +39,15 @@ export interface IssueListDto {
   page: number;
   page_size: number;
 }
+export interface PublicIssueListDto extends IssueListDto {
+  unread_ids: number[];
+}
+export interface IssueUnreadSummaryDto {
+  unread_count: number;
+}
+export interface AdminIssueSummaryDto {
+  awaiting_reply_count: number;
+}
 export type IssueEntryType =
   | 'comment'
   | 'edited'
@@ -99,4 +108,5 @@ export interface AdminIssueDetailDto {
 }
 export interface AdminIssueListDto extends IssueListDto {
   hidden_ids: number[];
+  awaiting_reply_ids: number[];
 }

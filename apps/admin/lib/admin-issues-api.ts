@@ -1,6 +1,7 @@
 import type {
   AdminIssueDetailDto,
   AdminIssueListDto,
+  AdminIssueSummaryDto,
   IssueModerationDto,
 } from '@fateclaw/contracts';
 import { adminRequest } from './admin-api';
@@ -20,6 +21,7 @@ async function request<T>(path: string, options: RequestInit = {}) {
 }
 export const adminIssues = {
   list: (params: URLSearchParams) => request<AdminIssueListDto>(`?${params}`),
+  summary: () => request<AdminIssueSummaryDto>('/summary'),
   detail: (id: number, before = 0) =>
     request<AdminIssueDetailDto>(`/${id}?before=${before}`),
   update: (id: number, body: IssueModerationDto) =>

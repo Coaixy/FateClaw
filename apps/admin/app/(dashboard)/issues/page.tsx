@@ -15,6 +15,7 @@ import type {
 } from '@fateclaw/contracts';
 import { ISSUE_LABELS } from '@fateclaw/contracts';
 import { adminIssues } from '@/lib/admin-issues-api';
+import { refreshIssueAwaiting } from '@/lib/use-issue-awaiting';
 import { IssueMarkdown } from '@/components/issues/issue-markdown';
 
 const labels = {
@@ -65,7 +66,8 @@ export default function AdminIssuesPage() {
     setList(null);
     const params = new URLSearchParams({ page: String(page) });
     if (q) params.set('q', q);
-    if (state) params.set('state', state);
+    if (state === 'awaiting') params.set('awaiting', 'true');
+    else if (state) params.set('state', state);
     void adminIssues
       .list(params)
       .then((data) => {
@@ -115,6 +117,7 @@ export default function AdminIssuesPage() {
       await work();
       done?.();
       setRevision((value) => value + 1);
+      void refreshIssueAwaiting();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : '操作失败');
     } finally {
@@ -252,6 +255,7 @@ export default function AdminIssuesPage() {
               }}
             >
               <option value="">全部状态</option>
+              <option value="awaiting">待官方回复</option>
               <option value="open">未关闭</option>
               <option value="closed">已关闭</option>
             </select>
@@ -275,6 +279,11 @@ export default function AdminIssuesPage() {
                             ? reasons[issue.close_reason]
                             : '已关闭'}
                       </span>
+                      {list.awaiting_reply_ids.includes(issue.id) && (
+                        <span className="font-medium text-primary">
+                          待官方回复
+                        </span>
+                      )}
                       {list.hidden_ids.includes(issue.id) && (
                         <span className="text-error">已隐藏</span>
                       )}

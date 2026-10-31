@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useIssueAwaitingCount } from '@/lib/use-issue-awaiting';
 
 const navItems = [
   {
@@ -132,6 +133,8 @@ export function AdminSidebar({ session }: { session: AdminSession }) {
   );
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // The issue API is owner-only, so other roles would only receive 403s from polling.
+  const awaiting = useIssueAwaitingCount(session.role === 'owner', pathname);
 
   useEffect(() => {
     setOpen(false);
@@ -150,10 +153,16 @@ export function AdminSidebar({ session }: { session: AdminSession }) {
       <header className="fixed top-0 left-0 right-0 h-12 bg-canvas border-b border-hairline flex items-center gap-3 px-4 z-50 lg:hidden">
         <button
           onClick={() => setOpen(!open)}
-          className="shrink-0 p-1.5 -ml-1 rounded-md text-muted hover:text-ink transition-colors cursor-pointer"
+          className="relative shrink-0 p-1.5 -ml-1 rounded-md text-muted hover:text-ink transition-colors cursor-pointer"
           aria-label="菜单"
         >
           {open ? <X size={20} /> : <Menu size={20} />}
+          {awaiting > 0 && !open && (
+            <span
+              aria-hidden="true"
+              className="absolute right-0.5 top-0.5 size-2 rounded-full bg-primary ring-2 ring-canvas"
+            />
+          )}
         </button>
         <span className="text-sm font-semibold">命枢 Admin</span>
       </header>
@@ -182,11 +191,15 @@ export function AdminSidebar({ session }: { session: AdminSession }) {
           {visibleNavItems.map((item) => {
             const active = normalizedPathname === item.href;
             const Icon = item.icon;
+            const badge = item.href === '/issues' ? awaiting : 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 prefetch={false}
+                aria-label={
+                  badge > 0 ? `${item.label}，${badge} 个待官方回复` : undefined
+                }
                 className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-colors duration-100 cursor-pointer ${
                   active
                     ? 'bg-surface-cream-strong text-ink font-medium'
@@ -195,6 +208,14 @@ export function AdminSidebar({ session }: { session: AdminSession }) {
               >
                 <Icon size={16} strokeWidth={active ? 2 : 1.5} />
                 {item.label}
+                {badge > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto min-w-5 rounded-full bg-primary px-1.5 py-0.5 text-center text-[11px] font-medium leading-none text-on-primary"
+                  >
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
               </Link>
             );
           })}

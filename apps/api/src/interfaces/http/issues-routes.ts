@@ -10,6 +10,8 @@ import { fixedWindowRateLimit } from './rate-limit.js';
 import { IssueError } from '#modules/issues/issue-errors';
 import {
   getAdminIssue,
+  getAdminIssueSummary,
+  getIssueUnreadSummary,
   getPublicIssue,
   listAdminIssues,
   listPublicIssues,
@@ -19,6 +21,7 @@ import {
   editIssueComment,
   insertIssue,
   insertIssueComment,
+  markIssueRead,
   moderateIssue,
   moderateIssueComment,
   moderateIssueParticipant,
@@ -34,10 +37,14 @@ const listSchema = z
     kind: z.enum(ISSUE_KINDS).optional(),
     label: z.enum(ISSUE_LABELS).optional(),
     mine: z.enum(['true']).optional(),
+    unread: z.enum(['true']).optional(),
     page: z.coerce.number().int().min(1).max(10000).default(1),
     page_size: z.coerce.number().int().min(1).max(50).default(20),
   })
   .strict();
+const adminListSchema = listSchema
+  .omit({ mine: true, unread: true })
+  .extend({ awaiting: z.enum(['true']).optional() });
 const cursorSchema = z
   .object({ before: z.coerce.number().int().min(0).max(2147483647).default(0) })
   .strict();
@@ -125,21 +132,35 @@ export async function issuesRoutes(app: FastifyInstance) {
 
   app.get('/', async (request) => {
     const filter = listSchema.parse(request.query);
-    if (filter.mine && !request.headers.authorization)
+    if ((filter.mine || filter.unread) && !request.headers.authorization)
       throw new IssueError(401, '请先登录');
     return listPublicIssues(
-      { ...filter, mine: filter.mine ? request.user.userId : undefined },
+      {
+        ...filter,
+        mine: filter.mine ? request.user.userId : undefined,
+        unread: Boolean(filter.unread),
+      },
       request.headers.authorization ? request.user.userId : undefined,
     );
+  });
+  app.get('/unread-count', async (request) => {
+    if (!request.headers.authorization) throw new IssueError(401, '请先登录');
+    return getIssueUnreadSummary(request.user.userId);
   });
   app.get('/:id', async (request) => {
     const { id } = paramsSchema.parse(request.params);
     const { before } = cursorSchema.parse(request.query);
-    return getPublicIssue(
-      id,
-      before,
-      request.headers.authorization ? request.user.userId : undefined,
-    );
+    const viewer = request.headers.authorization
+      ? request.user.userId
+      : undefined;
+    const detail = await getPublicIssue(id, before, viewer);
+    const newest = detail.entries.at(-1)?.id;
+    // The read marker is a notification convenience; failing to store it must not hide the discussion.
+    if (viewer && before === 0 && newest)
+      await markIssueRead(id, viewer, newest).catch(() =>
+        request.log.warn('Issue read marker update failed'),
+      );
+    return detail;
   });
   app.post('/', { bodyLimit: 64 * 1024 }, async (request, reply) => {
     const result = await insertIssue(
@@ -198,9 +219,10 @@ export async function adminIssueRoutes(app: FastifyInstance) {
     );
   });
   app.get('/', async (request) => {
-    const filter = listSchema.omit({ mine: true }).parse(request.query);
-    return listAdminIssues(filter);
+    const filter = adminListSchema.parse(request.query);
+    return listAdminIssues({ ...filter, awaiting: Boolean(filter.awaiting) });
   });
+  app.get('/summary', async () => getAdminIssueSummary());
   app.get('/:id', async (request) => {
     const { id } = paramsSchema.parse(request.params);
     return getAdminIssue(id, cursorSchema.parse(request.query).before);

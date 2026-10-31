@@ -23,6 +23,7 @@ vi.mock('#infrastructure/redis', () => ({
   getRedis: () => state.redis,
 }));
 import { issuesMigration } from '#infrastructure/migrations/versions/0086-issues';
+import { issueReadMarkersMigration } from '#infrastructure/migrations/versions/0099-issue-read-markers';
 import { issuesRoutes, adminIssueRoutes } from '#interfaces/http/issues-routes';
 import { fixedWindowRateLimit } from '#interfaces/http/rate-limit';
 
@@ -94,6 +95,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       const client = await state.pool.connect();
       try {
         await issuesMigration.up(client);
+        await issueReadMarkersMigration.up(client);
       } finally {
         client.release();
       }
@@ -489,6 +491,109 @@ describe.skipIf(!databaseUrl || !redisUrl)(
         (await app.inject({ url: `/api/issues/${id}` })).json().entries.at(-1)
           .author,
       ).toEqual({ kind: 'official', participant_number: null, is_self: false });
+    });
+
+    it('notifies participants of official activity and counts issues awaiting an official reply', async () => {
+      const unread = async (user: string) =>
+        (
+          await app.inject({
+            url: '/api/issues/unread-count',
+            headers: auth(user),
+          })
+        ).json().unread_count;
+      const awaiting = async () =>
+        (
+          await app.inject({ url: '/api/admin/issues/summary', headers: admin })
+        ).json().awaiting_reply_count;
+      const officialReply = (id: number) =>
+        app.inject({
+          method: 'POST',
+          url: `/api/admin/issues/${id}/comments`,
+          headers: admin,
+          payload: { body: 'Official update', request_key: randomUUID() },
+        });
+      expect(
+        (await app.inject({ url: '/api/issues/unread-count' })).statusCode,
+      ).toBe(401);
+      expect(
+        (await app.inject({ url: '/api/issues?unread=true' })).statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await app.inject({
+            url: '/api/admin/issues/summary',
+            headers: { 'x-test-admin': 'user_manager' },
+          })
+        ).statusCode,
+      ).toBe(403);
+
+      const first = (await create('alice')).json().id;
+      const second = (await create('bob', issue('Second'))).json().id;
+      expect((await comment(first, 'bob')).statusCode).toBe(201);
+      expect(await awaiting()).toBe(2);
+      expect(await unread('alice')).toBe(0);
+
+      const reply = (await officialReply(first)).json().id;
+      expect(await awaiting()).toBe(1);
+      const awaitingList = (
+        await app.inject({
+          url: '/api/admin/issues?awaiting=true',
+          headers: admin,
+        })
+      ).json();
+      expect(awaitingList.items.map((item: { id: number }) => item.id)).toEqual(
+        [second],
+      );
+      expect(awaitingList.awaiting_reply_ids).toEqual([second]);
+      expect(await unread('alice')).toBe(1);
+      expect(await unread('bob')).toBe(1);
+      const aliceList = (
+        await app.inject({ url: '/api/issues?unread=true', headers: auth() })
+      ).json();
+      expect(aliceList.items.map((item: { id: number }) => item.id)).toEqual([
+        first,
+      ]);
+      expect(aliceList.unread_ids).toEqual([first]);
+      expect(
+        (await app.inject({ url: '/api/issues' })).json().unread_ids,
+      ).toEqual([]);
+
+      // A later participant starts at the current timeline, and their comment needs an answer again.
+      expect((await comment(first, 'carol')).statusCode).toBe(201);
+      expect(await unread('carol')).toBe(0);
+      expect(await awaiting()).toBe(2);
+
+      expect(
+        (await app.inject({ url: `/api/issues/${first}`, headers: auth() }))
+          .statusCode,
+      ).toBe(200);
+      expect(await unread('alice')).toBe(0);
+      expect(await unread('bob')).toBe(1);
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/admin/issues/${first}/comments/${reply}`,
+        headers: admin,
+        payload: { hidden: true },
+      });
+      expect(await unread('bob')).toBe(0);
+      expect(
+        (await moderate(second, { state: 'closed', close_reason: 'resolved' }))
+          .statusCode,
+      ).toBe(200);
+      expect(await awaiting()).toBe(1);
+      expect(await unread('bob')).toBe(1);
+      expect(
+        (
+          await app.inject({
+            url: `/api/issues/${second}?before=2147483647`,
+            headers: auth('bob'),
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(await unread('bob')).toBe(1);
+      await moderate(second, { hidden: true });
+      expect(await unread('bob')).toBe(0);
     });
 
     it('enforces the real atomic Redis limit and refuses writes during a Redis outage', async () => {

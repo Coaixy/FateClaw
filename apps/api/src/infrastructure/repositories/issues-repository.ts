@@ -30,6 +30,8 @@ export interface IssueRow {
   created_at: Date;
   updated_at: Date;
   comment_count?: number;
+  unread?: boolean;
+  awaiting_reply?: boolean;
   request_hash: string;
 }
 export interface IssueEntryRow {
@@ -52,8 +54,23 @@ export interface IssueListFilter {
   kind?: IssueKind;
   label?: IssueLabel;
   mine?: string;
+  unread?: boolean;
+  awaiting?: boolean;
   page: number;
   page_size: number;
+}
+
+// Participants are notified of visible official activity after the newest entry they have seen.
+function unreadFor(issue: string, viewer: string) {
+  return `EXISTS (SELECT 1 FROM issue_participants p JOIN issue_entries e ON e.issue_id=p.issue_id
+    WHERE p.issue_id=${issue}.id AND p.user_id=${viewer} AND e.id>p.read_entry_id
+    AND e.actor_kind='official' AND NOT e.hidden)`;
+}
+// An open issue needs an official answer until an official comment follows the newest user comment.
+function awaitingReply(issue: string) {
+  return `(${issue}.state='open' AND NOT ${issue}.hidden AND NOT EXISTS (
+    SELECT 1 FROM issue_entries o WHERE o.issue_id=${issue}.id AND o.type='comment' AND o.actor_kind='official' AND NOT o.hidden
+    AND o.id>COALESCE((SELECT max(u.id) FROM issue_entries u WHERE u.issue_id=${issue}.id AND u.type='comment' AND u.actor_kind='user' AND NOT u.hidden),0)))`;
 }
 
 async function transaction<T>(
@@ -158,7 +175,11 @@ async function addEntry(
   );
 }
 
-export async function listIssueRows(filter: IssueListFilter, admin: boolean) {
+export async function listIssueRows(
+  filter: IssueListFilter,
+  admin: boolean,
+  viewer: string | null = null,
+) {
   return transaction(async (client) => {
     const q = filter.q ? `%${filter.q.replace(/[\\%_]/g, '\\$&')}%` : null;
     const params = [
@@ -168,15 +189,21 @@ export async function listIssueRows(filter: IssueListFilter, admin: boolean) {
       filter.kind ?? null,
       filter.label ?? null,
       filter.mine ?? null,
+      viewer,
+      filter.unread ?? false,
+      filter.awaiting ?? false,
     ];
     const where = `WHERE ($1 OR NOT i.hidden) AND ($2::text IS NULL OR i.title ILIKE $2)
     AND ($3::text IS NULL OR i.state=$3) AND ($4::text IS NULL OR i.kind=$4)
-    AND ($5::text IS NULL OR $5=ANY(i.labels)) AND ($6::text IS NULL OR i.author_user_id=$6)`;
+    AND ($5::text IS NULL OR $5=ANY(i.labels)) AND ($6::text IS NULL OR i.author_user_id=$6)
+    AND (NOT $8 OR ${unreadFor('i', '$7')}) AND (NOT $9 OR ${awaitingReply('i')})`;
     const rows = await queryRows<IssueRow>(
       client,
       `SELECT i.*,
-    (SELECT count(*)::int FROM issue_entries e WHERE e.issue_id=i.id AND e.type='comment' AND ($1 OR NOT e.hidden)) AS comment_count
-    FROM issues i ${where} ORDER BY i.updated_at DESC,i.id DESC LIMIT $7 OFFSET $8`,
+    (SELECT count(*)::int FROM issue_entries e WHERE e.issue_id=i.id AND e.type='comment' AND ($1 OR NOT e.hidden)) AS comment_count,
+    ${unreadFor('i', '$7')} AS unread,
+    ${awaitingReply('i')} AS awaiting_reply
+    FROM issues i ${where} ORDER BY i.updated_at DESC,i.id DESC LIMIT $10 OFFSET $11`,
       [...params, filter.page_size, (filter.page - 1) * filter.page_size],
     );
     const total = await queryOne<{ count: string }>(
@@ -237,6 +264,41 @@ export async function getIssueRows(id: number, after: number, admin: boolean) {
       identities,
     };
   });
+}
+
+export async function countUnreadIssues(userId: string) {
+  return transaction(async (client) => {
+    const row = await queryOne<{ count: number }>(
+      client,
+      `SELECT count(*)::int AS count FROM issues i WHERE NOT i.hidden AND ${unreadFor('i', '$1')}`,
+      [userId],
+    );
+    return row?.count ?? 0;
+  });
+}
+
+export async function countAwaitingReplyIssues() {
+  return transaction(async (client) => {
+    const row = await queryOne<{ count: number }>(
+      client,
+      `SELECT count(*)::int AS count FROM issues i WHERE ${awaitingReply('i')}`,
+    );
+    return row?.count ?? 0;
+  });
+}
+
+export async function markIssueRead(
+  id: number,
+  userId: string,
+  entryId: number,
+) {
+  // The monotonic guard keeps an older concurrent page view from moving the marker backwards.
+  await transaction((client) =>
+    client.query(
+      'UPDATE issue_participants SET read_entry_id=$3 WHERE issue_id=$1 AND user_id=$2 AND read_entry_id<$3',
+      [id, userId, entryId],
+    ),
+  );
 }
 
 export async function insertIssue(userId: string, input: IssueCreateDto) {
@@ -312,9 +374,11 @@ export async function insertIssueComment(
         [id, actor.userId, hash],
       );
       if (duplicate) throw new IssueError(409, '请勿重复发送相同评论');
+      // A new participant starts at the current timeline; earlier official activity is not news to them.
       await client.query(
-        `INSERT INTO issue_participants(issue_id,user_id,participant_number)
-        SELECT $1,$2,COALESCE(max(participant_number),0)+1 FROM issue_participants WHERE issue_id=$1
+        `INSERT INTO issue_participants(issue_id,user_id,participant_number,read_entry_id)
+        SELECT $1,$2,COALESCE(max(participant_number),0)+1,
+        (SELECT COALESCE(max(id),0) FROM issue_entries WHERE issue_id=$1) FROM issue_participants WHERE issue_id=$1
         ON CONFLICT(issue_id,user_id) DO NOTHING`,
         [id, actor.userId],
       );

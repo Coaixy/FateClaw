@@ -763,6 +763,7 @@ export const enMessages = {
     status: 'Status',
     shortcutsAndTheme: 'Sidebar shortcuts and theme toggle',
     issues: 'Issues',
+    issuesUnread: 'Issues, {count} with new replies or updates',
     viewStatus: 'View platform status',
     switchTheme: 'Switch theme, current {theme}',
     currentTheme: 'Current theme: {theme}',
