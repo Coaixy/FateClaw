@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MIGRATIONS } from '#infrastructure/migrations/manifest';
 import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
+import { getAnnouncementPolls } from '#infrastructure/repositories/announcements-repository';
 
 // This opt-in connection must point to a disposable server with CREATE DATABASE permission.
 const connectionString = process.env.FATECLAW_TEST_MIGRATIONS_DATABASE_URL;
@@ -155,6 +156,73 @@ describe.skipIf(!connectionString)(
         });
       });
     }, 30000);
+
+    it('preserves existing single-choice poll selections and revisions through the multi-choice upgrade', async () => {
+      await withDatabase(async (client) => {
+        await replayHistory(client, '0100_announcement_polls');
+        const id = randomUUID();
+        const optionIds = [randomUUID(), randomUUID()];
+        await client.query(
+          "INSERT INTO users(id,phone,created_at) VALUES ('poll-upgrade-user','13000000001',now())",
+        );
+        await client.query(
+          `INSERT INTO popup_announcements(id,title,body_markdown,status,published_at,revision)
+          VALUES ($1,'Existing poll','Existing body','published','2026-10-31T00:00:00Z',7)`,
+          [id],
+        );
+        await client.query(
+          "INSERT INTO announcement_polls(announcement_id,question) VALUES ($1,'Existing question')",
+          [id],
+        );
+        await client.query(
+          `INSERT INTO announcement_poll_options(announcement_id,id,label,position)
+          VALUES ($1,$2,'A',0),($1,$3,'B',1)`,
+          [id, ...optionIds],
+        );
+        await client.query(
+          `INSERT INTO announcement_poll_votes(announcement_id,user_id,option_id)
+          VALUES ($1,'poll-upgrade-user',$2)`,
+          [id, optionIds[1]],
+        );
+        const before = (
+          await client.query(
+            'SELECT * FROM popup_announcements WHERE id = $1',
+            [id],
+          )
+        ).rows[0];
+        await runDatabaseMigrations(client);
+        expect(
+          (await getAnnouncementPolls([id], 'poll-upgrade-user', client)).get(
+            id,
+          ),
+        ).toMatchObject({
+          allow_multiple: false,
+          total_votes: 1,
+          selected_option_ids: [optionIds[1]],
+          options: [
+            { id: optionIds[0], vote_count: 0 },
+            { id: optionIds[1], vote_count: 1 },
+          ],
+        });
+        await runDatabaseMigrations(client);
+        expect(
+          (
+            await client.query(
+              'SELECT * FROM popup_announcements WHERE id = $1',
+              [id],
+            )
+          ).rows[0],
+        ).toEqual(before);
+        expect(
+          (
+            await client.query(
+              'SELECT count(*)::integer AS total FROM announcement_poll_votes WHERE announcement_id = $1',
+              [id],
+            )
+          ).rows[0].total,
+        ).toBe(1);
+      });
+    });
 
     it('upgrades populated benefit records without losing attempt accounting and remains safe on repeated startup', async () => {
       await withDatabase(async (client) => {

@@ -16,7 +16,7 @@ The API prefixes currently registered in Fastify:
 - `/api/paipan`
 - `/api/skills`
 - `/api/issues`
-- `/api/announcements` — public popup notices; owner management under `/api/admin/announcements` ([contract](announcements.md))
+- `/api/announcements` — public popup notices and poll results; authenticated `PUT /:id/vote` submits complete single-choice or multiple-choice selections; owner management under `/api/admin/announcements` ([contract](announcements.md))
 - `/api/billing`
 - `/api/api-keys`
 - `/api/v1`

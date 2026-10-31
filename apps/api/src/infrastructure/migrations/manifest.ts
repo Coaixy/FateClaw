@@ -31,6 +31,8 @@ import { userDeletionOrdersMigration } from '#infrastructure/migrations/versions
 import { runtimeIpcReceiptsMigration } from '#infrastructure/migrations/versions/0097-runtime-ipc-receipts';
 import { runtimeConfigMigration } from '#infrastructure/migrations/versions/0098-runtime-config';
 import { issueReadMarkersMigration } from '#infrastructure/migrations/versions/0099-issue-read-markers';
+import { announcementPollsMigration } from '#infrastructure/migrations/versions/0100-announcement-polls';
+import { announcementMultipleChoiceMigration } from '#infrastructure/migrations/versions/0101-announcement-multiple-choice';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -65,6 +67,8 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   runtimeIpcReceiptsMigration,
   runtimeConfigMigration,
   issueReadMarkersMigration,
+  announcementPollsMigration,
+  announcementMultipleChoiceMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

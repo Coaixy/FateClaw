@@ -5,12 +5,21 @@ import { Eye, Megaphone, Plus, RefreshCw, Send, X } from 'lucide-react';
 import type {
   AdminAnnouncementDto,
   AdminAnnouncementListDto,
+  AnnouncementPollDto,
   AnnouncementStatus,
 } from '@fateclaw/contracts';
 import { adminAnnouncements } from '@/lib/admin-announcements-api';
 import { formatAdminErrorMessage } from '@/lib/admin-api';
 import { useConfirm } from '@/lib/use-confirm';
 import { AnnouncementMarkdown } from '@/components/announcements/announcement-markdown';
+import {
+  AnnouncementPollEditor,
+  getAnnouncementPollError,
+  getAnnouncementPollStatus,
+  toAnnouncementPollEditor,
+  toAnnouncementPollWrite,
+  type AnnouncementPollEditorValue,
+} from '@/components/announcements/announcement-poll-editor';
 
 const statusLabels: Record<AnnouncementStatus, string> = {
   draft: '草稿',
@@ -29,6 +38,8 @@ interface Editor {
   body_markdown: string;
   revision: number;
   status: AnnouncementStatus;
+  poll: AnnouncementPollEditorValue | null;
+  pollResults: AnnouncementPollDto | null;
 }
 
 function newEditor(): Editor {
@@ -38,6 +49,20 @@ function newEditor(): Editor {
     body_markdown: '',
     revision: 0,
     status: 'draft',
+    poll: null,
+    pollResults: null,
+  };
+}
+
+function announcementEditor(item: AdminAnnouncementDto): Editor {
+  return {
+    id: item.id,
+    title: item.title,
+    body_markdown: item.body_markdown,
+    revision: item.revision,
+    status: item.status,
+    poll: toAnnouncementPollEditor(item.poll),
+    pollResults: item.poll ?? null,
   };
 }
 
@@ -77,7 +102,7 @@ export default function AnnouncementsPage() {
   }, [page, status, reload]);
 
   function edit(item?: AdminAnnouncementDto) {
-    setEditor(item ? { ...item } : newEditor());
+    setEditor(item ? announcementEditor(item) : newEditor());
     setActionError('');
     setSuccess('');
     setPreview(false);
@@ -85,6 +110,11 @@ export default function AnnouncementsPage() {
 
   async function save(target: AnnouncementStatus, value = editor) {
     if (!value || saving.current) return;
+    const pollError = getAnnouncementPollError(value.poll, value.pollResults);
+    if (pollError) {
+      setActionError(pollError);
+      return;
+    }
     saving.current = true;
     setBusy(true);
     setActionError('');
@@ -95,6 +125,7 @@ export default function AnnouncementsPage() {
         body_markdown: value.body_markdown.trim(),
         status: target,
         expected_revision: value.revision,
+        poll: toAnnouncementPollWrite(value.poll, value.pollResults),
       });
       setEditor(null);
       setSuccess(
@@ -119,7 +150,7 @@ export default function AnnouncementsPage() {
       message: `确定下线「${item.title}」？下线后用户将不再收到这条公告。`,
       confirmLabel: '下线',
     });
-    if (accepted) await save('archived', item);
+    if (accepted) await save('archived', announcementEditor(item));
   }
 
   const valid = !!editor?.title.trim() && !!editor?.body_markdown.trim();
@@ -255,6 +286,15 @@ export default function AnnouncementsPage() {
                   /20000 字
                 </p>
               </div>
+              <AnnouncementPollEditor
+                value={editor.poll}
+                baseline={editor.pollResults}
+                status={editor.status}
+                onChange={(poll) => {
+                  setEditor({ ...editor, poll });
+                  setActionError('');
+                }}
+              />
               <div className="rounded-lg border border-hairline bg-canvas px-4 py-3 text-xs leading-6 text-muted">
                 {editor.status === 'published'
                   ? '保存并发布后，修改后的公告会再次提醒用户。'
@@ -394,6 +434,13 @@ export default function AnnouncementsPage() {
                         hour12: false,
                       })}
                     </p>
+                    {item.poll && (
+                      <p className="mt-1 text-xs text-muted">
+                        {item.poll.allow_multiple ? '多选' : '单选'} ·{' '}
+                        {getAnnouncementPollStatus(item.poll, item.status)} ·{' '}
+                        {item.poll.total_votes} 人参与
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button

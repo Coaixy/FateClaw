@@ -37,6 +37,21 @@ table for versioned operational notice dialogs. The retired banner table and
 its frozen removal migration remain unchanged. See [Popup announcements](announcements.md)
 for publication, browser dismissal and concurrent editing behavior.
 
+The `0100_announcement_polls` migration adds optional single-choice polls,
+ordered options, and one vote per announcement/account. Votes reference both
+their option and existing user; announcement and account deletion cascade their
+associated poll data. Existing notices retain their content and dismissal
+revision. API startup applies this additive upgrade before the updated web and
+admin clients use it. See [Announcement polls](announcements.md#single-choice-and-multiple-choice-polls)
+for voting, closure, retry, and concurrent editing rules.
+
+`0101_announcement_multiple_choice` adds a default-false `allow_multiple` flag
+and extends the vote primary key to announcement/account/option. Existing
+single-choice polls, selections, and announcement revisions are preserved.
+Each account submits a complete selection in one transaction; participation
+counts distinct accounts rather than selected options. Deploy API, web, and
+admin together for the `option_ids` and `selected_option_ids` array contract.
+
 The `0092_registration_invites` migration adds invitation policy, lifetime user
 allowances, hashed single-use codes and completed-refund records. Historical paid
 orders qualify for the initial CNY 100 / three-slot allowance. Subsequent recharge

@@ -730,6 +730,8 @@ export const zhCNMessages = {
     status: '状态',
     shortcutsAndTheme: '侧栏快捷入口和主题切换',
     issues: '问题与建议',
+    announcements: '公告',
+    viewAnnouncements: '公告与投票',
     issuesUnread: '问题与建议，{count} 条有新回复或进展',
     viewStatus: '查看平台状态',
     switchTheme: '切换主题，当前{theme}',

@@ -21,6 +21,8 @@ export function SiteNotices() {
   if (
     pathname === '/status' ||
     pathname === '/status/' ||
+    pathname === '/announcements' ||
+    pathname === '/announcements/' ||
     pathname === '/acknowledgements' ||
     pathname === '/acknowledgements/'
   ) {

@@ -730,6 +730,8 @@ export const zhTWMessages = {
     status: '狀態',
     shortcutsAndTheme: '側欄快捷入口和主題切換',
     issues: '問題與建議',
+    announcements: '公告',
+    viewAnnouncements: '公告與投票',
     issuesUnread: '問題與建議，{count} 則有新回覆或進展',
     viewStatus: '查看平台狀態',
     switchTheme: '切換主題，目前{theme}',

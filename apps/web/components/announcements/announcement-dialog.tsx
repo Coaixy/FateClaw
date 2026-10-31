@@ -1,10 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { Megaphone } from 'lucide-react';
-import type { AnnouncementDto } from '@fateclaw/contracts';
-import { announcementsApi } from '@/features/announcements/api';
+import { useAnnouncements } from '@/features/announcements/use-announcements';
 import {
   dismissAnnouncement,
   isAnnouncementDismissed,
@@ -14,42 +13,13 @@ import { useI18n } from '@/lib/i18n';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { AnnouncementMarkdown } from './announcement-markdown';
+import { AnnouncementPoll } from './announcement-poll';
 
 export function AnnouncementDialog({ enabled }: { enabled: boolean }) {
-  const pathname = usePathname();
   const { formatDate } = useI18n();
-  const [items, setItems] = useState<AnnouncementDto[]>([]);
+  const { items, refresh, updatePoll, viewer } = useAnnouncements(enabled);
   const [, setStorageRevision] = useState(0);
   const [available, setAvailable] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let controller: AbortController | undefined;
-    let active = true;
-    async function refresh() {
-      controller?.abort();
-      const requestController = new AbortController();
-      controller = requestController;
-      try {
-        const result = await announcementsApi.list(requestController.signal);
-        if (active && !requestController.signal.aborted) setItems(result.items);
-      } catch (error) {
-        if (active && !requestController.signal.aborted) {
-          console.warn('Failed to load announcements', error);
-        }
-      }
-    }
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh();
-    };
-    void refresh();
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      active = false;
-      controller?.abort();
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [enabled, pathname]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -109,6 +79,13 @@ export function AnnouncementDialog({ enabled }: { enabled: boolean }) {
           <p className="text-xs leading-5 text-muted">
             同一公告不再重复提醒
             {pending.length > 1 ? ` · 还有 ${pending.length - 1} 条` : ''}
+            <Link
+              href="/announcements"
+              onClick={dismiss}
+              className="mt-1 block text-primary underline underline-offset-4"
+            >
+              查看公告与投票
+            </Link>
           </p>
           <Button autoFocus onClick={dismiss} className="shrink-0">
             {pending.length > 1 ? '下一条' : '我知道了'}
@@ -136,6 +113,16 @@ export function AnnouncementDialog({ enabled }: { enabled: boolean }) {
         <div className="mt-5 border-t border-hairline-soft pt-2">
           <AnnouncementMarkdown>{current.body_markdown}</AnnouncementMarkdown>
         </div>
+        {current.poll && (
+          <AnnouncementPoll
+            key={`${current.id}:${current.revision}:${viewer}`}
+            announcementId={current.id}
+            revision={current.revision}
+            poll={current.poll}
+            onChange={(poll) => updatePoll(current.id, poll)}
+            onRefresh={refresh}
+          />
+        )}
       </article>
     </BottomSheet>
   );
