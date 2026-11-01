@@ -128,7 +128,7 @@ const pendingInboxRequests = new Map<string, PendingInboxRequest>();
 const pendingAiChatRequests = new Map<string, PendingInboxRequest>();
 const accountListeners = new Map<
   string,
-  { running: boolean; redis: Redis; aiRedis: Redis }
+  { running: boolean; redis: Redis; aiRedis: Redis; memoryRedis: Redis }
 >();
 const desiredAccountListeners = new Set<string>();
 const listenerSupervisors = new Map<string, { running: boolean }>();
@@ -461,7 +461,10 @@ async function listenForAccount(accountId: string): Promise<void> {
   // The 1s reads fit within the inherited 5s deadline; ioredis treats 0 as immediate.
   const redis = getRedis().duplicate();
   const aiRedis = getRedis().duplicate();
-  for (const client of [redis, aiRedis]) {
+  // Memory RPCs sit on the first model step, so they must not wait behind chart calculations, and
+  // their database waits must not delay outbox delivery.
+  const memoryRedis = getRedis().duplicate();
+  for (const client of [redis, aiRedis, memoryRedis]) {
     client.on('error', (err) => {
       // Redis errors can carry command arguments, including authentication values.
       logger.warn(
@@ -473,7 +476,7 @@ async function listenForAccount(accountId: string): Promise<void> {
       );
     });
   }
-  const listener = { running: true, redis, aiRedis };
+  const listener = { running: true, redis, aiRedis, memoryRedis };
   accountListeners.set(accountId, listener);
   let lastActivityAtMs = Date.now();
 
@@ -481,7 +484,11 @@ async function listenForAccount(accountId: string): Promise<void> {
 
   try {
     // The lazy duplicate inherits disabled offline queuing, so BRPOP must wait for readiness.
-    await Promise.all([redis.connect(), aiRedis.connect()]);
+    await Promise.all([
+      redis.connect(),
+      aiRedis.connect(),
+      memoryRedis.connect(),
+    ]);
     const consume = async (aiChat: boolean) => {
       while (listener.running) {
         const queueName = aiChat
@@ -498,7 +505,6 @@ async function listenForAccount(accountId: string): Promise<void> {
               queueName,
               paipanRequestQueue(accountId),
               visualizationRequestQueue(accountId),
-              memoryRequestQueue(accountId),
               1,
             );
 
@@ -532,8 +538,6 @@ async function listenForAccount(accountId: string): Promise<void> {
             await processPaipanToolPayload(payload, accountId);
           } else if (queue === visualizationRequestQueue(accountId)) {
             await processVisualizationToolPayload(payload, accountId);
-          } else if (queue === memoryRequestQueue(accountId)) {
-            await processMemoryToolPayload(payload, accountId);
           } else if (queue.endsWith(':ai-chat:outbox')) {
             // AI Chat 专属队列：永远不发微信
             await processAiChatOutboxPayload(
@@ -621,9 +625,29 @@ async function listenForAccount(accountId: string): Promise<void> {
         }
       }
     };
-    await Promise.all([consume(false), consume(true)]);
+    const consumeMemory = async () => {
+      const queue = memoryRequestQueue(accountId);
+      while (listener.running) {
+        const result = await memoryRedis.brpop(queue, 1);
+        if (!result) continue;
+        lastActivityAtMs = Date.now();
+        try {
+          await processMemoryToolPayload(
+            JSON.parse(decodeRuntimeIpc(accountId, queue, result[1])),
+            accountId,
+          );
+        } catch (error) {
+          logger.error(
+            { accountId, queue, err: error },
+            '处理记忆 IPC 请求失败',
+          );
+        }
+      }
+    };
+    await Promise.all([consume(false), consume(true), consumeMemory()]);
   } finally {
     listener.running = false;
+    memoryRedis.disconnect();
     aiRedis.disconnect();
     // QUIT on a broken read-only connection can mask the original listener failure.
     redis.disconnect();
@@ -852,6 +876,7 @@ export function _resetIpcWorkerForTests(): void {
     listener.running = false;
     listener.redis.disconnect();
     listener.aiRedis.disconnect();
+    listener.memoryRedis.disconnect();
   }
   accountListeners.clear();
   desiredAccountListeners.clear();

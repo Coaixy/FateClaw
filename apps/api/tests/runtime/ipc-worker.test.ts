@@ -119,6 +119,9 @@ vi.mock('#runtime/ipc-outbox-handler', () => ({
 vi.mock('#runtime/paipan-tool-handler', () => ({
   processPaipanToolPayload: vi.fn(),
 }));
+vi.mock('#runtime/memory-tool-handler', () => ({
+  processMemoryToolPayload: vi.fn(),
+}));
 
 vi.mock('#runtime/ipc-ai-chat-outbox-handler', () => ({
   processAiChatOutboxPayload: vi.fn(),
@@ -169,6 +172,7 @@ import type { PendingInboxRequest } from '#runtime/ipc-payloads';
 import { processAiChatOutboxPayload } from '#runtime/ipc-ai-chat-outbox-handler';
 import { processOutboxPayload } from '#runtime/ipc-outbox-handler';
 import { processPaipanToolPayload } from '#runtime/paipan-tool-handler';
+import { processMemoryToolPayload } from '#runtime/memory-tool-handler';
 import {
   getMembershipOverview,
   getUserByAccountId,
@@ -250,6 +254,17 @@ describe('Redis IPC listener lifecycle', () => {
     };
   }
 
+  function createMemoryConsumer() {
+    return {
+      on: vi.fn(),
+      connect: vi.fn(async () => undefined),
+      brpop: vi.fn(
+        (): Promise<[string, string] | null> => new Promise(() => {}),
+      ),
+      disconnect: vi.fn(),
+    };
+  }
+
   beforeEach(() => {
     _resetIpcWorkerForTests();
     vi.clearAllMocks();
@@ -275,9 +290,11 @@ describe('Redis IPC listener lifecycle', () => {
           ready = resolve;
         }),
     );
+    const memory = createMemoryConsumer();
     mockDuplicate
       .mockReturnValueOnce(consumer)
-      .mockReturnValueOnce(createAiConsumer());
+      .mockReturnValueOnce(createAiConsumer())
+      .mockReturnValueOnce(memory);
 
     addAccountListener(accountId);
     await vi.advanceTimersByTimeAsync(0);
@@ -293,7 +310,6 @@ describe('Redis IPC listener lifecycle', () => {
       queue,
       `ipc:${accountId}:paipan`,
       `ipc:${accountId}:visualization`,
-      `ipc:${accountId}:memory`,
       1,
     );
     expect(processOutboxPayload).toHaveBeenCalledWith(
@@ -302,6 +318,7 @@ describe('Redis IPC listener lifecycle', () => {
       expect.any(Map),
     );
     expect(consumer.disconnect).toHaveBeenCalledOnce();
+    expect(memory.disconnect).toHaveBeenCalledOnce();
     expect(consumer.quit).not.toHaveBeenCalled();
     expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
     expect(mockLoggerError).not.toHaveBeenCalled();
@@ -321,7 +338,8 @@ describe('Redis IPC listener lifecycle', () => {
     });
     mockDuplicate
       .mockReturnValueOnce(consumer)
-      .mockReturnValueOnce(createAiConsumer());
+      .mockReturnValueOnce(createAiConsumer())
+      .mockReturnValueOnce(createMemoryConsumer());
     addAccountListener(accountId);
     await vi.advanceTimersByTimeAsync(0);
     expect(processPaipanToolPayload).toHaveBeenCalledWith(
@@ -330,6 +348,43 @@ describe('Redis IPC listener lifecycle', () => {
     );
     expect(processOutboxPayload).not.toHaveBeenCalled();
     expect(processAiChatOutboxPayload).not.toHaveBeenCalled();
+  });
+
+  it('serves memory requests while a chart request still occupies the tool listener', async () => {
+    const consumer = createConsumer();
+    const toolQueue = `ipc:${accountId}:paipan`;
+    consumer.brpop.mockImplementationOnce(async () => [
+      toolQueue,
+      encodeRuntimeIpc(
+        accountId,
+        toolQueue,
+        JSON.stringify({ rpcId: 'chart', operation: { mode: 'catalog' } }),
+      ),
+    ]);
+    vi.mocked(processPaipanToolPayload).mockImplementationOnce(
+      () => new Promise(() => {}),
+    );
+    const memory = createMemoryConsumer();
+    const memoryQueue = `ipc:${accountId}:memory`;
+    const request = { rpcId: 'memory', operation: { mode: 'prepare' } };
+    memory.brpop.mockImplementationOnce(async () => {
+      removeAccountListener(accountId);
+      return [
+        memoryQueue,
+        encodeRuntimeIpc(accountId, memoryQueue, JSON.stringify(request)),
+      ];
+    });
+    mockDuplicate
+      .mockReturnValueOnce(consumer)
+      .mockReturnValueOnce(createAiConsumer())
+      .mockReturnValueOnce(memory);
+    addAccountListener(accountId);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(processPaipanToolPayload).toHaveBeenCalledOnce();
+    expect(processMemoryToolPayload).toHaveBeenCalledWith(
+      expect.objectContaining(request),
+      accountId,
+    );
   });
 
   it.each(['connect', 'brpop'] as const)(
@@ -348,8 +403,10 @@ describe('Redis IPC listener lifecycle', () => {
       mockDuplicate
         .mockReturnValueOnce(failed)
         .mockReturnValueOnce(createAiConsumer())
+        .mockReturnValueOnce(createMemoryConsumer())
         .mockReturnValueOnce(recovered)
-        .mockReturnValueOnce(createAiConsumer());
+        .mockReturnValueOnce(createAiConsumer())
+        .mockReturnValueOnce(createMemoryConsumer());
 
       addAccountListener(accountId);
       await vi.advanceTimersByTimeAsync(0);
@@ -360,12 +417,12 @@ describe('Redis IPC listener lifecycle', () => {
       );
       expect(failed.disconnect).toHaveBeenCalledOnce();
       expect(getIpcWorkerStatus().listenerAccounts).toEqual([]);
-      expect(mockDuplicate).toHaveBeenCalledTimes(2);
+      expect(mockDuplicate).toHaveBeenCalledTimes(3);
       if (phase === 'connect') expect(failed.brpop).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1_000);
 
-      expect(mockDuplicate).toHaveBeenCalledTimes(4);
+      expect(mockDuplicate).toHaveBeenCalledTimes(6);
       expect(processOutboxPayload).toHaveBeenCalledWith(
         expect.objectContaining(payload),
         accountId,

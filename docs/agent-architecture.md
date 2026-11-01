@@ -34,6 +34,8 @@ Redis IPC
   ipc:{runtimeId}:outbox
   ipc:{runtimeId}:ai-chat:outbox
   ipc:{runtimeId}:cancel
+  ipc:{runtimeId}:paipan / :visualization   (host tools, read with the outbox)
+  ipc:{runtimeId}:memory                    (own host consumer, so recall never waits behind charts)
         │
         ▼
 Account-level resident agent-runtime process
