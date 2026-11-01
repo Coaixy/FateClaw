@@ -24,7 +24,7 @@ flowchart LR
 
 The host owns identity, permissions, source access, writes, jobs and accounting. The runtime owns the model loop and the temporary provider projection. Model tool arguments cannot select an owner, actor, audience or memory namespace.
 
-User admission stores the message, its frozen memory scope, a source record and the extraction job in one transaction, so learning does not depend on the assistant replying. Admission never fails a chat turn because of memory state: an archived client, an inactive speaker binding or a subject the speaker may not use only turns learning and recall off for that turn. Admission takes no lock on the memory root.
+User admission stores the message, its frozen memory scope, a source record and the extraction job in one transaction, so learning does not depend on the assistant replying. Admission rejects a turn only when the session is missing, the channel metadata lacks the speaker identity, or the identity changed after the turn was prepared (409 `MEMORY.PREPARATION_CHANGED`). Other memory state never fails it: an archived client, an inactive speaker binding or a subject the speaker may not use only turns learning and recall off for that turn. Admission takes no lock on the memory root.
 
 Model calls run outside row locks. Applying their output locks the memory root and checks the job lease, the scope epoch, the speaker binding revision, the source version and hash, and the current account and conversation learning switches. Late or revoked work ends as a durable skipped/cancelled job. Workers use the existing platform model resolver and its opaque credential source.
 
@@ -90,7 +90,7 @@ The three account switches control automatic learning, model recall, and memory 
 
 `/memory` supports subject/source/status filtering, direct add/edit/forget, original evidence, source exclusion, sender binding and sharing, per-conversation learning, history import progress and pause/resume.
 
-`remember_memory` can cite only a user message of the current conversation and audience, so a model cannot attach text from another conversation or from a conversation whose learning is off.
+`remember_memory` can cite only a user message of the current conversation, audience and speaker binding, so a model cannot attach text from another conversation. It still works when the conversation's learning is off, because the user asked to save that statement.
 
 Forgetting an item follows its version and merge lineage, excludes every historical hash and key at the cutoff, masks every occurrence of its supporting quote in the source text, revokes overlapping unsupported evidence and removes its index entries. Pending extraction cannot recreate a forgotten item. Unrelated statements in the same message remain usable. Excluding one source preserves facts that still have another valid source, and its exclusion identity survives physical deletion of the source row.
 
