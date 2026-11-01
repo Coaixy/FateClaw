@@ -142,7 +142,7 @@ export async function updateMemoryScopeBinding(
     const owner = await ensureOwnerMemoryScope(ownerUserId, db);
     const root = await lockMemoryRoot(owner.id, db);
     const { rows } = await db.query<BindingRow>(
-      'SELECT * FROM memory_scopes WHERE id=$1 AND owner_user_id=$2 AND (id=$3 OR parent_scope_id=$3) FOR UPDATE',
+      'SELECT * FROM memory_scopes WHERE id=$1 AND owner_user_id=$2 AND (id=$3 OR parent_scope_id=$3) FOR NO KEY UPDATE',
       [scopeId, ownerUserId, root.id],
     );
     const scope = rows[0];

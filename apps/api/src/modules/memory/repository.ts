@@ -98,13 +98,17 @@ export async function ensureOwnerMemoryScope(
   return root;
 }
 
+/**
+ * Serializes memory writers. NO KEY UPDATE, because FOR UPDATE also blocks the foreign-key checks
+ * of chat admission inserting sources and jobs that reference the scope.
+ */
 export async function lockMemoryRoot(
   scopeId: string,
   db: pg.PoolClient,
 ): Promise<MemoryScopeRow> {
   const { rows } = await db.query<MemoryScopeRow>(
     `SELECT root.*,root.cleared_at::text AS cleared_at FROM memory_scopes scoped JOIN memory_scopes root
-     ON root.id=COALESCE(scoped.parent_scope_id,scoped.id) WHERE scoped.id=$1 FOR UPDATE OF root`,
+     ON root.id=COALESCE(scoped.parent_scope_id,scoped.id) WHERE scoped.id=$1 FOR NO KEY UPDATE OF root`,
     [scopeId],
   );
   if (!rows[0])
