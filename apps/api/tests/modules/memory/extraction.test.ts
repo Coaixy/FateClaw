@@ -135,6 +135,39 @@ describe('evidence-bound memory extraction', () => {
     },
   );
 
+  it('refuses a bare confirmation of an assistant question but keeps a stated value', async () => {
+    const previousAssistant = '请问您是哪一年出生的？是1990年吗？';
+    const confirm = await extractMemoryCandidates({
+      ...args,
+      sources: [{ ...source, content: '对。', previousAssistant }],
+      runner: output({
+        candidates: [
+          { ...candidate, quote: '对。', content: '对。', kind: 'fact' },
+        ],
+      }),
+    });
+    expect(confirm.candidates).toEqual([]);
+    expect(confirm.rejected).toEqual({ CONFIRMATION: 1 });
+    const value = await extractMemoryCandidates({
+      ...args,
+      sources: [{ ...source, content: '1990年', previousAssistant }],
+      runner: output({
+        candidates: [
+          {
+            ...candidate,
+            quote: '1990年',
+            content: '1990年',
+            kind: 'fact',
+            factKey: 'birth_date',
+          },
+        ],
+      }),
+    });
+    expect(value.candidates).toMatchObject([
+      { content: '1990年', factKey: 'birth_date' },
+    ]);
+  });
+
   it.each([
     '我在「腾讯」工作。',
     '我从事算命行业十年了。',

@@ -57,7 +57,11 @@ import {
   reserveMemoryBudget,
   settleMemoryBudget,
 } from '#modules/memory/budget';
-import { authorizeMemoryRecall, searchMemory } from '#modules/memory/retrieval';
+import {
+  authorizeMemoryRecall,
+  prepareMemory,
+  searchMemory,
+} from '#modules/memory/retrieval';
 import { runMemoryWorkerOnce, stopMemoryWorker } from '#runtime/memory-worker';
 import type {
   MemoryModelResolver,
@@ -369,6 +373,84 @@ describe.skipIf(!connectionString)(
       expect(
         await remaining("SELECT 1 FROM memory_items WHERE status='active'"),
       ).toBe(1);
+    });
+
+    it('gives a short answer the question it answers, only from the same audience, and pins intake facts', async () => {
+      const seen: Array<string | undefined> = [];
+      const intakeRunner: MemoryTextRunner = async (request) => {
+        const { sources } = JSON.parse(request.input) as {
+          sources: Array<{
+            id: string;
+            subjectId: string;
+            content: string;
+            previousAssistant?: string;
+          }>;
+        };
+        seen.push(sources[0].previousAssistant);
+        return {
+          text: JSON.stringify({
+            candidates: sources.map((source) => ({
+              sourceId: source.id,
+              subjectId: source.subjectId,
+              quote: source.content,
+              content: source.content,
+              kind: 'fact',
+              assertionType: 'stated',
+              ...(source.previousAssistant ? { factKey: 'birth_date' } : {}),
+            })),
+          }),
+          usage: { inputTokens: 20, outputTokens: 5 },
+        };
+      };
+      let second = 0;
+      const at = () =>
+        new Date(
+          Date.parse('2026-10-01T00:00:00Z') + 1000 * second++,
+        ).toISOString();
+      const reply = async (requestId: string, content: string) =>
+        getDbPool().query(
+          `INSERT INTO messages(id,account_id,user_id,sender,content,timestamp,is_from_me,is_bot_message,session_id,metadata)
+           VALUES($1,'web:owner','owner','web:owner',$2,$3,true,true,'session-a',$4::jsonb)`,
+          [
+            randomUUID(),
+            content,
+            at(),
+            JSON.stringify({ request_id: requestId }),
+          ],
+        );
+      const sender = await turn('你好。', 'session-a', at(), {
+        source_channel: 'wechat',
+        wechat_account_id: 'synthetic-intake',
+        sender_hash: 'intake-sender',
+      });
+      await reply(sender.requestId, '另一位联系人的问题：你住哪里？');
+      await turn('2001年', 'session-a', at());
+      const asked = await turn('帮我看看命盘。', 'session-a', at());
+      await reply(asked.requestId, '好的。请问您是哪一年出生的？');
+      await turn('1990年', 'session-a', at());
+      for (let index = 0; index < 4; index++)
+        await turn(`我第${index}次说我喜欢喝茶。`, 'session-a', at());
+      for (let index = 0; index < 20; index++) {
+        const jobs = await claimMemoryJobs(policy, 10);
+        if (!jobs.length) break;
+        for (const job of jobs)
+          await processMemoryJob(job, policy, {
+            modelOptions: { runner: intakeRunner, resolveModel },
+          });
+      }
+      expect(seen.filter(Boolean)).toEqual(['好的。请问您是哪一年出生的？']);
+      const scope = await ownerMemorySnapshot('owner');
+      const prepared = await withMemoryReadTransaction(async (db) => {
+        const context = await authorizeMemoryRecall(db, scope, policy);
+        return prepareMemory(context!, {
+          references: [],
+          sessionId: 'session-other-chat',
+        });
+      });
+      expect(prepared.excerpts[0]).toMatchObject({
+        text: '1990年',
+        label: expect.stringContaining('birth_date'),
+      });
     });
 
     it('claims across owners in turn so one backlog cannot starve another account', async () => {

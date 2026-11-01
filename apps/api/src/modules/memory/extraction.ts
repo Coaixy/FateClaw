@@ -22,7 +22,17 @@ export interface MemorySourceInput {
   subjectName?: string;
   speakerKind?: 'owner' | 'sender';
   subjectKind?: 'self' | 'client' | 'sender' | 'unresolved';
+  /** End of the assistant reply this short message answers; context only, never evidence. */
+  previousAssistant?: string;
 }
+
+/** Canonical keys for single-valued intake facts; core recall shows them first. */
+export const MEMORY_PINNED_FACT_KEYS = [
+  'birth_date',
+  'birth_time',
+  'gender',
+  'birthplace',
+];
 
 export interface MemoryCandidate {
   sourceId: string;
@@ -78,7 +88,9 @@ Only new user, manual and structured profile sources can supply evidence. Assist
 Each candidate has sourceId, subjectId, quote, content, kind (fact|preference|event|plan|decision), assertionType (stated|experience|plan), and optionally factKey, validFrom, validTo, supersedesId. Omit unknown optional fields. Dates must be ISO 8601 with timezone; do not invent dates.
 quote must be an exact, complete, self-contained statement copied from a single eligible source. content must equal quote, preserving negation, uncertainty and attribution; do not paraphrase or clip away qualifying context. Select a shorter complete sentence only when it still carries its original meaning. Exclude questions, requests, hypotheses, conditional examples, third-party quotations, hearsay and AI predictions. User intentions remain plans, not accomplished events. Reported real experiences can be events.
 subjectId is the discussed person; speakerSubjectId is the actual speaker. First-person statements belong to speakerSubjectId, even inside a client's discussion. Explicit statements about the client belong to the discussed subjectId. Never infer that the speaker and client are the same. When both identities differ, set subjectId explicitly to the correct one. Use only those two supplied IDs; exclude ambiguous subjects and unresolved discussion identities. Assistant first-person statements never describe the user.
-supersedesId may only propose an existing ID for the same subject and factKey; never claim a merge or deletion. Include only useful durable information, omit repetitions, and use an empty list when no eligible statement exists.`;
+supersedesId may only propose an existing ID for the same subject and factKey; never claim a merge or deletion. Include only useful durable information, omit repetitions, and use an empty list when no eligible statement exists.
+A source may carry previousAssistant: the end of the assistant message that the user answered. Use it only to understand what a short answer refers to and to choose factKey. It is never evidence: quote and content still come from the user's own words, and a bare confirmation such as "对", "是的" or "嗯" is never a fact, because the claim would be the assistant's. A short answer that itself states a value (a year, a time, a place, a gender, a name) is a fact about the source subject.
+For these single-valued facts use exactly these factKey values: birth_date, birth_time, gender, birthplace.`;
 
 export function estimateMemoryExtractionInput(
   sources: MemorySourceInput[],
@@ -221,6 +233,13 @@ function checkCandidate(
     reject('SOURCE');
   if (!source.content.includes(candidate.quote)) reject('QUOTE');
   if (candidate.content !== candidate.quote) reject('QUOTE');
+  // Agreeing with the assistant would turn the assistant's claim into a user fact.
+  if (
+    /^(?:对|对的|是|是的|嗯|嗯嗯|好|好的|没错|可以|行|yes|yeah|right|ok|okay)$/i.test(
+      candidate.quote.replace(/[\p{P}\p{S}\s]/gu, ''),
+    )
+  )
+    reject('CONFIRMATION');
   if (
     source.speakerSubjectId &&
     source.speakerSubjectId !== source.subjectId &&

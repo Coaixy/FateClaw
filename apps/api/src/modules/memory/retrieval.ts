@@ -15,6 +15,7 @@ import {
   memoryQueryTerms,
   type MemoryItemRow,
 } from './domain.js';
+import { MEMORY_PINNED_FACT_KEYS } from './extraction.js';
 import {
   actorSubjectId,
   assertMemoryBindingCurrent,
@@ -247,7 +248,7 @@ async function hydrateItem(
     reference,
     text: item.content.slice(offset, offset + limit),
     // The shared reading rules (verbatim source text, first person) are in the system prompt.
-    label: `${item.kind}：${item.subject_name}（${item.subject_kind}）${offset || limit < item.content.length ? ` ${offset}-${Math.min(offset + limit, item.content.length)}/${item.content.length}` : ''}`,
+    label: `${item.kind}${item.fact_key ? `(${item.fact_key})` : ''}：${item.subject_name}（${item.subject_kind}）${offset || limit < item.content.length ? ` ${offset}-${Math.min(offset + limit, item.content.length)}/${item.content.length}` : ''}`,
     observedAt: isoDate(item.observed_at),
     sourceReferences: evidence.rows.slice(0, 3).map((row) => ({
       kind: 'source' as const,
@@ -424,7 +425,10 @@ async function coreReferences(
   const { rows } = await context.db.query<{ id: string; revision: number }>(
     `SELECT id,revision FROM memory_items WHERE owner_user_id=$1 AND scope_id=ANY($2::text[]) AND subject_id=$3
        AND status='active' AND assertion_type<>'inferred' AND epoch=$4
-     ORDER BY array_position(ARRAY['fact','preference','decision','plan','event'],kind),observed_at DESC,id
+     -- Intake facts such as the birth date are usually the oldest; ordering by recency alone
+     -- would push them out first.
+     ORDER BY fact_key=ANY($6::text[]) IS NOT TRUE,
+       array_position(ARRAY['fact','preference','decision','plan','event'],kind),observed_at DESC,id
      LIMIT $5`,
     [
       context.scope.ownerUserId,
@@ -432,6 +436,7 @@ async function coreReferences(
       context.scope.subjectId,
       context.scope.epoch,
       context.policy.recall_max_results * 4,
+      MEMORY_PINNED_FACT_KEYS,
     ],
   );
   return rows.map((row) => ({

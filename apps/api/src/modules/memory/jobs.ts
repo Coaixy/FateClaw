@@ -502,6 +502,49 @@ function existingFact(item: MemoryItemRow): MemoryExistingFact {
   };
 }
 
+const SHORT_ANSWER_CHARS = 40;
+const ASSISTANT_TAIL_CHARS = 300;
+
+/**
+ * A short answer such as "1990年" means nothing without the question it answers. Only the
+ * assistant reply to the same audience is used, so one WeChat sender never sees another's turn.
+ */
+async function previousAssistantTail(
+  source: CurrentSource,
+  db: DbQueryable,
+): Promise<string | undefined> {
+  if (
+    source.source_kind !== 'message' ||
+    !source.session_id ||
+    [...source.content.trim()].length > SHORT_ANSWER_CHARS
+  )
+    return undefined;
+  // Only the message immediately before the answer, so a later unrelated short message never
+  // inherits an old question.
+  const { rows } = await db.query<{
+    content: string;
+    is_bot_message: boolean | null;
+    kind: string | null;
+    audience: string | null;
+  }>(
+    `SELECT m.content,m.is_bot_message,m.metadata->>'kind' AS kind,
+       COALESCE(r.memory_scope->>'contextAudience','') AS audience
+     FROM messages m LEFT JOIN agent_requests r ON r.request_id=m.metadata->>'request_id'
+     WHERE m.session_id=$1 AND m.deleted_at IS NULL AND m.timestamp<$2::timestamptz
+     ORDER BY m.timestamp DESC,m.id DESC LIMIT 1`,
+    [source.session_id, source.observed_at],
+  );
+  const previous = rows[0];
+  if (
+    !previous?.is_bot_message ||
+    previous.kind === 'error' ||
+    previous.audience !== (source.identity_snapshot?.contextAudience ?? '')
+  )
+    return undefined;
+  const text = previous.content.trim();
+  return text ? [...text].slice(-ASSISTANT_TAIL_CHARS).join('') : undefined;
+}
+
 /** Only complete paragraphs or sentences are eligible extraction batches. */
 export function splitMemoryExtractionSource(
   source: MemorySourceInput,
@@ -583,7 +626,11 @@ async function processExtract(
     db,
   );
   const existing = supported.map(existingFact);
-  const input = sourceInput(source, scope);
+  const previousAssistant = await previousAssistantTail(source, db);
+  const input = {
+    ...sourceInput(source, scope),
+    ...(previousAssistant ? { previousAssistant } : {}),
+  };
   // Existing facts are optional context; canonical source statements are never cropped.
   while (
     existing.length &&

@@ -48,7 +48,7 @@ Sources and facts are authoritative; the keyword index can be rebuilt. Source te
 
 `epoch` advances when memory is cleared and invalidates all earlier work. `binding_revision` advances when a sender's identity binding changes. Settings, items and bindings also carry an ordinary `revision` used for compare-and-swap edits, which return `409` on conflict.
 
-Extraction keeps exact, complete source statements. It preserves negation, attribution and uncertainty, distinguishes a plan from a completed event, and rejects questions, hypothetical examples, hearsay and assistant text as evidence. First-person statements refer to the actual speaker, even in a conversation about a client. Ambiguous historical identity stays unresolved. Each candidate is checked separately: a refused candidate is counted by reason code in the job payload (`rejectedCandidates`) and the others still apply. Hedged statements such as "可能" are kept verbatim; opening conditions ("如果…"), hypotheses, hearsay and quoted speech are refused.
+Extraction keeps exact, complete source statements. It preserves negation, attribution and uncertainty, distinguishes a plan from a completed event, and rejects questions, hypothetical examples, hearsay and assistant text as evidence. First-person statements refer to the actual speaker, even in a conversation about a client. Ambiguous historical identity stays unresolved. Each candidate is checked separately: a refused candidate is counted by reason code in the job payload (`rejectedCandidates`) and the others still apply. A user message of at most 40 characters that directly follows an assistant reply to the same audience is sent with the last 300 characters of that reply as `previousAssistant`, so "1990年" can be read as an answer. That text is context only: evidence still comes from the user's words, and a bare confirmation such as "对" is refused. Single-valued intake facts use the keys `birth_date`, `birth_time`, `gender` and `birthplace`; a newer value supersedes the older one, and core recall shows them first. Hedged statements such as "可能" are kept verbatim; opening conditions ("如果…"), hypotheses, hearsay and quoted speech are refused.
 
 Repeated facts merge their evidence. A newer automatic statement with the same fact key can supersede an older automatic statement; observation order prevents a delayed old job from replacing a newer fact. Automatic extraction never supersedes a manual or explicitly remembered item. Direct edits use revision checks, and conflict resolution never rewrites source messages.
 
@@ -73,7 +73,7 @@ Binding changes cancel old actor work and reset that sender's separate context w
 
 On the first model step of a request the runtime sends one `prepare` call with the user query and the references persisted by earlier memory tool results in the conversation. The host answers in a read-only transaction under the `recall_timeout_ms` deadline with:
 
-- core facts: the subject's active facts ordered by kind, then most recent observation;
+- core facts: the subject's active facts, intake keys first, then by kind and most recent observation;
 - recently accepted user statements whose extraction has not finished, from other conversations;
 - keyword recall for the query: words of two or more characters plus every bigram of a Han run, matched with `ILIKE` over the reader's own entries and ranked by the number of matched terms;
 - the supplied references, keeping the newest when there are more than `recall_max_results × 3`.
