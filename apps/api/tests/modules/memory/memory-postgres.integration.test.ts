@@ -154,8 +154,12 @@ describe.skipIf(!connectionString)(
     }
     const read = (scope: MemoryRequestScope, references: MemoryReference[]) =>
       recall(scope, (context) => readMemory(context, references));
-    const search = (scope: MemoryRequestScope, query: string) =>
-      recall(scope, (context) => searchMemory(context, { query }));
+    const search = (
+      scope: MemoryRequestScope,
+      query: string,
+      sessionId = 'session-search',
+    ) =>
+      recall(scope, (context) => searchMemory(context, { query }, sessionId));
     const prepare = (
       scope: MemoryRequestScope,
       sessionId: string,
@@ -306,6 +310,25 @@ describe.skipIf(!connectionString)(
       await forgetManualMemory('owner', item.id, item.revision);
       expect((await search(b.scope, '咖啡')).excerpts).toEqual([]);
       expect(a.scope.scopeId).toBe(b.scope.scopeId);
+    });
+
+    it('does not echo the current conversation back as a remembered source', async () => {
+      const a = await turn('session-a', '我下周三要去体检。');
+      const sourceText = (hydration: MemoryHydration) =>
+        hydration.excerpts.filter(
+          (excerpt) =>
+            excerpt.reference.kind === 'source' && excerpt.text.includes('体检'),
+        );
+      expect(sourceText(await search(a.scope, '体检', 'session-a'))).toEqual(
+        [],
+      );
+      expect(
+        sourceText(await prepare(a.scope, 'session-a', [], '体检')),
+      ).toEqual([]);
+      const b = await turn('session-b', '我什么时候体检？');
+      expect(
+        sourceText(await search(b.scope, '体检', 'session-b')),
+      ).not.toEqual([]);
     });
 
     it('keeps actors and subjects distinct and rejects forged cross-user or cross-sender references', async () => {

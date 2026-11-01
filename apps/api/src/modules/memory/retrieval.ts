@@ -89,6 +89,8 @@ async function keywordRecall(
     after?: string;
     before?: string;
     limit?: number;
+    /** The current conversation is already in the model context; its sources would only echo it. */
+    excludeSessionId?: string;
   },
 ): Promise<MemoryReference[]> {
   const { db, scope, policy } = context;
@@ -119,6 +121,8 @@ async function keywordRecall(
          WHERE e.id=x.subject_id AND e.deleted_at IS NULL AND (e.client_id IS NULL OR c.deleted_at IS NULL))
        AND x.observed_at>=COALESCE($6::timestamptz,'-infinity') AND x.observed_at<=COALESCE($7::timestamptz,'infinity')
        AND x.search_text ILIKE ANY($8::text[])
+       AND (x.object_kind<>'source' OR $9::text IS NULL OR NOT EXISTS(
+         SELECT 1 FROM memory_sources current WHERE current.id=x.object_id AND current.session_id=$9))
      ORDER BY x.updated_at DESC LIMIT 120`,
     [
       context.spaces,
@@ -129,6 +133,7 @@ async function keywordRecall(
       args.after ?? null,
       args.before ?? null,
       terms.map((term) => `%${escapeMemoryLike(term)}%`),
+      args.excludeSessionId ?? null,
     ],
   );
   const best = new Map<string, { reference: MemoryReference; score: number }>();
@@ -453,7 +458,10 @@ export async function prepareMemory(
   args: { query?: string; references: MemoryReference[]; sessionId: string },
 ): Promise<MemoryHydration> {
   const recall = args.query?.trim()
-    ? await keywordRecall(context, { query: args.query })
+    ? await keywordRecall(context, {
+        query: args.query,
+        excludeSessionId: args.sessionId,
+      })
     : [];
   const core = await coreReferences(context);
   const recent = await recentSourceReferences(context, args.sessionId);
@@ -496,8 +504,12 @@ export async function searchMemory(
     before?: string;
     limit?: number;
   },
+  sessionId: string,
 ): Promise<MemoryHydration> {
-  const references = await keywordRecall(context, args);
+  const references = await keywordRecall(context, {
+    ...args,
+    excludeSessionId: sessionId,
+  });
   return hydrateCandidates(
     context,
     references.map((reference, order) => ({

@@ -284,7 +284,7 @@ describe.skipIf(!connectionString)(
       return withMemoryReadTransaction(async (db) => {
         const context = await authorizeMemoryRecall(db, scope, currentPolicy);
         if (!context) throw new Error('Synthetic recall is disabled');
-        return searchMemory(context, { query });
+        return searchMemory(context, { query }, 'session-search');
       });
     }
 

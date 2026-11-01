@@ -233,7 +233,10 @@ const defaultTextRunner: MemoryTextRunner = async (request) => {
     api: connection.piApi,
     provider: `fateclaw-memory-${connection.providerKey}`,
     baseUrl: baseUrl(connection).toString().replace(/\/$/, ''),
-    reasoning: false,
+    // pi-ai sends openai-completions providers their "thinking off" flag only for reasoning
+    // models; otherwise DeepSeek-style defaults spend the output budget before the JSON answer.
+    // openai-responses would send effort "none", which older reasoning models reject.
+    reasoning: connection.piApi === 'openai-completions',
     input: ['text'],
     contextWindow: connection.contextWindowTokens ?? 8192,
     maxTokens: request.maxOutputTokens,

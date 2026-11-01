@@ -684,7 +684,8 @@ async function readWithinDeadline(
           references: operation.references,
           sessionId: admitted.session_id,
         });
-      if (operation.mode === 'search') return searchMemory(context, operation);
+      if (operation.mode === 'search')
+        return searchMemory(context, operation, admitted.session_id);
       return readMemory(context, operation.references);
     },
     { timeoutMs: policy.recall_timeout_ms },
