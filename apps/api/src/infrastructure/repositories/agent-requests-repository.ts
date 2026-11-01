@@ -98,9 +98,6 @@ export async function admitAgentRequest(args: {
                 !Array.isArray(metadata)
               ? (metadata as Record<string, unknown>)
               : null,
-        learningAllowed: (
-          args.input as AiChatSubmission & { memoryLearningAllowed?: boolean }
-        ).memoryLearningAllowed,
       });
       if (
         preparedScope &&

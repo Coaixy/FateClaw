@@ -928,6 +928,98 @@ describe.skipIf(!connectionString)(
       ).rejects.toThrow('只能修改自己的记忆');
     });
 
+    it('never lets the shared owner audience forget another sender’s private memory', async () => {
+      await getDbPool().query(
+        "UPDATE chat_sessions SET client_id='client' WHERE id='session-b'",
+      );
+      const operate = async (
+        admitted: Awaited<ReturnType<typeof turn>>,
+        operation: Parameters<typeof executeMemoryOperation>[1]['operation'],
+      ) => {
+        await getDbPool().query(
+          "UPDATE agent_requests SET state='running' WHERE request_id=$1",
+          [admitted.requestId],
+        );
+        try {
+          return await executeMemoryOperation('web:owner', {
+            rpcId: randomUUID(),
+            requestId: admitted.requestId,
+            executionId: admitted.executionId,
+            operation,
+          });
+        } finally {
+          // One running request per session.
+          await getDbPool().query(
+            "UPDATE agent_requests SET state='completed' WHERE request_id=$1",
+            [admitted.requestId],
+          );
+        }
+      };
+      const privateSender = await turn('session-b', '客户住在杭州。', {
+        source_channel: 'wechat',
+        wechat_account_id: 'synthetic-private',
+        sender_hash: 'private-sender',
+      });
+      const saved = await operate(privateSender, {
+        mode: 'remember',
+        content: '客户住在杭州。',
+        toolCallId: 'private-remember',
+      });
+      expect(saved).toMatchObject({ ok: true, mode: 'remember' });
+      const ownerMetadata = {
+        source_channel: 'wechat',
+        wechat_account_id: 'synthetic-owner',
+        sender_hash: 'owner-sender',
+      };
+      const discovery = await turn('session-b', '你好。', ownerMetadata);
+      await updateMemoryScopeBinding('owner', discovery.scope.scopeId, {
+        speaker_subject_id: 'self:owner',
+        share_subject_memory: true,
+        revision: 1,
+      });
+      const ownerSender = await turn('session-b', '忘掉它。', ownerMetadata);
+      if (!saved.ok || saved.mode !== 'remember') throw new Error('unsaved');
+      await expect(
+        operate(ownerSender, {
+          mode: 'forget',
+          id: saved.reference.id,
+          toolCallId: 'owner-forget',
+        }),
+      ).rejects.toMatchObject({ code: 'MEMORY.AUDIENCE_DENIED' });
+    });
+
+    it('does not save a message from before a binding change under the new speaker', async () => {
+      const metadata = {
+        source_channel: 'wechat',
+        wechat_account_id: 'synthetic-rebind',
+        sender_hash: 'rebind-sender',
+      };
+      const before = await turn('session-b', '我在杭州工作。', metadata);
+      await updateMemoryScopeBinding('owner', before.scope.scopeId, {
+        speaker_subject_id: 'self:owner',
+        share_subject_memory: false,
+        revision: 1,
+      });
+      const after = await turn('session-b', '记住我刚才说的。', metadata);
+      await getDbPool().query(
+        "UPDATE agent_requests SET state='running' WHERE request_id=$1",
+        [after.requestId],
+      );
+      await expect(
+        executeMemoryOperation('web:owner', {
+          rpcId: randomUUID(),
+          requestId: after.requestId,
+          executionId: after.executionId,
+          operation: {
+            mode: 'remember',
+            content: '我在杭州工作。',
+            sourceMessageId: before.messageId,
+            toolCallId: 'pre-binding',
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'MEMORY.EVIDENCE_REQUIRED' });
+    });
+
     it('keeps a former shared-owner source private after the same actor becomes a shared client', async () => {
       const metadata = {
         source_channel: 'wechat',

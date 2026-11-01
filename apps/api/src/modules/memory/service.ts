@@ -39,6 +39,7 @@ import {
   lockMemoryRoot,
   memoryItemDto,
   memorySettingsDto,
+  readableMemorySpaces,
   revokeMemorySource,
   withMemoryReadTransaction,
   withMemoryTransaction,
@@ -267,6 +268,20 @@ export async function createManualMemory(
   });
 }
 
+/**
+ * Chat edits reach the request's own space, plus the owner space for the owner audience. Another
+ * sender's private space is never editable, even by the owner audience; a read grant is not
+ * edit permission.
+ */
+async function editableMemorySpaces(
+  scope: MemoryRequestScope,
+  db: DbQueryable,
+): Promise<string[]> {
+  return hasOwnerMemoryAudience(scope)
+    ? readableMemorySpaces(scope, db)
+    : [memorySpaceId(scope)];
+}
+
 export async function editMemoryItem(
   db: pg.PoolClient,
   scope: MemoryRequestScope,
@@ -291,8 +306,7 @@ export async function editMemoryItem(
     );
   if (
     origin === 'explicit' &&
-    previous.scope_id !== memorySpaceId(scope) &&
-    !hasOwnerMemoryAudience(scope)
+    !(await editableMemorySpaces(scope, db)).includes(previous.scope_id)
   )
     throw new MemoryError(
       '此说话人只能修改自己的记忆',
@@ -776,6 +790,8 @@ export async function executeMemoryOperation(
         `SELECT id FROM memory_sources WHERE scope_id=$1 AND owner_user_id=$2 AND session_id=$3
            AND message_id=$4 AND source_kind='message' AND source_role='user' AND excluded_at IS NULL
            AND COALESCE(identity_snapshot->>'contextAudience','')=$5
+           -- A message from before a binding change belongs to the speaker identity of that time.
+           AND COALESCE(identity_snapshot->>'bindingRevision','1')=$6
          ORDER BY revision DESC LIMIT 1`,
         [
           scope.scopeId,
@@ -783,6 +799,7 @@ export async function executeMemoryOperation(
           admitted.session_id,
           operation.sourceMessageId ?? admitted.user_message_id,
           scope.contextAudience ?? '',
+          String(scope.bindingRevision ?? 1),
         ],
       );
       const source = found.rows[0]
@@ -829,8 +846,7 @@ export async function executeMemoryOperation(
       );
       if (
         !item.rows[0] ||
-        (item.rows[0].scope_id !== memorySpaceId(scope) &&
-          !hasOwnerMemoryAudience(scope))
+        !(await editableMemorySpaces(scope, db)).includes(item.rows[0].scope_id)
       )
         throw new MemoryError(
           '记忆不存在或未授权',

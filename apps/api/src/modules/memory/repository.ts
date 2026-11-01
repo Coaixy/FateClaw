@@ -149,7 +149,6 @@ export async function createMemoryAdmissionScope(
     ownerUserId: string;
     sessionId: string;
     metadata?: Record<string, unknown> | null;
-    learningAllowed?: boolean;
   },
 ): Promise<MemoryRequestScope> {
   const root = await ensureOwnerMemoryScope(args.ownerUserId, db);
@@ -287,8 +286,7 @@ export async function createMemoryAdmissionScope(
     learningEnabled:
       memoryAvailable &&
       root.learning_enabled &&
-      session.memory_learning_enabled !== false &&
-      args.learningAllowed !== false,
+      session.memory_learning_enabled !== false,
     recallEnabled: memoryAvailable && root.recall_enabled,
     chatEditingEnabled: memoryAvailable && root.chat_editing_enabled,
     contextGeneration: piContext.contextGeneration,
