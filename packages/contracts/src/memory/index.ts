@@ -203,9 +203,19 @@ export interface MemoryExcerpt {
   automatic?: boolean;
 }
 
-/** A portable upper bound for memory text when provider tokenizers differ. */
+/**
+ * A tokenizer-independent estimate: one token per non-ASCII (mostly CJK) character, which common
+ * tokenizers do not exceed, and one per three ASCII characters. Billing settles on reported usage;
+ * this only sizes reservations and context budgets. UTF-8 bytes overstated CJK about threefold.
+ */
 export function estimateMemoryTokens(text: string): number {
-  return new TextEncoder().encode(text).length;
+  let ascii = 0;
+  let other = 0;
+  for (const char of text) {
+    if (char.charCodeAt(0) < 0x80) ascii++;
+    else other++;
+  }
+  return other + Math.ceil(ascii / 3);
 }
 
 export interface MemoryHydration {

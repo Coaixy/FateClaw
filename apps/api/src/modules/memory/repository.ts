@@ -15,6 +15,7 @@ import {
   isoDate,
   memoryContentHash,
   memoryHash,
+  memorySourceHasNoStatement,
   memorySourceId,
   validateMemoryContent,
   type MemoryItemRow,
@@ -424,10 +425,12 @@ export async function captureMemorySource(
   const learningEnabled =
     !excluded.rows.length &&
     (Boolean(args.backfillJobId) || args.scope.learningEnabled);
+  // Recorded as already extracted, so neither recall of pending statements nor import revisits it.
+  const nothingToLearn = memorySourceHasNoStatement(args.content);
   const result = await db.query<MemorySourceRow>(
     `INSERT INTO memory_sources(id,owner_user_id,scope_id,subject_id,source_kind,source_role,source_ref,
-       account_id,message_id,session_id,content_hash,observed_at,epoch,learning_enabled,identity_snapshot,memory_space_id)
-     VALUES($1,$2,$3,$4,'message','user',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       account_id,message_id,session_id,content_hash,observed_at,epoch,learning_enabled,identity_snapshot,memory_space_id,extracted_revision)
+     VALUES($1,$2,$3,$4,'message','user',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,CASE WHEN $15::boolean THEN 1 ELSE 0 END)
      ON CONFLICT(id) DO NOTHING RETURNING *`,
     [
       id,
@@ -444,10 +447,11 @@ export async function captureMemorySource(
       learningEnabled,
       JSON.stringify(args.scope),
       memorySpaceId(args.scope),
+      nothingToLearn,
     ],
   );
   const source = result.rows[0];
-  if (!source?.learning_enabled) return source ?? null;
+  if (!source?.learning_enabled || nothingToLearn) return source ?? null;
   await queueMemoryJob(db, {
     scope: args.scope,
     kind: 'extract',

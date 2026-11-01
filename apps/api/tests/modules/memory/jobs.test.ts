@@ -5,7 +5,10 @@ import {
   type MemoryRuntimePolicy,
 } from '@fateclaw/contracts/memory';
 import type { MemoryJobRow, MemoryScopeRow } from '#modules/memory/domain';
-import { memoryHash } from '#modules/memory/domain';
+import {
+  memoryHash,
+  memorySourceHasNoStatement,
+} from '#modules/memory/domain';
 import { MemoryModelError } from '#modules/memory/model-client';
 import {
   changeMemoryJobState,
@@ -45,6 +48,7 @@ vi.mock('#modules/memory/policy', () => ({
   getMemoryRuntimePolicy: async () => mocks.policy,
 }));
 vi.mock('#modules/memory/budget', () => ({
+  assertMemoryBudgetOpen: async () => undefined,
   reserveMemoryBudget: mocks.reserve,
   settleMemoryBudget: mocks.settle,
 }));
@@ -490,6 +494,22 @@ describe('durable memory job boundaries', () => {
       error_code: 'MEMORY_MODEL_TIMEOUT',
     });
     expect(mocks.insertItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('extraction prefilter', () => {
+  it('skips only messages that cannot carry a statement, keeping short intake answers', () => {
+    for (const skipped of ['你好', '谢谢！', '👍', '？？', '今年财运怎么样？'])
+      expect(memorySourceHasNoStatement(skipped), skipped).toBe(true);
+    for (const kept of [
+      '男',
+      '1990年',
+      '对',
+      '帮我看看今年的财运？',
+      '我是1990年生的，这样好吗？',
+      '我在杭州工作。',
+    ])
+      expect(memorySourceHasNoStatement(kept), kept).toBe(false);
   });
 });
 

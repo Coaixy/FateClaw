@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { MemoryRuntimePolicy } from '@fateclaw/contracts/memory';
 import type pg from 'pg';
+import { getDbPool } from '#infrastructure/db-pool';
 import { MemoryError } from './domain.js';
 import { withMemoryTransaction } from './repository.js';
 
@@ -31,6 +32,27 @@ interface MemoryBudgetSettlement {
 }
 
 const RESERVATION_RECOVERY_GRACE_MS = 5_000;
+const BUDGET_PURPOSE = 'language';
+
+const budgetDay = () => new Date().toISOString().slice(0, 10);
+
+function budgetExhausted(): MemoryError {
+  return new MemoryError(
+    '今日记忆处理预算已用完，任务将稍后继续',
+    429,
+    'MEMORY.BUDGET_EXHAUSTED',
+  );
+}
+
+export async function assertMemoryBudgetOpen(
+  policy: MemoryRuntimePolicy,
+): Promise<void> {
+  const { rows } = await getDbPool().query(
+    'SELECT 1 FROM memory_daily_budgets WHERE day=$1 AND purpose=$2 AND used_tokens+reserved_tokens>=$3',
+    [budgetDay(), BUDGET_PURPOSE, policy.daily_token_budget],
+  );
+  if (rows[0]) throw budgetExhausted();
+}
 
 export async function reserveMemoryBudget(args: {
   ownerUserId: string;
@@ -40,8 +62,8 @@ export async function reserveMemoryBudget(args: {
   jobId?: string;
   jobLeaseToken?: string;
 }): Promise<MemoryBudgetReservation> {
-  const day = new Date().toISOString().slice(0, 10);
-  const purpose = 'language';
+  const day = budgetDay();
+  const purpose = BUDGET_PURPOSE;
   const limit = args.policy.daily_token_budget;
   const timeoutMs = args.policy.job_timeout_ms;
   if (
@@ -76,12 +98,7 @@ export async function reserveMemoryBudget(args: {
        WHERE day=$1 AND purpose=$2 AND used_tokens+reserved_tokens+$3<=$4 RETURNING day`,
       [day, purpose, args.tokens, limit],
     );
-    if (!rows[0])
-      throw new MemoryError(
-        '今日记忆处理预算已用完，任务将稍后继续',
-        429,
-        'MEMORY.BUDGET_EXHAUSTED',
-      );
+    if (!rows[0]) throw budgetExhausted();
     const reservation = {
       id: randomUUID(),
       day,

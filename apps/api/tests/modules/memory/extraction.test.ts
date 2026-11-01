@@ -243,7 +243,7 @@ describe('evidence-bound memory extraction', () => {
     await expect(
       extractMemoryCandidates({
         ...args,
-        sources: [{ ...source, content: '合成完整陈述。'.repeat(1000) }],
+        sources: [{ ...source, content: '合成完整陈述。'.repeat(2000) }],
         runner,
       }),
     ).rejects.toMatchObject({ code: 'MEMORY_INPUT_BUDGET_EXCEEDED' });

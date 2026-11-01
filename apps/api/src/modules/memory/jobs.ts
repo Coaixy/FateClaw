@@ -34,6 +34,7 @@ import {
 import { isMemoryPiContextCurrent } from './pi-contexts.js';
 import { getMemoryRuntimePolicy } from './policy.js';
 import {
+  assertMemoryBudgetOpen,
   reserveMemoryBudget,
   settleMemoryBudget,
   type MemoryBudgetReservation,
@@ -85,13 +86,20 @@ export async function claimMemoryJobs(
        UPDATE memory_jobs SET state='failed',lease_token=NULL,lease_until=NULL,
          error_code=COALESCE(error_code,'MEMORY.ATTEMPTS_EXHAUSTED'),updated_at=clock_timestamp()
        WHERE attempts>=$1 AND (state='pending' OR state='running' AND lease_until<=clock_timestamp())
+     ), ranked AS (
+       -- Round-robin across owners so one account's backlog cannot starve the shared budget.
+       SELECT id,row_number() OVER(PARTITION BY owner_user_id ORDER BY priority,created_at,id) AS turn,priority,created_at
+       FROM (SELECT id,owner_user_id,created_at,
+           CASE WHEN kind='extract' AND NOT(payload ? 'backfillJobId') THEN 0 WHEN kind='extract' THEN 1 ELSE 2 END AS priority
+         FROM memory_jobs
+         WHERE attempts<$1 AND next_attempt_at<=clock_timestamp()
+           AND (state='pending' OR state='running' AND lease_until<=clock_timestamp())) eligible
      ), candidates AS (
-       SELECT id FROM memory_jobs
-       WHERE attempts<$1 AND next_attempt_at<=clock_timestamp()
-         AND (state='pending' OR state='running' AND lease_until<=clock_timestamp())
-       ORDER BY CASE WHEN kind='extract' AND NOT(payload ? 'backfillJobId') THEN 0
-         WHEN kind='extract' THEN 1 ELSE 2 END,created_at,id
-       FOR UPDATE SKIP LOCKED LIMIT $2
+       SELECT j.id FROM memory_jobs j JOIN ranked r ON r.id=j.id
+       -- Repeated on the locked row: a concurrent worker may have claimed it since the snapshot.
+       WHERE j.attempts<$1 AND (j.state='pending' OR j.state='running' AND j.lease_until<=clock_timestamp())
+       ORDER BY r.turn,r.priority,r.created_at,j.id
+       FOR UPDATE OF j SKIP LOCKED LIMIT $2
      ) UPDATE memory_jobs j SET state='running',attempts=j.attempts+1,
        lease_token=gen_random_uuid()::text,lease_until=clock_timestamp()+$3::int*interval '1 millisecond',
        error_code=NULL,updated_at=clock_timestamp()
@@ -567,6 +575,8 @@ async function processExtract(
     source.subject_kind === 'unresolved'
   )
     throw new StaleMemoryJob('MEMORY.INELIGIBLE_SOURCE');
+  // Fails before the existing-fact queries; the reservation below stays the authoritative check.
+  await assertMemoryBudgetOpen(policy);
   const supported = await activeFacts(
     scope,
     [...new Set([scope.subjectId, actorSubjectId(scope)])],

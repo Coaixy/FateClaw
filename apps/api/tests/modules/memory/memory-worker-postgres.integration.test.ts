@@ -329,6 +329,28 @@ describe.skipIf(!connectionString)(
       throw new Error('Worker failed to finish the finite synthetic queue');
     }
 
+    it('claims across owners in turn so one backlog cannot starve another account', async () => {
+      for (let index = 0; index < 5; index++)
+        await turn(`我第${index}次说我喜欢喝茶。`);
+      const otherScope = (
+        await getDbPool().query<{ id: string }>(
+          `INSERT INTO memory_scopes(owner_user_id,actor_key,audience_key) VALUES('other','user:other','owner:other') RETURNING id`,
+        )
+      ).rows[0].id;
+      await getDbPool().query(
+        `INSERT INTO memory_jobs(owner_user_id,scope_id,job_key,kind,event_type,epoch) VALUES('other',$1,'other-late','extract','user_message_committed',1)`,
+        [otherScope],
+      );
+      const claimed = await claimMemoryJobs(
+        { ...(await getMemoryRuntimePolicy()), worker_concurrency: 2 },
+        2,
+      );
+      expect(claimed.map((job) => job.owner_user_id).sort()).toEqual([
+        'other',
+        'owner',
+      ]);
+    });
+
     it('extracts admitted user evidence, indexes its text and recalls it by keyword in another session', async () => {
       const admitted = await turn('我经常喝无糖拿铁。');
       await drain();
@@ -1468,7 +1490,7 @@ describe.skipIf(!connectionString)(
     });
 
     it('resumes complete-source fragments without duplicate facts and rejects a later-arriving older residence claim', async () => {
-      const narrow = { ...policy, extraction_input_tokens: 4000 };
+      const narrow = { ...policy, extraction_input_tokens: 1500 };
       await getDbPool().query(
         "UPDATE runtime_config SET memory_policy=$1::jsonb WHERE id='default'",
         [JSON.stringify(narrow)],

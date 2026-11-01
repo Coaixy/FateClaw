@@ -254,6 +254,26 @@ export function memoryLexicalScore(
   );
 }
 
+const GREETING =
+  /^(?:你好|您好|在吗|在不在|嗨|哈喽|早上好|晚上好|谢谢|多谢|感谢|好的|好|嗯嗯|嗯|哦|噢|收到|ok|okay|hi|hello|thanks|thank you)$/i;
+
+/**
+ * Skips the model call for messages that cannot carry a durable statement. Short answers such as
+ * "男" or "1990年" are kept: they answer intake questions.
+ */
+export function memorySourceHasNoStatement(content: string): boolean {
+  const text = content.normalize('NFKC').trim();
+  const words = text.replace(/[\p{P}\p{S}\s]/gu, '');
+  if (!words) return true;
+  if (GREETING.test(words)) return true;
+  // A single question without a first-person clause asks rather than tells.
+  return (
+    /[?？]$/.test(text) &&
+    !/[。！!；;\n]/.test(text) &&
+    !/(?:我|本人|\bI\b|\bmy\b|\bme\b)/i.test(text)
+  );
+}
+
 export function escapeMemoryLike(value: string): string {
   return value.replace(/[\\%_]/g, '\\$&');
 }
