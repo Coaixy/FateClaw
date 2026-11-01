@@ -224,6 +224,7 @@ export async function getChatSessionsForAdmin(opts: {
 
 /** 管理后台清理 Pi session 文件时使用的会话候选行。 */
 export interface AdminChatSessionPiCleanupCandidate {
+  memory_context_generation?: number;
   id: string;
   account_id: string;
   updated_at: string;
@@ -256,7 +257,7 @@ export async function getChatSessionPiCleanupCandidates(opts: {
     if (opts.cursor) params.push(opts.cursor);
     params.push(limit);
     const { rows } = await pool.query(
-      `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at
+      `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at,memory_context_generation
        FROM chat_sessions s
        WHERE deleted_at IS NOT NULL
          ${opts.cursor ? `AND id > $${paramIdx++}` : ''}
@@ -291,7 +292,7 @@ export async function getChatSessionPiCleanupCandidates(opts: {
   params.push(limit);
 
   const { rows } = await pool.query(
-    `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at
+    `SELECT id, account_id, updated_at, deleted_at, pi_session_archived_at,memory_context_generation
      FROM chat_sessions s
      WHERE deleted_at IS NULL
        AND updated_at < $1

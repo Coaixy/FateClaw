@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
 import { UserSoulCard } from '@/components/workspace/user-soul-card';
 import { useI18n } from '@/lib/i18n';
@@ -22,6 +23,12 @@ export default function PersonaPage() {
           <p className="mt-1 text-[12px] text-muted">
             {t('pages.persona.description')}
           </p>
+          <Link
+            href="/memory"
+            className="mt-2 inline-flex min-h-9 items-center text-[12px] text-primary"
+          >
+            {t('memory.title')}
+          </Link>
         </div>
 
         <section className="rounded-2xl border border-hairline bg-surface-raised p-4 lg:p-5">

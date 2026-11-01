@@ -5,7 +5,6 @@ import {
   paipanResponseQueue,
   type PaipanCaller,
   type PaipanOperation,
-  type PaipanIpcRequest,
   type PaipanResult,
 } from '@fateclaw/contracts/agent/paipan';
 import {
@@ -14,10 +13,18 @@ import {
   visualizationResponseQueue,
   type VisualizationCaller,
   type VisualizationOperation,
-  type VisualizationIpcRequest,
   type VisualizationResult,
 } from '@fateclaw/contracts/agent/visualization';
 import { parseVisualizationArtifact } from '@fateclaw/contracts/visualization';
+import {
+  MEMORY_RPC_TIMEOUT_MS,
+  memoryRequestQueue,
+  memoryResponseQueue,
+  type MemoryCaller,
+  type MemoryOperation,
+  type MemoryResult,
+} from '@fateclaw/contracts/agent/memory';
+import { parseMemoryResult } from './memory-client.js';
 
 import { getRedis } from '#agent/redis';
 import { decodeAgentIpc, encodeAgentIpc } from '#agent/ipc-security';
@@ -37,15 +44,25 @@ export function createHostToolCaller(
   identity: HostToolIdentity,
 ): VisualizationCaller;
 export function createHostToolCaller(
-  kind: 'paipan' | 'visualization',
+  kind: 'memory',
   identity: HostToolIdentity,
-): PaipanCaller | VisualizationCaller {
+): MemoryCaller;
+export function createHostToolCaller(
+  kind: 'paipan' | 'visualization' | 'memory',
+  identity: HostToolIdentity,
+): PaipanCaller | VisualizationCaller | MemoryCaller {
   const call = async (
-    operation: PaipanOperation | VisualizationOperation,
+    operation: PaipanOperation | VisualizationOperation | MemoryOperation,
     signal?: AbortSignal,
-  ): Promise<PaipanResult | VisualizationResult> => {
-    const prefix = kind === 'paipan' ? 'PAIPAN' : 'VISUALIZATION';
-    const noun = kind === 'paipan' ? '起盘' : '图形生成';
+  ): Promise<PaipanResult | VisualizationResult | MemoryResult> => {
+    const prefix =
+      kind === 'paipan'
+        ? 'PAIPAN'
+        : kind === 'memory'
+          ? 'MEMORY'
+          : 'VISUALIZATION';
+    const noun =
+      kind === 'paipan' ? '起盘' : kind === 'memory' ? '记忆操作' : '图形生成';
     if (signal?.aborted)
       return { ok: false, code: `${prefix}.CANCELLED`, error: `${noun}已取消` };
     const redis = getRedis();
@@ -60,19 +77,27 @@ export function createHostToolCaller(
     const queue =
       kind === 'paipan'
         ? paipanRequestQueue(identity.accountId)
-        : visualizationRequestQueue(identity.accountId);
+        : kind === 'memory'
+          ? memoryRequestQueue(identity.accountId)
+          : visualizationRequestQueue(identity.accountId);
     const replyQueue =
       kind === 'paipan'
         ? paipanResponseQueue(identity.accountId, rpcId)
-        : visualizationResponseQueue(identity.accountId, rpcId);
+        : kind === 'memory'
+          ? memoryResponseQueue(identity.accountId, rpcId)
+          : visualizationResponseQueue(identity.accountId, rpcId);
     const timeout =
-      kind === 'paipan' ? PAIPAN_RPC_TIMEOUT_MS : VISUALIZATION_RPC_TIMEOUT_MS;
+      kind === 'paipan'
+        ? PAIPAN_RPC_TIMEOUT_MS
+        : kind === 'memory'
+          ? MEMORY_RPC_TIMEOUT_MS
+          : VISUALIZATION_RPC_TIMEOUT_MS;
     const request = {
       rpcId,
       requestId: identity.requestId,
       executionId: identity.executionId,
       operation,
-    } as PaipanIpcRequest | VisualizationIpcRequest;
+    };
     let timedOut = false;
     const close = () => consumer.disconnect();
     const timer = setTimeout(() => {
@@ -98,7 +123,7 @@ export function createHostToolCaller(
       }
       const response = JSON.parse(decodeAgentIpc(replyQueue, reply[1])) as {
         rpcId: string;
-        result: PaipanResult | VisualizationResult;
+        result: PaipanResult | VisualizationResult | MemoryResult;
       };
       if (
         response.rpcId !== rpcId ||
@@ -113,7 +138,12 @@ export function createHostToolCaller(
           !parseVisualizationArtifact(response.result.artifact))
       )
         throw new Error('Invalid visualization reply');
-      return response.result;
+      return kind === 'memory'
+        ? parseMemoryResult(
+            response.result,
+            (operation as MemoryOperation).mode,
+          )
+        : response.result;
     } catch {
       return {
         ok: false,
@@ -124,9 +154,11 @@ export function createHostToolCaller(
             : `${prefix}.UNAVAILABLE`,
         error: signal?.aborted
           ? `${noun}已取消；已保存的结果仍会保留在会话中`
-          : kind === 'paipan'
-            ? '起盘服务未能返回结果，请检查会话中是否已生成盘面；不要自动重复起卦'
-            : '图形服务未能返回结果；已保存的图形仍会保留，请用文字继续回答',
+          : kind === 'memory'
+            ? '记忆服务未能返回结果；不要声称已读取或保存记忆'
+            : kind === 'paipan'
+              ? '起盘服务未能返回结果，请检查会话中是否已生成盘面；不要自动重复起卦'
+              : '图形服务未能返回结果；已保存的图形仍会保留，请用文字继续回答',
       };
     } finally {
       clearTimeout(timer);
@@ -134,5 +166,5 @@ export function createHostToolCaller(
       close();
     }
   };
-  return call as PaipanCaller | VisualizationCaller;
+  return call as PaipanCaller | VisualizationCaller | MemoryCaller;
 }

@@ -240,9 +240,10 @@ export const AiChatMessageList = memo(function AiChatMessageList({
               className="mx-auto flex w-full max-w-3xl justify-start px-2.5 sm:px-3 animate-message-in"
             >
               <div className="flex min-w-0 w-full flex-col items-start">
-                {renderMessageContext && row.trajectory.map((message) => (
-                  <div key={message.id}>{renderMessageContext(message)}</div>
-                ))}
+                {renderMessageContext &&
+                  row.trajectory.map((message) => (
+                    <div key={message.id}>{renderMessageContext(message)}</div>
+                  ))}
                 <TrajectoryTimeline blocks={row.trajectory} completed />
               </div>
             </div>
@@ -883,6 +884,11 @@ const FRIENDLY_TOOL_NAMES = new Set([
   'read',
   'read_soul',
   'edit_soul',
+  'search_memory',
+  'get_memory_source',
+  'remember_memory',
+  'update_memory',
+  'forget_memory',
   'reverse_ganzhi',
   'get_ganzhi_by_datetime',
   'get_current_time',

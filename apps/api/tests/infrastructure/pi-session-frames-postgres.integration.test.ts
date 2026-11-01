@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { initDbPool, getDbPool, closeDbPool } from '#infrastructure/db-pool';
 import { piSessionFramesMigration } from '#infrastructure/migrations/versions/0094-pi-session-frames';
 import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
@@ -19,9 +21,16 @@ const connectionString = process.env.FATECLAW_TEST_FRAMES_DATABASE_URL;
 describe.skipIf(!connectionString)(
   'Pi session frames PostgreSQL integration',
   () => {
+    const schema = `pi_frames_test_${randomUUID().replaceAll('-', '')}`;
+    let administrator: pg.Pool;
     beforeAll(async () => {
-      const pool = initDbPool(connectionString!);
-      await pool.query(`CREATE TABLE chat_sessions(id text PRIMARY KEY,account_id text NOT NULL);
+      administrator = new pg.Pool({ connectionString });
+      await administrator.query(`CREATE SCHEMA ${schema}`);
+      const target = new URL(connectionString!);
+      target.searchParams.set('options', `-c search_path=${schema},public`);
+      const pool = initDbPool(target.toString());
+      await pool.query(`CREATE TABLE chat_sessions(id text PRIMARY KEY,account_id text NOT NULL,memory_context_generation integer NOT NULL DEFAULT 0);
+      CREATE TABLE pi_session_contexts(session_id text REFERENCES chat_sessions(id) ON DELETE CASCADE,context_audience text NOT NULL,context_generation integer NOT NULL,reset_revision integer NOT NULL,initialized boolean NOT NULL DEFAULT false,updated_at timestamptz DEFAULT clock_timestamp(),PRIMARY KEY(session_id,context_audience));
       CREATE TABLE conversation_logs(id text PRIMARY KEY,account_id text,request_id text,usage jsonb,model text,provider text,
         transcript_event_count int,tool_call_count int,trace_event_count int,agent_graph_summary jsonb,capability_ledger jsonb,created_at timestamptz);
       CREATE TABLE conversation_log_payloads(log_id text PRIMARY KEY REFERENCES conversation_logs(id) ON DELETE CASCADE,
@@ -29,6 +38,9 @@ describe.skipIf(!connectionString)(
       const client = await pool.connect();
       try {
         await durableAgentRequestsMigration.up(client);
+        await client.query(
+          'ALTER TABLE agent_requests ADD COLUMN memory_scope jsonb',
+        );
         await piSessionFramesMigration.up(client);
       } finally {
         client.release();
@@ -39,14 +51,15 @@ describe.skipIf(!connectionString)(
         'TRUNCATE chat_sessions,pi_session_frames,conversation_logs,conversation_log_payloads,agent_requests,agent_result_deliveries CASCADE',
       );
       await getDbPool().query(
-        "INSERT INTO chat_sessions VALUES ('session','web:user')",
+        "INSERT INTO chat_sessions(id,account_id) VALUES ('session','web:user')",
       );
     });
     afterAll(async () => {
-      await getDbPool().query(
-        'DROP TABLE pi_session_frames,conversation_log_payloads,conversation_logs,chat_sessions,agent_result_deliveries,agent_requests',
-      );
       await closeDbPool();
+      if (administrator) {
+        await administrator.query(`DROP SCHEMA ${schema} CASCADE`);
+        await administrator.end();
+      }
     });
 
     async function frame(

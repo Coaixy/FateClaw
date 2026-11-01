@@ -69,13 +69,13 @@ accounting and owner administration.
 
 The authentication routes also include:
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/auth/captcha` | Get a graphical captcha challenge |
-| POST | `/api/auth/me/send-sms-captcha` | Send an SMS verification code for an authenticated user's phone-change or reset flow |
-| POST | `/api/auth/change-password` | Change an authenticated user's password |
-| POST | `/api/auth/reset-password` | Recover a password without logging in |
-| POST | `/api/auth/me/reset-password` | Reset the authenticated user's own password |
+| Method | Path                            | Description                                                                          |
+| ------ | ------------------------------- | ------------------------------------------------------------------------------------ |
+| GET    | `/api/auth/captcha`             | Get a graphical captcha challenge                                                    |
+| POST   | `/api/auth/me/send-sms-captcha` | Send an SMS verification code for an authenticated user's phone-change or reset flow |
+| POST   | `/api/auth/change-password`     | Change an authenticated user's password                                              |
+| POST   | `/api/auth/reset-password`      | Recover a password without logging in                                                |
+| POST   | `/api/auth/me/reset-password`   | Reset the authenticated user's own password                                          |
 
 ### POST /api/auth/register
 
@@ -92,12 +92,12 @@ Register a new user.
 }
 ```
 
-| Field | Type | Required | Description |
-| -------------- | ------ | ---- | ------------------ |
-| phoneNumber | string | Yes | Mainland China phone number |
-| password | string | Yes | At least eight characters |
-| smsCaptchaCode | string | Yes | SMS verification code |
-| inviteCode | string | No | Valid single-use invitation for 72 hours of membership; omit or leave blank for ordinary registration |
+| Field          | Type   | Required | Description                                                                                           |
+| -------------- | ------ | -------- | ----------------------------------------------------------------------------------------------------- |
+| phoneNumber    | string | Yes      | Mainland China phone number                                                                           |
+| password       | string | Yes      | At least eight characters                                                                             |
+| smsCaptchaCode | string | Yes      | SMS verification code                                                                                 |
+| inviteCode     | string | No       | Valid single-use invitation for 72 hours of membership; omit or leave blank for ordinary registration |
 
 **Response 201**
 
@@ -141,12 +141,12 @@ Log in and receive a JWT.
 }
 ```
 
-| Field | Type | Required | Description |
-| -------------- | ------ | ---- | ------------------ |
-| phone | string | Yes | Mainland China phone number |
-| password | string | Yes | Login password |
-| captcha_token | string | Yes | Graphical captcha token |
-| captcha_answer | string | Yes | Graphical captcha answer |
+| Field          | Type   | Required | Description                 |
+| -------------- | ------ | -------- | --------------------------- |
+| phone          | string | Yes      | Mainland China phone number |
+| password       | string | Yes      | Login password              |
+| captcha_token  | string | Yes      | Graphical captcha token     |
+| captcha_answer | string | Yes      | Graphical captcha answer    |
 
 **Response 200**
 
@@ -213,13 +213,13 @@ Send an SMS verification code. Use `type = 1` for registration and `type = 0` fo
 }
 ```
 
-| Field | Type | Required | Description |
-| -------------- | ------ | ---- | ------------------------------------- |
-| type | number | Yes | `1` for registration, `0` for password recovery |
-| phoneNumber | string | Yes | Mainland China phone number |
-| captcha_token | string | Yes | Graphical captcha token |
-| captcha_answer | string | Yes | Graphical captcha answer |
-| inviteCode     | string | No | Optional for registration; a supplied code must be valid. Omitted for password recovery |
+| Field          | Type   | Required | Description                                                                             |
+| -------------- | ------ | -------- | --------------------------------------------------------------------------------------- |
+| type           | number | Yes      | `1` for registration, `0` for password recovery                                         |
+| phoneNumber    | string | Yes      | Mainland China phone number                                                             |
+| captcha_token  | string | Yes      | Graphical captcha token                                                                 |
+| captcha_answer | string | Yes      | Graphical captcha answer                                                                |
+| inviteCode     | string | No       | Optional for registration; a supplied code must be valid. Omitted for password recovery |
 
 **Response 200**
 
@@ -270,9 +270,9 @@ Get one account's details. Authentication required; users can view only their ow
 
 **Path Params**
 
-| Parameter | Description |
-| ---- | ----------------- |
-| id | Account ID (bot_id) |
+| Parameter | Description         |
+| --------- | ------------------- |
+| id        | Account ID (bot_id) |
 
 **Response 200** — A single object with the same structure as above
 
@@ -290,9 +290,9 @@ Bind an existing WeChat account to the current user. Authentication required.
 
 **Path Params**
 
-| Parameter | Description |
-| ---- | ----------------- |
-| id | Account ID (bot_id) |
+| Parameter | Description         |
+| --------- | ------------------- |
+| id        | Account ID (bot_id) |
 
 **Response 200**
 
@@ -308,17 +308,44 @@ Bind an existing WeChat account to the current user. Authentication required.
 
 ### Other account endpoints
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/account/me/soul` | Read the current user's custom Soul persona |
-| PUT | `/api/account/me/soul` | Update the current user's custom Soul persona with `{ "content": "..." }` |
-| GET | `/api/account/:id/soul` | Read the specified account's Soul |
-| PUT | `/api/account/:id/soul` | Update the specified account's Soul with `{ "content": "..." }` |
-| DELETE | `/api/account/:id` | Unbind and delete an account owned by the current user |
-| POST | `/api/account/qrcode` | Request an iLink QR code for account binding |
-| POST | `/api/account/qrcode/status` | Poll QR-code status with `{ "qrcode": "..." }` |
+| Method | Path                                | Description                                                                                                                                  |
+| ------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/account/me/soul`              | Read the current user's custom Soul persona                                                                                                  |
+| PUT    | `/api/account/me/soul`              | Update the Soul persona with `{ "content": "...", "base_hash": "..." }`; returns `{ "success": true, "sha256": "..." }`, stale hashes return `409` |
+| PUT    | `/api/account/me/soul/edit-enabled` | Allow or forbid `edit_soul` in chat with `{ "edit_enabled": true }`                                                                          |
+| GET    | `/api/account/:id/soul`             | Read the specified account's Soul                                                                                                            |
+| PUT    | `/api/account/:id/soul`             | Update the specified account's Soul with `{ "content": "..." }`                                                                              |
+| DELETE | `/api/account/:id`                  | Unbind and delete an account owned by the current user                                                                                       |
+| POST   | `/api/account/qrcode`               | Request an iLink QR code for account binding                                                                                                 |
+| POST   | `/api/account/qrcode/status`        | Poll QR-code status with `{ "qrcode": "..." }`                                                                                               |
 
 ---
+
+## Memory
+
+User routes require JWT authentication and operate on the current account's memory. Direct management remains available when automatic learning or model recall is off. See [Memory architecture](memory.md) and `@fateclaw/contracts/memory` for DTOs and lifecycle semantics.
+
+| Method      | Path                                      | Behavior                                                                                              |
+| ----------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| GET         | `/api/memory`                             | Cursor-paged items; filters `q`, `subject_id`, source `scope_id`, `kind`, `status`, `limit`           |
+| GET / PATCH | `/api/memory/settings`                    | Read/update learning, recall and chat editing switches; PATCH requires `revision`                     |
+| POST        | `/api/memory`                             | Add `{content, kind?, subject_id?}`                                                                   |
+| PATCH       | `/api/memory/:id`                         | Edit `{content, revision}`                                                                            |
+| DELETE      | `/api/memory/:id?revision=...`            | Forget an item family and mask its supporting quotes                                                  |
+| GET         | `/api/memory/:id/evidence`                | Original quotes with source availability and attribution                                              |
+| POST        | `/api/memory/sources/:id/exclude`         | Exclude the complete source from memory processing and retrieval                                      |
+| POST        | `/api/memory/clear`                       | `{reset_context?}`, default false; never changes Soul                                                 |
+| GET         | `/api/memory/status`                      | Counts and recent jobs, prioritizing active imports                                                   |
+| POST        | `/api/memory/backfill`                    | Explicit history learning with optional `session_ids`, `scope_ids`, `client_id`, `from`, `to` filters |
+| POST        | `/api/memory/jobs/:id/pause` or `/resume` | Pause/resume an authorized history import                                                             |
+| GET         | `/api/memory/scopes`                      | Actor metadata and active bindable subjects                                                           |
+| PATCH       | `/api/memory/scopes/:id/binding`          | `{speaker_subject_id, share_subject_memory, display_name?, revision}`                                 |
+| GET         | `/api/memory/sessions`                    | Cursor-paged conversation learning settings                                                           |
+| PATCH       | `/api/memory/sessions/:id`                | `{learning_enabled, revision}`; turning it off cancels the conversation's pending extraction          |
+
+`indexed_items` in status responses counts items with searchable text.
+
+The owner-only admin routes are `GET /api/admin/memory`, `PUT /api/admin/memory/policy` (complete policy plus its current revision), and `POST /api/admin/memory/jobs/:id/retry`. Policy validation requires one extraction reservation (input plus output tokens) to fit in the daily budget. Query text and original memory bodies are excluded from operational request logs. Conflicting item/settings/binding/policy edits return `409`.
 
 ## Message history
 
@@ -329,15 +356,15 @@ Get conversation history for an account. Authentication required; users can view
 **Path Params**
 
 | Parameter | Description |
-| --------- | ------- |
-| accountId | Account ID |
+| --------- | ----------- |
+| accountId | Account ID  |
 
 **Query Params**
 
-| Parameter | Type | Default | Description |
-| ----- | ------ | ---- | ------------------ |
-| limit | number | 50 | Number of messages to return, maximum 200 |
-| before | string | - | Timestamp cursor; return messages before this time |
+| Parameter | Type   | Default | Description                                        |
+| --------- | ------ | ------- | -------------------------------------------------- |
+| limit     | number | 50      | Number of messages to return, maximum 200          |
+| before    | string | -       | Timestamp cursor; return messages before this time |
 
 **Response 200**
 
@@ -368,22 +395,22 @@ Get conversation history for an account. Authentication required; users can view
 
 All endpoints below except share previews require authentication and allow access only to the current user's own sessions.
 
-| Method | Path | Description |
-| ------ | -------------------------------------------------------------------- | -------------------------- |
-| GET | `/api/chat-sessions` | List AI Chat sessions |
-| GET | `/api/chat-sessions/archived` | List archived sessions |
-| POST | `/api/chat-sessions` | Create a session, optionally passing `{ "title": "..." }` |
-| PATCH | `/api/chat-sessions/s/:sessionId` | Update the session title |
-| DELETE | `/api/chat-sessions/s/:sessionId` | Archive the session and clean up local Pi session files |
-| POST | `/api/chat-sessions/s/:sessionId/restore` | Restore an archived session |
-| POST | `/api/chat-sessions/s/:sessionId/share` | Create or reuse a private session-sharing link |
-| GET | `/api/chat-sessions/shared/:token` | Read a session through a share token without authentication |
-| GET    | `/api/chat-sessions/s/:sessionId/messages`                           | List messages with `limit`, `before`, and optional `before_id` |
-| GET    | `/api/chat-sessions/s/:sessionId/boards`                             | List selectable board summaries |
-| POST | `/api/chat-sessions/s/:sessionId/messages` | Send a message with `content` and optional `selected_board_message_id` |
-| POST | `/api/chat-sessions/s/:sessionId/messages/cancel` | Interrupt the current session's in-progress AI Chat output |
-| POST | `/api/chat-sessions/s/:sessionId/stream-ticket` | Issue a single-use WebSocket stream ticket |
-| GET | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process` | Get a redacted execution timeline |
+| Method | Path                                                                | Description                                                            |
+| ------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| GET    | `/api/chat-sessions`                                                | List AI Chat sessions                                                  |
+| GET    | `/api/chat-sessions/archived`                                       | List archived sessions                                                 |
+| POST   | `/api/chat-sessions`                                                | Create a session, optionally passing `{ "title": "..." }`              |
+| PATCH  | `/api/chat-sessions/s/:sessionId`                                   | Update the session title                                               |
+| DELETE | `/api/chat-sessions/s/:sessionId`                                   | Archive the session and clean up local Pi session files                |
+| POST   | `/api/chat-sessions/s/:sessionId/restore`                           | Restore an archived session                                            |
+| POST   | `/api/chat-sessions/s/:sessionId/share`                             | Create or reuse a private session-sharing link                         |
+| GET    | `/api/chat-sessions/shared/:token`                                  | Read a session through a share token without authentication            |
+| GET    | `/api/chat-sessions/s/:sessionId/messages`                          | List messages with `limit`, `before`, and optional `before_id`         |
+| GET    | `/api/chat-sessions/s/:sessionId/boards`                            | List selectable board summaries                                        |
+| POST   | `/api/chat-sessions/s/:sessionId/messages`                          | Send a message with `content` and optional `selected_board_message_id` |
+| POST   | `/api/chat-sessions/s/:sessionId/messages/cancel`                   | Interrupt the current session's in-progress AI Chat output             |
+| POST   | `/api/chat-sessions/s/:sessionId/stream-ticket`                     | Issue a single-use WebSocket stream ticket                             |
+| GET    | `/api/chat-sessions/s/:sessionId/messages/:messageId/query-process` | Get a redacted execution timeline                                      |
 
 ### GET /api/chat-sessions/archived
 
@@ -498,11 +525,11 @@ The ticket expires after 60 seconds, is single-use, and is bound to the current 
 
 Direct chart endpoints call internal TypeScript runners in the API process and return structured `skillContext`. Preview requests neither write to a session nor require a model `llmRuntime`.
 
-| Method | Path | Description |
-| ---- | --------------------- | -------------------------------------------------- |
-| GET | `/api/paipan/catalog` | Public endpoint listing system chart types available for direct calculation |
-| POST | `/api/paipan/preview` | Public endpoint; pass `skill` and `input` to preview without writing to a session. A valid JWT supplies user context |
-| POST | `/api/paipan/commit` | Authentication required; submit previewed or newly calculated results to AI Chat |
+| Method | Path                  | Description                                                                                                          |
+| ------ | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/paipan/catalog` | Public endpoint listing system chart types available for direct calculation                                          |
+| POST   | `/api/paipan/preview` | Public endpoint; pass `skill` and `input` to preview without writing to a session. A valid JWT supplies user context |
+| POST   | `/api/paipan/commit`  | Authentication required; submit previewed or newly calculated results to AI Chat                                     |
 
 `commit.target` supports `new_session_from_preview` and `current_session`. Pass `sessionId` when submitting to the current session. You can also pass `skill` + `input` for the server to calculate and save a chart immediately.
 
@@ -560,10 +587,10 @@ Public feedback uses `/api/issues`; authenticated users create and edit their ow
 
 Users choose between the platform-managed paid and free pools. Supplier connections and credentials remain administrator-owned. Each pool may contain multiple models/providers; users select a service rather than a provider node.
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/model-settings` | Authenticated paid `model`, `benefit` availability/allowance/reset time and `preferred_pool` |
-| PUT | `/api/model-settings/preference` | Save `{ "pool_key": "official" | "benefit", "session_id"?: "..." }`; optional session must belong to the caller and have no active turn |
+| Method | Path                             | Description                                                                                  |
+| ------ | -------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| GET    | `/api/model-settings`            | Authenticated paid `model`, `benefit` availability/allowance/reset time and `preferred_pool` |
+| PUT    | `/api/model-settings/preference` | Save `{ "pool_key": "official"                                                               | "benefit", "session_id"?: "..." }`; optional session must belong to the caller and have no active turn |
 
 The paid `model` remains nullable and keeps its existing public alias. Displayed input/output prices include the current account's non-member multiplier when applicable. `benefit` includes `model`, `enabled`, `eligible`, `supply`, `daily_turns`, `remaining_turns`, and `resets_at`. `eligible` indicates active membership, independently of pool availability; ineligible users receive `remaining_turns: null`. New free requests require active membership at durable admission and return HTTP 403 otherwise. Expiry does not interrupt accepted requests or recovery. Daily turns and concurrency keep their configured values. Connection details and credential values are omitted. Preferences are server-owned; session choices apply to future turns, and exhaustion never changes a request into paid execution. Legacy custom-provider selection endpoints remain removed. See [Free model service](benefit-model-pool.md).
 
@@ -626,7 +653,10 @@ API startup separately imports legacy records with no current revision. `skill_c
 {
   "skill_name": "Liuyao wealth assessment",
   "files": [
-    { "path": "SKILL.md", "content": "---\nname: \"Liuyao wealth assessment\"\ndescription: \"Updated description\"\n---\n\n# Liuyao wealth assessment\n" },
+    {
+      "path": "SKILL.md",
+      "content": "---\nname: \"Liuyao wealth assessment\"\ndescription: \"Updated description\"\n---\n\n# Liuyao wealth assessment\n"
+    },
     { "path": "index.md", "content": "# File index\n" },
     { "path": "docs/knowledge.md", "content": "# Knowledge content\n" }
   ]
@@ -667,12 +697,12 @@ These routes replace the retired referral documentation. They gate new account
 creation and do not issue referral commissions. Anonymous preview uses a POST body
 so invitation codes do not enter API URLs. All responses use `Cache-Control: no-store`.
 
-| Method | Path | Description |
-| --- | --- | --- |
-| POST | `/api/auth/invites/preview` | Validate `{ inviteCode }` without consuming the code |
-| GET | `/api/auth/invites/me` | Authenticated user's qualification, allowance and recent codes |
-| POST | `/api/auth/invites` | Reserve a slot using `{ request_key }`; return the code once |
-| POST | `/api/auth/invites/:id/revoke` | Revoke an owned unused code and release its reservation |
+| Method | Path                           | Description                                                    |
+| ------ | ------------------------------ | -------------------------------------------------------------- |
+| POST   | `/api/auth/invites/preview`    | Validate `{ inviteCode }` without consuming the code           |
+| GET    | `/api/auth/invites/me`         | Authenticated user's qualification, allowance and recent codes |
+| POST   | `/api/auth/invites`            | Reserve a slot using `{ request_key }`; return the code once   |
+| POST   | `/api/auth/invites/:id/revoke` | Revoke an owned unused code and release its reservation        |
 
 Owner-only policy, allowance, operational code and completed-refund administration
 is under `/api/admin/registration-invites`. See the complete
@@ -901,10 +931,10 @@ Soft-reset the current user's data by scope. Authentication required. `scope` su
 
 For users making programmatic calls with API keys: `/api/api-keys` is the internal management surface (JWT authentication) where users create, list, and revoke their keys. `/api/v1` is the external calling surface (API-key authentication, OpenAI-compatible requests, responses, and errors). Creating a key requires active membership; existing keys remain usable after membership expiry, subject to the arrears gate. See [Open API](open-api.md) for authentication, endpoints, billing, and session retention.
 
-| Prefix | Authentication | Description |
-| --- | --- | --- |
-| `/api/api-keys` | JWT | Internal API-key management: create, list, and revoke the current user's keys |
-| `/api/v1` | API Key | External Open API: OpenAI-compatible entry point for key holders to call chart and Agent capabilities programmatically |
+| Prefix          | Authentication | Description                                                                                                            |
+| --------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `/api/api-keys` | JWT            | Internal API-key management: create, list, and revoke the current user's keys                                          |
+| `/api/v1`       | API Key        | External Open API: OpenAI-compatible entry point for key holders to call chart and Agent capabilities programmatically |
 
 ---
 
@@ -1059,25 +1089,25 @@ The legacy `/system-config/providers`, `/system-config/runtime`, and `/system-co
 
 ### Other admin endpoints
 
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/api/admin/users` | User list and usage overview |
-| POST | `/api/admin/users` | Create a user directly as an administrator |
-| GET | `/api/admin/users/:id` | User details |
-| GET | `/api/admin/users/:id/transactions` | User wallet transactions |
-| POST | `/api/admin/users/:id/balance/grant` | Grant bonus balance |
-| POST | `/api/admin/users/:id/balance/adjust` | Adjust recharge balance |
-| GET | `/api/admin/users/:id/balance/grants` | User bonus-balance records |
-| DELETE | `/api/admin/users/:id/logs` | Delete user conversation logs |
-| DELETE | `/api/admin/users/:id` | Delete a user |
-| GET | `/api/admin/billing/reservations` | Query billing reservations |
-| POST | `/api/admin/billing/reconcile` | Reconcile stale billing reservations |
-| GET | `/api/admin/messages` | Search messages as an administrator |
-| GET | `/api/admin/chat-sessions` | Search sessions as an administrator |
-| POST | `/api/admin/chat-sessions/pi-sessions/cleanup` | Clean up Pi session files |
-| GET | `/api/admin/skills/custom` | Search custom Skills as an administrator |
-| GET | `/api/admin/skills/custom/:id` | Current skill content, database storage metadata, and recent revision history |
-| GET | `/api/admin/skills/global` | List global system chart switches |
+| Method | Path                                           | Description                                                                   |
+| ------ | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| GET    | `/api/admin/users`                             | User list and usage overview                                                  |
+| POST   | `/api/admin/users`                             | Create a user directly as an administrator                                    |
+| GET    | `/api/admin/users/:id`                         | User details                                                                  |
+| GET    | `/api/admin/users/:id/transactions`            | User wallet transactions                                                      |
+| POST   | `/api/admin/users/:id/balance/grant`           | Grant bonus balance                                                           |
+| POST   | `/api/admin/users/:id/balance/adjust`          | Adjust recharge balance                                                       |
+| GET    | `/api/admin/users/:id/balance/grants`          | User bonus-balance records                                                    |
+| DELETE | `/api/admin/users/:id/logs`                    | Delete user conversation logs                                                 |
+| DELETE | `/api/admin/users/:id`                         | Delete a user                                                                 |
+| GET    | `/api/admin/billing/reservations`              | Query billing reservations                                                    |
+| POST   | `/api/admin/billing/reconcile`                 | Reconcile stale billing reservations                                          |
+| GET    | `/api/admin/messages`                          | Search messages as an administrator                                           |
+| GET    | `/api/admin/chat-sessions`                     | Search sessions as an administrator                                           |
+| POST   | `/api/admin/chat-sessions/pi-sessions/cleanup` | Clean up Pi session files                                                     |
+| GET    | `/api/admin/skills/custom`                     | Search custom Skills as an administrator                                      |
+| GET    | `/api/admin/skills/custom/:id`                 | Current skill content, database storage metadata, and recent revision history |
+| GET    | `/api/admin/skills/global`                     | List global system chart switches                                             |
 
 The custom skill list returns summary metadata without file bodies or revision arrays. Its `storage` object includes the persisted content state, current revision ID and save time, format version, revision and file counts, and legacy import status, diagnostic code, and last check time. A current database revision takes precedence over historical import outcomes when determining the displayed storage state. Enabled and visibility flags remain independent.
 
@@ -1093,42 +1123,42 @@ All error responses use a consistent format:
 { "error": "Error description" }
 ```
 
-| HTTP status | Meaning |
-| ----------- | ------------------- |
-| 400 | Invalid request parameters |
-| 401 | Not logged in or token expired |
-| 403 | Permission denied |
-| 404 | Resource not found |
-| 500 | Internal server error |
+| HTTP status | Meaning                        |
+| ----------- | ------------------------------ |
+| 400         | Invalid request parameters     |
+| 401         | Not logged in or token expired |
+| 403         | Permission denied              |
+| 404         | Resource not found             |
+| 500         | Internal server error          |
 
 ---
 
 ## Environment variables
 
-| Variable | Default | Description |
-| --------------------------- | ----------------------- | ---------------------------------- |
-| `API_PORT` | 3000 | API listen port |
-| `API_HOST` | 0.0.0.0 | API listen address |
-| `PUBLIC_BASE_URL` | - | Public base URL for generating payment callback URLs |
-| `PUBLIC_API_BASE_URL` | - | Public API URL for generating payment notification `notify_url` |
-| `PUBLIC_WEB_BASE_URL` | - | Public www URL for generating post-payment `return_url` |
-| `DATABASE_URL` | - | PostgreSQL connection URL |
-| `REDIS_URL` | - | Redis connection URL |
-| `JWT_SECRET` | - | JWT signing secret; must be strongly random |
-| `MANAGER_KEY` | - | Admin authentication key; must be strongly random if supplied |
-| `USER_MANAGER_KEY` | - | User-manager key granting access only to user and message modules; must be strongly random if supplied |
-| `ALLOWED_ORIGINS` | - | Production CORS allowlist; must include www and admin origins in three-site deployments |
-| `NODE_ENV` | - | Set to `production` in production |
-| `LOCAL_AGENT_ENTRY_MODE` | `auto` | Local agent-runtime entry selection: `auto` / `src` / `dist` |
-| `LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB` | - | V8 old-space limit for agent-runtime children; `128` recommended for a 2 GB server |
-| `AGENT_REQUEST_TIMEOUT` | `1800000` | WeChat Bot timeout waiting for an agent response, in milliseconds |
-| `AI_CHAT_REQUEST_TIMEOUT` | `1800000` | AI Chat timeout waiting for an agent response, in milliseconds |
-| `BILLING_RESERVATION_STALE_MS` | `2400000` | Age at which a billing reservation is considered stale |
-| `TRACE_RETENTION_DAYS` | `7` | Retention days for `conversation_log_payloads.trace_events` |
-| `FATECLAW_TEXT_SKILLS_DIR`  | `.fateclaw/text-skills` | Rebuildable user skill cache and legacy backfill root |
-| `FATECLAW_PI_SESSION_DIR` | - | Directory for agent-runtime Pi session files |
-| `LOG_LEVEL` | `info` | Server log level |
-| `LOG_PRETTY` | Enabled by default outside production | `1` forces pino-pretty on; `0` forces it off |
+| Variable                            | Default                               | Description                                                                                            |
+| ----------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `API_PORT`                          | 3000                                  | API listen port                                                                                        |
+| `API_HOST`                          | 0.0.0.0                               | API listen address                                                                                     |
+| `PUBLIC_BASE_URL`                   | -                                     | Public base URL for generating payment callback URLs                                                   |
+| `PUBLIC_API_BASE_URL`               | -                                     | Public API URL for generating payment notification `notify_url`                                        |
+| `PUBLIC_WEB_BASE_URL`               | -                                     | Public www URL for generating post-payment `return_url`                                                |
+| `DATABASE_URL`                      | -                                     | PostgreSQL connection URL                                                                              |
+| `REDIS_URL`                         | -                                     | Redis connection URL                                                                                   |
+| `JWT_SECRET`                        | -                                     | JWT signing secret; must be strongly random                                                            |
+| `MANAGER_KEY`                       | -                                     | Admin authentication key; must be strongly random if supplied                                          |
+| `USER_MANAGER_KEY`                  | -                                     | User-manager key granting access only to user and message modules; must be strongly random if supplied |
+| `ALLOWED_ORIGINS`                   | -                                     | Production CORS allowlist; must include www and admin origins in three-site deployments                |
+| `NODE_ENV`                          | -                                     | Set to `production` in production                                                                      |
+| `LOCAL_AGENT_ENTRY_MODE`            | `auto`                                | Local agent-runtime entry selection: `auto` / `src` / `dist`                                           |
+| `LOCAL_AGENT_NODE_MAX_OLD_SPACE_MB` | -                                     | V8 old-space limit for agent-runtime children; `128` recommended for a 2 GB server                     |
+| `AGENT_REQUEST_TIMEOUT`             | `1800000`                             | WeChat Bot timeout waiting for an agent response, in milliseconds                                      |
+| `AI_CHAT_REQUEST_TIMEOUT`           | `1800000`                             | AI Chat timeout waiting for an agent response, in milliseconds                                         |
+| `BILLING_RESERVATION_STALE_MS`      | `2400000`                             | Age at which a billing reservation is considered stale                                                 |
+| `TRACE_RETENTION_DAYS`              | `7`                                   | Retention days for `conversation_log_payloads.trace_events`                                            |
+| `FATECLAW_TEXT_SKILLS_DIR`          | `.fateclaw/text-skills`               | Rebuildable user skill cache and legacy backfill root                                                  |
+| `FATECLAW_PI_SESSION_DIR`           | -                                     | Directory for agent-runtime Pi session files                                                           |
+| `LOG_LEVEL`                         | `info`                                | Server log level                                                                                       |
+| `LOG_PRETTY`                        | Enabled by default outside production | `1` forces pino-pretty on; `0` forces it off                                                           |
 
 Model providers are primarily configured in the database through admin `/api/admin/system-config`. AI requests consume the host-supplied `llmRuntime` and do not rely on process-level model keys.
 Owner-only `GET` and `PUT /api/admin/system-config/runtime` manage the persisted runtime policy. `PUT` requires all current policy fields and `revision`; stale edits return 409. See [Runtime configuration](runtime-configuration.md) for the complete field contract and application timing.

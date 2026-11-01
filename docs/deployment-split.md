@@ -24,6 +24,12 @@ Payment callbacks also follow this split: the Epay asynchronous notification `no
 `https://api.example.com/api/billing/recharge/notify`, while the post-payment
 `return_url` points to `https://www.example.com/wallet`.
 
+## Cross-conversation memory
+
+Deploy API, agent-runtime, web, admin and contracts together for memory RPC and audience-aware session frames. Migration `0102_cross_conversation_memory` leaves existing users' automatic learning off; new users inherit the platform default. The full API entry point starts the durable memory worker. Configure the extraction model and budgets in admin `/system/memory`.
+
+Memory works on the existing `postgres:18-alpine` service and needs no extension beyond the optional `pg_trgm`. See [Memory deployment and recovery](memory.md#deployment) for activation, old queued requests, source controls and context reset semantics.
+
 ## User skill storage
 
 User-created skill content is stored as immutable revisions in PostgreSQL. `user_custom_skills.current_revision_id` selects the latest content; local files under `FATECLAW_TEXT_SKILLS_DIR` (default `.fateclaw/text-skills`) are disposable caches and do not need to be included in deployment archives. API, agent-runtime, and web must all run the updated version because editor saves require `base_revision_id`.

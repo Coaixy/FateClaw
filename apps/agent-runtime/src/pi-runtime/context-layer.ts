@@ -9,6 +9,7 @@ import type {
 } from '#agent/types';
 import type { RequestRuntime } from '#agent/runtime';
 import { getJingzhanPrompt } from '#agent/pi-runtime/prompts/jingzhan';
+import { soulToolsAvailable } from '#agent/pi-runtime/tools/soul-tool';
 
 const BOARD_MANIFEST_PREVIEW_CHARS = 240;
 const SOUL_MANIFEST_PREVIEW_CHARS = 800;
@@ -274,6 +275,8 @@ async function buildSoulSection(args: {
   runtime: RequestRuntime;
   soulEditEnabled: boolean;
 }): Promise<PiContextSection | null> {
+  // The persona block already carries Soul for other audiences; the manifest only guides the tools.
+  if (!soulToolsAvailable(args.input)) return null;
   try {
     const content = await args.runtime.deps.soulStore.read(
       args.input.accountId,
@@ -296,7 +299,9 @@ async function buildSoulSection(args: {
         args.soulEditEnabled
           ? '读取/编辑规则：用户明确要求查看、记住、修改或删除 Soul 时，先调用 read_soul 获取全文和 baseHash；编辑时必须使用 edit_soul。'
           : '读取规则：用户明确要求查看 Soul 时，可调用 read_soul 获取全文；当前用户关闭了对话编辑 Soul。',
-        '边界：用户长期记忆只有这一份 Soul，不要另造 memory/persona 概念。',
+        args.input.memoryScope
+          ? '边界：Soul 是用户手工维护的人格与偏好配置；跨对话记忆由宿主单独管理，不要写入 Soul。'
+          : '边界：用户长期记忆只有这一份 Soul，不要另造 memory/persona 概念。',
       ],
     });
   } catch (error) {

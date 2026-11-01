@@ -299,11 +299,17 @@ extensions require separate host integration.
   cannot change a replacement's busy count. Existing exit handling and durable
   recovery terminate interrupted requests without automatically replaying execution.
 
+## Cross-conversation memory
+
+PostgreSQL owns scoped sources, versioned memory items, evidence and durable extraction jobs. Admission freezes owner, actor, audience and discussed subject before user-message capture. Background extraction uses the existing model resolver; epoch, binding and source checks fence late results. The keyword index is rebuildable.
+
+Soul stays the user's persona: it enters the system prompt as before, independent of memory. On the first model step of a request the runtime makes one `prepare` call and reuses its excerpts for every later step, retry and pool failover of that request; a memory failure only removes memory from the turn. Managed memory tool results persist references only, and `agent.transformContext` puts the text into a cloned provider context. Ordinary session files, durable frame chains, resource boards and restoration are isolated by audience and generation. See [Cross-conversation memory](memory.md) for the schema, controls, lifecycle and limits.
+
 ## State and observability
 
 Primary sources of truth:
 
-- PostgreSQL: Users, accounts, sessions, messages, tasks, model configuration, Skill metadata, billing, `conversation_logs`, and `conversation_log_payloads`.
+- PostgreSQL: Users, accounts, sessions, messages, tasks, model configuration, Skill metadata, memory/evidence/jobs, billing, `conversation_logs`, and `conversation_log_payloads`.
 - Filesystem: rebuildable authorized Skill revision snapshots, Pi session files and unsent result spools. PostgreSQL owns Skill content.
 - Redis: IPC queues, session busy flags, short-lived history/context boundaries, and other runtime state.
 - `apps/api/src/modules/chat/paipan-registry.ts`: System chart catalog, parameter schemas, and runner bindings.

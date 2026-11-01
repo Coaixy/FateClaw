@@ -399,6 +399,7 @@ function readRequestIdFromMessageMetadata(message: {
 async function restorePiSessionPayloadFromConversationSnapshot(input: {
   sessionId: string;
   accountId: string;
+  contextGeneration?: number;
 }): Promise<PiSessionCleanupPayloadResolution | null> {
   const recentMessages = await getRecentMessages(
     input.accountId,
@@ -424,9 +425,12 @@ async function restorePiSessionPayloadFromConversationSnapshot(input: {
     if (!snapshot) {
       continue;
     }
+    if ((snapshot.contextGeneration ?? 0) !== (input.contextGeneration ?? 0))
+      continue;
     const restored = await writePiSessionSnapshotArchiveToFiles(
       input.sessionId,
       snapshot,
+      input.contextGeneration ?? 0,
     );
     if (!restored || !hasUsablePiSessionArchivePayload(restored.payload)) {
       continue;
@@ -447,11 +451,16 @@ async function resolvePiSessionCleanupPayload(input: {
   sessionId: string;
   accountId: string;
   piSessionArchivedAt: string | null;
+  contextGeneration?: number;
 }): Promise<PiSessionCleanupPayloadResolution | null> {
   const existingArchive = await getChatSessionPiSessionArchive(input.sessionId);
   if (
     existingArchive &&
-    hasUsablePiSessionArchivePayload(existingArchive.pi_session_archive_payload)
+    hasUsablePiSessionArchivePayload(
+      existingArchive.pi_session_archive_payload,
+    ) &&
+    ((existingArchive.pi_session_archive_payload as PiSessionArchivePayload)
+      .context_generation ?? 0) === (input.contextGeneration ?? 0)
   ) {
     return {
       payload: existingArchive.pi_session_archive_payload,
@@ -462,7 +471,10 @@ async function resolvePiSessionCleanupPayload(input: {
     };
   }
 
-  const archive = await readPiSessionArchiveForSession(input.sessionId);
+  const archive = await readPiSessionArchiveForSession(
+    input.sessionId,
+    input.contextGeneration ?? 0,
+  );
   if (hasUsablePiSessionArchivePayload(archive.payload)) {
     return {
       payload: archive.payload,
@@ -476,6 +488,7 @@ async function resolvePiSessionCleanupPayload(input: {
   return restorePiSessionPayloadFromConversationSnapshot({
     sessionId: input.sessionId,
     accountId: input.accountId,
+    contextGeneration: input.contextGeneration ?? 0,
   });
 }
 
@@ -534,6 +547,7 @@ export async function cleanupPiSessionFilesForAdmin(input: {
       sessionId: candidate.id,
       accountId: candidate.account_id,
       piSessionArchivedAt: candidate.pi_session_archived_at,
+      contextGeneration: candidate.memory_context_generation ?? 0,
     });
     if (!resolution) {
       unarchivableSessions += 1;

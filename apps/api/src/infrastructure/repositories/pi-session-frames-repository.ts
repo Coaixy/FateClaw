@@ -13,12 +13,20 @@ import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 export async function getPiSessionBase(
   sessionId: string,
   accountId: string,
+  contextAudience = '',
+  db: DbQueryable = getDbPool(),
 ): Promise<PiSessionBase | undefined> {
-  const { rows } = await getDbPool().query<PiSessionBase>(
-    `SELECT request_id AS "requestId",messages_hash AS "messagesHash",message_count AS "messageCount",checkpoint_depth AS "checkpointDepth"
-     FROM pi_session_frames WHERE session_id=$1 AND account_id=$2
-     ORDER BY created_at DESC,request_id DESC LIMIT 1`,
-    [sessionId, accountId],
+  const { rows } = await db.query<PiSessionBase>(
+    `SELECT p.request_id AS "requestId",p.messages_hash AS "messagesHash",p.message_count AS "messageCount",p.checkpoint_depth AS "checkpointDepth",
+       COALESCE((p.frame->>'contextGeneration')::int,0) AS "contextGeneration",COALESCE(p.frame->>'contextAudience','') AS "contextAudience"
+     FROM pi_session_frames p JOIN chat_sessions s ON s.id=p.session_id AND s.account_id=p.account_id
+     LEFT JOIN pi_session_contexts ctx ON ctx.session_id=s.id AND ctx.context_audience=$3
+     WHERE p.session_id=$1 AND p.account_id=$2
+       AND COALESCE(p.frame->>'contextAudience','')=$3
+       AND COALESCE((p.frame->>'contextGeneration')::int,0)=COALESCE(ctx.context_generation,s.memory_context_generation)
+       AND (ctx.session_id IS NULL OR ctx.reset_revision=s.memory_context_generation)
+     ORDER BY p.created_at DESC,p.request_id DESC LIMIT 1`,
+    [sessionId, accountId, contextAudience],
   );
   return rows[0];
 }
@@ -31,6 +39,51 @@ export async function storePiSessionFrame(
   frame: PiSessionFrame,
 ): Promise<void> {
   if (!isPiSessionFrame(frame)) throw new Error('Invalid Pi session frame');
+  const sessionGeneration = await db.query<{
+    memory_context_generation: number;
+    context_generation: number | null;
+    reset_revision: number | null;
+    memory_scope:
+      | import('@fateclaw/contracts/memory').MemoryRequestScope
+      | null;
+  }>(
+    `SELECT s.memory_context_generation,ctx.context_generation,ctx.reset_revision,r.memory_scope
+     FROM chat_sessions s JOIN agent_requests r ON r.session_id=s.id AND r.account_id=s.account_id AND r.request_id=$3
+     LEFT JOIN pi_session_contexts ctx ON ctx.session_id=s.id AND ctx.context_audience=$4
+     WHERE s.id=$1 AND s.account_id=$2`,
+    [sessionId, accountId, requestId, frame.contextAudience ?? ''],
+  );
+  const current = sessionGeneration.rows[0];
+  if (!current)
+    throw new Error('Pi session frame has no matching delivery owner');
+  if (
+    (current.memory_scope?.contextAudience ?? '') !==
+    (frame.contextAudience ?? '')
+  )
+    throw new Error('Pi session frame audience mismatch');
+  if (
+    current.memory_scope &&
+    current.memory_scope.contextGeneration !== (frame.contextGeneration ?? 0)
+  )
+    throw new Error('Pi session frame generation mismatch');
+  // Revoking an old context must not roll back an otherwise valid reply or its usage.
+  if (current.context_generation !== null) {
+    if (
+      (frame.contextGeneration ?? 0) !== current.context_generation ||
+      current.reset_revision !== current.memory_context_generation
+    )
+      return;
+  } else {
+    if (
+      frame.contextAudience ||
+      (frame.contextGeneration ?? 0) !== current.memory_context_generation
+    )
+      return;
+    await db.query(
+      "INSERT INTO pi_session_contexts(session_id,context_audience,context_generation,reset_revision,initialized) VALUES($1,'',$2,$2,false) ON CONFLICT DO NOTHING",
+      [sessionId, current.memory_context_generation],
+    );
+  }
   if (frame.kind === 'delta') {
     const base = frame.base;
     if (
@@ -41,7 +94,8 @@ export async function storePiSessionFrame(
       throw new Error('Invalid Pi session delta');
     const { rows } = await db.query(
       `SELECT 1 FROM pi_session_frames WHERE request_id=$1 AND session_id=$2 AND account_id=$3
-       AND messages_hash=$4 AND message_count=$5 AND checkpoint_depth=$6`,
+       AND messages_hash=$4 AND message_count=$5 AND checkpoint_depth=$6 AND COALESCE(frame->>'contextAudience','')=$7
+       AND COALESCE((frame->>'contextGeneration')::int,0)=$8`,
       [
         base.requestId,
         sessionId,
@@ -49,6 +103,8 @@ export async function storePiSessionFrame(
         base.messagesHash,
         base.messageCount,
         base.checkpointDepth,
+        frame.contextAudience ?? '',
+        frame.contextGeneration ?? 0,
       ],
     );
     if (!rows.length) throw new Error('Missing committed Pi session base');
@@ -76,6 +132,10 @@ export async function storePiSessionFrame(
   );
   if (!result.rows.length)
     throw new Error('Pi session frame has no matching delivery owner');
+  await db.query(
+    'UPDATE pi_session_contexts SET initialized=true,updated_at=clock_timestamp() WHERE session_id=$1 AND context_audience=$2 AND context_generation=$3',
+    [sessionId, frame.contextAudience ?? '', frame.contextGeneration ?? 0],
+  );
 }
 
 export async function getPiSessionSnapshot(

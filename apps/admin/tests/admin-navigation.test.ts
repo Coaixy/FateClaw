@@ -48,6 +48,9 @@ describe('canAdminSessionAccessPath', () => {
     expect(canAdminSessionAccessPath(ownerSession, '/system/models')).toBe(
       true,
     );
+    expect(canAdminSessionAccessPath(ownerSession, '/system/memory/')).toBe(
+      true,
+    );
     expect(
       canAdminSessionAccessPath(ownerSession, '/system/registration-invites'),
     ).toBe(true);
@@ -63,6 +66,9 @@ describe('canAdminSessionAccessPath', () => {
     );
     expect(
       canAdminSessionAccessPath(userManagerSession, '/system/models'),
+    ).toBe(false);
+    expect(
+      canAdminSessionAccessPath(userManagerSession, '/system/memory/'),
     ).toBe(false);
     expect(
       canAdminSessionAccessPath(

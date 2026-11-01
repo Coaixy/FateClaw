@@ -4,6 +4,11 @@ import { logger } from '#infrastructure/logger';
 import { getRedis } from '#infrastructure/redis';
 import { getAccountsByUserId } from './accounts-repository.js';
 import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
+import {
+  ensureOwnerMemoryScope,
+  lockMemoryRoot,
+} from '#modules/memory/repository';
+import { mergePiSessionArchivePayload } from '#modules/chat/pi-session-files';
 
 /** Redis 中每个账号保留的最大历史消息条数。 */
 const HISTORY_REDIS_MAX = 500;
@@ -237,6 +242,7 @@ export async function hasFinalAiChatSessionReply(
 }
 
 export async function createChatSession(session: {
+  creatorActorKey?: string;
   modelPoolKey?: 'official' | 'benefit';
   id: string;
   accountId: string;
@@ -246,8 +252,8 @@ export async function createChatSession(session: {
   clientId?: string;
 }): Promise<ChatSession> {
   const { rows } = await getDbPool().query(
-    `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id,model_pool_key)
-     VALUES ($1, $2, $3, $4, $5,$6) RETURNING *`,
+    `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id,model_pool_key,created_actor_key,created_actor_title)
+     VALUES ($1, $2, $3, $4, $5,$6,$7,$4) RETURNING *`,
     [
       session.id,
       session.accountId,
@@ -255,6 +261,7 @@ export async function createChatSession(session: {
       session.title,
       session.clientId ?? null,
       session.modelPoolKey ?? 'official',
+      session.creatorActorKey ?? `user:${session.userId}`,
     ],
   );
   return rows[0] as ChatSession;
@@ -439,16 +446,37 @@ export async function markChatSessionPiSessionArchived(input: {
   reason: 'soft_deleted' | 'inactive';
   payload: unknown;
 }): Promise<boolean> {
-  const { rowCount } = await getDbPool().query(
-    `UPDATE chat_sessions
+  const client = await getDbPool().connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{
+      pi_session_archive_payload: unknown;
+    }>(
+      'SELECT pi_session_archive_payload FROM chat_sessions WHERE id=$1 FOR UPDATE',
+      [input.sessionId],
+    );
+    const payload = mergePiSessionArchivePayload(
+      input.sessionId,
+      rows[0]?.pi_session_archive_payload,
+      input.payload,
+    );
+    const { rowCount } = await client.query(
+      `UPDATE chat_sessions
      SET pi_session_archived_at = NOW(),
          pi_session_archive_reason = $2,
          pi_session_archive_payload = $3::jsonb,
          pi_session_archive_restored_at = NULL
      WHERE id = $1`,
-    [input.sessionId, input.reason, JSON.stringify(input.payload)],
-  );
-  return (rowCount ?? 0) > 0;
+      [input.sessionId, input.reason, JSON.stringify(payload)],
+    );
+    await client.query('COMMIT');
+    return (rowCount ?? 0) > 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -549,6 +577,8 @@ export async function resetUserMessages(userId: string): Promise<string[]> {
   const client = await getDbPool().connect();
   try {
     await client.query('BEGIN');
+    const root = await ensureOwnerMemoryScope(userId, client);
+    await lockMemoryRoot(root.id, client);
     await client.query(
       `UPDATE messages
        SET deleted_at = $1
@@ -558,6 +588,14 @@ export async function resetUserMessages(userId: string): Promise<string[]> {
            OR account_id = ANY($3::text[])
          )`,
       [now, userId, accountIds],
+    );
+    await client.query(
+      'UPDATE chat_sessions SET memory_context_generation=memory_context_generation+1 WHERE user_id=$1',
+      [userId],
+    );
+    await client.query(
+      "UPDATE agent_requests SET cancel_requested_at=COALESCE(cancel_requested_at,clock_timestamp()) WHERE owner_user_id=$1 AND state IN ('queued','dispatched','running')",
+      [userId],
     );
     await client.query('COMMIT');
   } catch (err) {

@@ -1,4 +1,5 @@
 import type { AccountDto, AccountSoulDto } from '@fateclaw/contracts/account';
+import { createHash } from 'node:crypto';
 
 import type { Account } from '#shared/types';
 
@@ -31,5 +32,9 @@ export function toAccountSoulDto(
   content: string,
   editEnabled = true,
 ): AccountSoulDto {
-  return { content, edit_enabled: editEnabled };
+  return {
+    content,
+    edit_enabled: editEnabled,
+    sha256: createHash('sha256').update(content, 'utf8').digest('hex'),
+  };
 }

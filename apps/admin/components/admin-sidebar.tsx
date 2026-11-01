@@ -19,6 +19,7 @@ import {
   Puzzle,
   ScrollText,
   Bot,
+  Brain,
   Crown,
   ReceiptText,
   WalletCards,
@@ -91,6 +92,12 @@ const navItems = [
     href: '/system/runtime',
     label: '运行配置',
     icon: Settings2,
+    requiredScopes: ['admin:*'],
+  },
+  {
+    href: '/system/memory',
+    label: '长期记忆',
+    icon: Brain,
     requiredScopes: ['admin:*'],
   },
   {

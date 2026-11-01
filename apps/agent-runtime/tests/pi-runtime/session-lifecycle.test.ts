@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
@@ -18,6 +18,20 @@ import type { ContainerInput } from '#agent/types';
 import * as paipanClient from '#agent/paipan-client';
 import * as hostToolClient from '#agent/host-tool-client';
 import { visualizationReference } from '@fateclaw/contracts/visualization';
+import type {
+  MemoryCaller,
+  MemoryResult,
+} from '@fateclaw/contracts/agent/memory';
+import type { VisualizationCaller } from '@fateclaw/contracts/agent/visualization';
+import type {
+  MemoryExcerpt,
+  MemoryRequestScope,
+} from '@fateclaw/contracts/memory';
+import { databaseModelPoolHealth } from '#agent/model-pool-health';
+import {
+  hashPiMessages,
+  piSessionStorageKey,
+} from '@fateclaw/contracts/agent/session';
 
 const servers: ReturnType<typeof createServer>[] = [];
 const directories: string[] = [];
@@ -103,6 +117,7 @@ async function setup(
     accountId: 'web:synthetic-user',
     sessionId,
     userMessage: 'Synthetic current question',
+    history: [],
     llmRuntime: {
       source: 'official',
       billingMode: 'none',
@@ -133,12 +148,13 @@ async function seedV3(
   turns: number,
   text: string,
   inputTokens = 11,
+  mappingId = sessionId,
 ) {
   const entries: object[] = [
     {
       type: 'session',
       version: 3,
-      id: sessionId,
+      id: mappingId,
       timestamp: '2026-09-20T00:00:00.000Z',
       cwd: process.cwd(),
     },
@@ -195,10 +211,517 @@ async function seedV3(
     path.join(dir, 'legacy.jsonl'),
     `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n`,
   );
-  await fs.writeFile(path.join(dir, `${sessionId}.path`), 'legacy.jsonl');
+  await fs.writeFile(path.join(dir, `${mappingId}.path`), 'legacy.jsonl');
+}
+
+function memoryScope(
+  options: { generation?: number; recall?: boolean } = {},
+): MemoryRequestScope {
+  return {
+    scopeId: 'synthetic-scope',
+    ownerUserId: 'synthetic-owner',
+    actorKey: 'synthetic-actor',
+    audienceKey: 'private',
+    subjectId: 'synthetic-subject',
+    epoch: 1,
+    learningEnabled: true,
+    recallEnabled: options.recall ?? true,
+    chatEditingEnabled: true,
+    contextGeneration: options.generation ?? 0,
+  };
+}
+
+function hydrated(
+  mode: 'prepare' | 'read' | 'search',
+  excerpts: MemoryExcerpt[],
+  contextGeneration = 0,
+): MemoryResult {
+  return {
+    ok: true,
+    mode,
+    hydration: {
+      status: 'ready',
+      epoch: 1,
+      contextGeneration,
+      tokenBudget: 2000,
+      excerpts,
+    },
+  };
+}
+
+function runManaged(
+  input: ContainerInput,
+  deps: AgentRuntimeDeps,
+  scope: MemoryRequestScope,
+) {
+  const requestScope = createRequestScope();
+  requestScope.requestId = `synthetic-${randomUUID()}`;
+  return runPiSession({
+    containerInput: {
+      ...input,
+      executionId: 'synthetic-execution',
+      memoryScope: scope,
+    },
+    runtime: { deps },
+    requestScope,
+  });
 }
 
 describe('Pi SDK session lifecycle', () => {
+  it('isolates ordinary history, tools and compaction for two sender audiences and the owner on one business session', async () => {
+    const memory = vi.fn<MemoryCaller>();
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const { dir, input, deps, requests } = await setup(
+      (_body, response, index) => {
+        if (index === 2)
+          send(
+            response,
+            {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'sender-a-board-read',
+                  type: 'function',
+                  function: {
+                    name: 'get_session_board',
+                    arguments: JSON.stringify({
+                      mode: 'detail',
+                      sourceMessageId: 'sender-a-board',
+                    }),
+                  },
+                },
+              ],
+            },
+            true,
+          );
+        else
+          send(response, {
+            content: [
+              'OWNER_COMPACTION_MARKER',
+              'OWNER_ASSISTANT_MARKER',
+              '',
+              'SENDER_A_ASSISTANT_MARKER',
+              'SENDER_B_ASSISTANT_MARKER',
+              'SENDER_A_SECOND_REPLY',
+              'SENDER_B_SECOND_REPLY',
+              'OWNER_SECOND_REPLY',
+            ][index],
+          });
+      },
+    );
+    await seedV3(dir, 6, 'OWNER_HISTORY_MARKER '.repeat(1200), 60_000);
+    const ownerMapping = await fs.readFile(
+      path.join(dir, `${sessionId}.path`),
+      'utf8',
+    );
+    const runAudience = async (
+      audience: string,
+      userMessage: string,
+      extra: Partial<ContainerInput> = {},
+    ) => {
+      const requestScope = createRequestScope();
+      requestScope.requestId = `synthetic-audience-${requests.length}`;
+      return runPiSession({
+        containerInput: {
+          ...input,
+          executionId: 'synthetic-execution',
+          userMessage,
+          sessionBoardContexts: [],
+          authorizedSkillIds: [],
+          piSessionBase: null,
+          llmRuntime: {
+            ...input.llmRuntime,
+            contextWindowTokens: 64_000,
+            maxOutputTokens: 128,
+          },
+          memoryScope: {
+            scopeId: audience || 'owner',
+            ownerUserId: 'synthetic-owner',
+            actorKey: audience ? `wechat:${audience}` : 'user:synthetic-owner',
+            audienceKey: audience || 'owner',
+            subjectId: 'synthetic-subject',
+            epoch: 1,
+            learningEnabled: false,
+            recallEnabled: false,
+            chatEditingEnabled: false,
+            contextGeneration: 0,
+            contextAudience: audience,
+            memorySpaceId: 'synthetic-shared-owner-memory',
+          },
+          ...extra,
+        },
+        runtime: { deps },
+        requestScope,
+      });
+    };
+    const owner = await runAudience('', 'OWNER_CURRENT_USER_MARKER');
+    const a = await runAudience('sender-a', 'SENDER_A_USER_MARKER', {
+      sessionBoardContexts: [
+        {
+          sourceMessageId: 'sender-a-board',
+          source: 'official_paipan',
+          skill: 'bazi-paipan',
+          promptText: 'SENDER_A_TOOL_MARKER',
+          isCurrent: true,
+        },
+      ],
+    });
+    const emptyA = {
+      requestId: 'synthetic-empty-a',
+      messagesHash: hashPiMessages([]),
+      messageCount: 0,
+      checkpointDepth: 0,
+      contextGeneration: 0,
+      contextAudience: 'sender-a',
+    };
+    const b = await runAudience('sender-b', 'SENDER_B_USER_MARKER', {
+      piSessionBase: emptyA,
+    });
+    if (!a.piSession || !('messagesHash' in a.piSession))
+      throw new Error('Missing sender A frame');
+    await runAudience('sender-a', 'SENDER_A_FOLLOW_UP', {
+      piSessionBase: {
+        requestId: 'sender-a-first',
+        messagesHash: a.piSession.messagesHash,
+        messageCount: a.piSession.messageCount,
+        checkpointDepth: a.piSession.checkpointDepth,
+        contextGeneration: 0,
+        contextAudience: 'sender-a',
+      },
+    });
+    await runAudience('sender-b', 'SENDER_B_FOLLOW_UP');
+    await runAudience('', 'OWNER_FOLLOW_UP');
+    expect(requests).toHaveLength(8);
+    for (const index of [2, 3, 5]) {
+      expect(JSON.stringify(requests[index])).not.toContain(
+        'OWNER_HISTORY_MARKER',
+      );
+      expect(JSON.stringify(requests[index])).not.toContain(
+        'OWNER_COMPACTION_MARKER',
+      );
+      expect(JSON.stringify(requests[index])).not.toContain(
+        'OWNER_ASSISTANT_MARKER',
+      );
+      expect(JSON.stringify(requests[index])).not.toContain('SENDER_B_');
+    }
+    for (const index of [4, 6]) {
+      expect(JSON.stringify(requests[index])).not.toContain(
+        'OWNER_HISTORY_MARKER',
+      );
+      expect(JSON.stringify(requests[index])).not.toContain(
+        'OWNER_COMPACTION_MARKER',
+      );
+      expect(JSON.stringify(requests[index])).not.toContain('SENDER_A_');
+    }
+    expect(JSON.stringify(requests[5])).toContain('SENDER_A_USER_MARKER');
+    expect(JSON.stringify(requests[5])).toContain('SENDER_A_ASSISTANT_MARKER');
+    expect(JSON.stringify(requests[5])).toContain('SENDER_A_TOOL_MARKER');
+    expect(JSON.stringify(requests[6])).toContain('SENDER_B_USER_MARKER');
+    expect(JSON.stringify(requests[6])).toContain('SENDER_B_ASSISTANT_MARKER');
+    expect(JSON.stringify(requests[7])).toContain('OWNER_COMPACTION_MARKER');
+    expect(JSON.stringify(requests[7])).toContain('OWNER_ASSISTANT_MARKER');
+    expect(JSON.stringify(requests[7])).not.toContain('SENDER_A_');
+    expect(JSON.stringify(requests[7])).not.toContain('SENDER_B_');
+    expect(owner.piSession).toMatchObject({
+      contextAudience: '',
+      contextGeneration: 0,
+    });
+    expect(b.piSession).toMatchObject({
+      kind: 'checkpoint',
+      contextAudience: 'sender-b',
+    });
+    expect(await fs.readFile(path.join(dir, `${sessionId}.path`), 'utf8')).toBe(
+      ownerMapping,
+    );
+    for (const audience of ['sender-a', 'sender-b'])
+      expect(
+        await fs.readFile(
+          path.join(dir, `${piSessionStorageKey(sessionId, 0, audience)}.path`),
+          'utf8',
+        ),
+      ).toBeTruthy();
+  });
+
+  it('prepares memory once per request, projects searched text only to the provider and persists references only', async () => {
+    const core = { kind: 'item' as const, id: 'synthetic-core', revision: 1 };
+    const searched = {
+      kind: 'item' as const,
+      id: 'synthetic-searched',
+      revision: 1,
+    };
+    const memory = vi.fn<MemoryCaller>(async (operation) => {
+      if (operation.mode === 'prepare')
+        return hydrated(
+          'prepare',
+          [{ reference: core, text: 'EPHEMERAL_CORE_FACT', label: 'Core' }],
+          3,
+        );
+      if (operation.mode === 'search')
+        return hydrated(
+          'search',
+          [
+            {
+              reference: searched,
+              text: 'EPHEMERAL_SEARCHED_FACT',
+              label: 'Searched',
+            },
+          ],
+          3,
+        );
+      throw new Error('Unexpected synthetic memory operation');
+    });
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const { dir, input, deps, requests } = await setup(
+      (_body, response, index) => {
+        if (index === 0)
+          send(
+            response,
+            {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'synthetic-search',
+                  type: 'function',
+                  function: {
+                    name: 'search_memory',
+                    arguments: JSON.stringify({ query: 'Synthetic' }),
+                  },
+                },
+              ],
+            },
+            true,
+          );
+        else send(response, { content: 'Synthetic managed answer' });
+      },
+    );
+    const result = await runManaged(
+      input,
+      deps,
+      memoryScope({ generation: 3 }),
+    );
+    expect(result.text).toBe('Synthetic managed answer');
+    expect(requests).toHaveLength(2);
+    expect(
+      memory.mock.calls.filter(([operation]) => operation.mode === 'prepare'),
+    ).toHaveLength(1);
+    expect(memory).toHaveBeenCalledWith(
+      {
+        mode: 'prepare',
+        query: 'Synthetic current question',
+        references: [],
+      },
+      expect.any(AbortSignal),
+    );
+    for (const request of requests) {
+      const messages = request.messages;
+      const latestUser =
+        messages.length -
+        1 -
+        [...messages].reverse().findIndex((message) => message.role === 'user');
+      expect(JSON.stringify(messages[latestUser - 1])).toContain(
+        'EPHEMERAL_CORE_FACT',
+      );
+      expect(JSON.stringify(messages[latestUser])).toContain(
+        'Synthetic current question',
+      );
+    }
+    expect(
+      JSON.stringify(
+        requests[1].messages.find((message) => message.role === 'tool'),
+      ),
+    ).toContain('EPHEMERAL_SEARCHED_FACT');
+    expect(JSON.stringify(result)).not.toContain('EPHEMERAL_');
+    const mapping = await fs.readFile(
+      path.join(dir, `${piSessionStorageKey(sessionId, 3, '')}.path`),
+      'utf8',
+    );
+    const persisted = await fs.readFile(path.join(dir, mapping), 'utf8');
+    expect(persisted).not.toContain('EPHEMERAL_');
+    expect(persisted).toContain('fateclaw-memory-reference-v1');
+    expect(persisted).toContain('synthetic-searched');
+  });
+
+  it('reuses the prepared projection across a provider retry and a pool failover of the same request', async () => {
+    const core = { kind: 'item' as const, id: 'synthetic-core', revision: 1 };
+    const memory = vi.fn<MemoryCaller>(async () =>
+      hydrated('prepare', [
+        { reference: core, text: 'EPHEMERAL_RETRY_FACT', label: 'Core' },
+      ]),
+    );
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    vi.spyOn(databaseModelPoolHealth, 'claim').mockResolvedValue({
+      generation: 0,
+      token: null,
+    });
+    vi.spyOn(databaseModelPoolHealth, 'finish').mockResolvedValue();
+    const { input, deps, requests } = await setup((_body, response, index) => {
+      if (index % 2 === 0) {
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end('{"error":{"message":"synthetic unavailable"}}');
+      } else send(response, { content: 'Synthetic recovered answer' });
+    });
+    const retried = await runManaged(input, deps, memoryScope());
+    expect(retried.text).toBe('Synthetic recovered answer');
+    const node = {
+      ...input.llmRuntime,
+      piApi: 'openai-completions' as const,
+      model: input.llmRuntime.model,
+      providerKey: 'synthetic-provider',
+      authMode: 'openai_api_key' as const,
+      apiKey: 'synthetic-session-key',
+      baseUrl: input.llmRuntime.baseUrl!,
+      revision: 1,
+      weight: 1,
+    };
+    const failedOver = await runManaged(
+      {
+        ...input,
+        llmRuntime: {
+          ...input.llmRuntime,
+          billingMode: 'metered',
+          poolNodes: [
+            { ...node, modelConfigId: 'synthetic-a' },
+            { ...node, modelConfigId: 'synthetic-b' },
+          ],
+        },
+      },
+      deps,
+      memoryScope(),
+    );
+    expect(failedOver.text).toBe('Synthetic recovered answer');
+    expect(requests).toHaveLength(4);
+    for (const request of requests)
+      expect(JSON.stringify(request)).toContain('EPHEMERAL_RETRY_FACT');
+    // One prepare per request: the retry and the failover reused the cached projection.
+    expect(memory).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('completes the turn without memory when the memory RPC fails', async () => {
+    const memory = vi.fn<MemoryCaller>(async () => ({
+      ok: false,
+      code: 'MEMORY.TIMEOUT',
+      error: 'Synthetic memory outage',
+    }));
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const { input, deps, requests } = await setup((_body, response) =>
+      send(response, { content: 'Synthetic answer without memory' }),
+    );
+    const result = await runManaged(input, deps, memoryScope());
+    expect(result.text).toBe('Synthetic answer without memory');
+    expect(memory).toHaveBeenCalledOnce();
+    expect(requests).toHaveLength(1);
+    expect(
+      requests[0].messages.filter((message) => message.role === 'user'),
+    ).toHaveLength(1);
+  });
+
+  it('does not replay a forgotten item to later model steps of the same request', async () => {
+    const forgotten = {
+      kind: 'item' as const,
+      id: 'synthetic-forgotten-item',
+      revision: 1,
+    };
+    const remaining = {
+      kind: 'item' as const,
+      id: 'synthetic-remaining-item',
+      revision: 1,
+    };
+    const memory = vi.fn<MemoryCaller>(async (operation) => {
+      if (operation.mode === 'forget')
+        return { ok: true, mode: 'forget', forgottenId: operation.id };
+      if (operation.mode === 'prepare')
+        return hydrated('prepare', [
+          {
+            reference: forgotten,
+            text: 'SYNTHETIC_FORGOTTEN_MEMORY_BODY',
+            label: 'Old fact',
+          },
+          {
+            reference: remaining,
+            text: 'SYNTHETIC_REMAINING_MEMORY_BODY',
+            label: 'Remaining fact',
+          },
+        ]);
+      throw new Error('Unexpected synthetic operation');
+    });
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const { input, deps, requests } = await setup((_body, response, index) => {
+      if (index === 0)
+        send(
+          response,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'synthetic-forget-call',
+                type: 'function',
+                function: {
+                  name: 'forget_memory',
+                  arguments: JSON.stringify({ id: forgotten.id, revision: 1 }),
+                },
+              },
+            ],
+          },
+          true,
+        );
+      else send(response, { content: '已遗忘。' });
+    });
+    const result = await runManaged(
+      { ...input, userMessage: '请忘记上一条记忆' },
+      deps,
+      memoryScope(),
+    );
+    expect(result.text).toBe('已遗忘。');
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[0])).toContain(
+      'SYNTHETIC_FORGOTTEN_MEMORY_BODY',
+    );
+    expect(JSON.stringify(requests[1])).not.toContain(
+      'SYNTHETIC_FORGOTTEN_MEMORY_BODY',
+    );
+    expect(JSON.stringify(requests[1])).toContain(
+      'SYNTHETIC_REMAINING_MEMORY_BODY',
+    );
+    expect(JSON.stringify(result.piSession)).not.toContain('SYNTHETIC_');
+    expect(
+      memory.mock.calls.filter(([operation]) => operation.mode === 'prepare'),
+    ).toHaveLength(1);
+  });
+
+  it('injects the Soul persona for every audience and offers Soul tools only to the owner', async () => {
+    const memory = vi.fn<MemoryCaller>();
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const { input, deps, requests } = await setup((_body, response) =>
+      send(response, { content: 'Synthetic persona answer' }),
+    );
+    const tools = (index: number) =>
+      requests[index].tools?.map((tool) => tool.function.name) ?? [];
+    const persona = { ...input, personaPrompt: 'SYNTHETIC_SOUL_PERSONA' };
+    await runManaged(persona, deps, {
+      ...memoryScope({ recall: false }),
+      contextAudience: 'sender-a',
+    });
+    expect(JSON.stringify(requests[0].messages[0])).toContain(
+      'SYNTHETIC_SOUL_PERSONA',
+    );
+    expect(tools(0)).not.toContain('read_soul');
+    expect(tools(0)).not.toContain('edit_soul');
+    expect(deps.soulStore.canEdit).not.toHaveBeenCalled();
+    expect(deps.soulStore.read).not.toHaveBeenCalled();
+    await runManaged(persona, deps, {
+      ...memoryScope({ recall: false }),
+      ownerAudience: true,
+    });
+    expect(JSON.stringify(requests[1].messages[0])).toContain(
+      'SYNTHETIC_SOUL_PERSONA',
+    );
+    expect(tools(1)).toEqual(
+      expect.arrayContaining(['read_soul', 'edit_soul']),
+    );
+    expect(tools(1)).not.toContain('search_memory');
+    expect(memory).not.toHaveBeenCalled();
+  });
+
   it('delivers active tool guidance to the provider and embeds a persisted figure through the tool loop', async () => {
     const id = `visualization-${'a'.repeat(64)}`;
     const figure = {
@@ -207,13 +730,16 @@ describe('Pi SDK session lifecycle', () => {
       summary: '五行相生关系示意，不代表个人强弱。',
       spec: '<svg viewBox="0 0 480 180"><circle cx="100" cy="90" r="42" fill="var(--color-surface-soft)"/><text x="100" y="98">木</text><path d="M150 90H320" stroke="var(--color-primary)"/><text x="365" y="98">火</text></svg>',
     };
-    const caller = vi.fn(async () => ({
-      ok: true as const,
+    const caller = vi.fn<VisualizationCaller>(async () => ({
+      ok: true,
       sessionId,
-      artifact: { ...figure, id, version: 1 as const },
+      artifact: { ...figure, id, version: 1 },
       createdAt: '2026-10-23T00:00:00Z',
     }));
-    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(caller);
+    // vi.spyOn types only the last overload (memory); this test stubs the visualization caller.
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(
+      caller as unknown as MemoryCaller,
+    );
     const answer = `先看相生的方向。\n\n${visualizationReference(id)}\n\n箭头表示相生关系。`;
     const { input, deps, requests, run } = await setup(
       (_body, response, index) => {
@@ -536,5 +1062,81 @@ describe('Pi SDK session lifecycle', () => {
         .split('\n')
         .some((line) => line && JSON.parse(line).type === 'compaction'),
     ).toBe(true);
+  });
+
+  it('keeps temporary memory out of automatic compaction requests and the stored summary', async () => {
+    const scope = {
+      ...memoryScope({ generation: 3 }),
+      chatEditingEnabled: false,
+    };
+    const reference = {
+      kind: 'item' as const,
+      id: 'synthetic-fact',
+      revision: 1,
+    };
+    const memory = vi.fn<MemoryCaller>(async () =>
+      hydrated(
+        'prepare',
+        [
+          {
+            reference,
+            text: 'EPHEMERAL_MEMORY_EXCLUDED_FROM_COMPACTION',
+            label: 'Synthetic evidence',
+          },
+        ],
+        3,
+      ),
+    );
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const { dir, input, deps, requests } = await setup(
+      (_body, response, index) => {
+        send(response, {
+          content:
+            index === 0
+              ? 'Synthetic managed compacted history'
+              : 'Synthetic managed current answer',
+        });
+      },
+    );
+    await seedV3(
+      dir,
+      6,
+      'Synthetic history '.repeat(1200),
+      60_000,
+      `${sessionId}.memory-3`,
+    );
+    const requestScope = createRequestScope();
+    requestScope.requestId = 'synthetic-managed-compaction';
+    const result = await runPiSession({
+      containerInput: {
+        ...input,
+        memoryScope: scope,
+        executionId: 'synthetic-execution',
+        llmRuntime: {
+          ...input.llmRuntime,
+          contextWindowTokens: 64_000,
+          maxOutputTokens: 128,
+        },
+      },
+      runtime: { deps },
+      requestScope,
+    });
+    expect(result.text).toBe('Synthetic managed current answer');
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[0])).not.toContain(
+      'EPHEMERAL_MEMORY_EXCLUDED_FROM_COMPACTION',
+    );
+    expect(JSON.stringify(requests[1])).toContain(
+      'EPHEMERAL_MEMORY_EXCLUDED_FROM_COMPACTION',
+    );
+    expect(JSON.stringify(result.piSession)).not.toContain(
+      'EPHEMERAL_MEMORY_EXCLUDED_FROM_COMPACTION',
+    );
+    expect(
+      await fs.readFile(path.join(dir, 'legacy.jsonl'), 'utf8'),
+    ).not.toContain('EPHEMERAL_MEMORY_EXCLUDED_FROM_COMPACTION');
+    expect(requestScope.traceEvents).toContainEqual(
+      expect.objectContaining({ type: 'pi_compaction_end' }),
+    );
   });
 });

@@ -18,6 +18,7 @@ import type {
 
 /** Request-scoped input passed from the Redis envelope into Pi. */
 export interface ContainerInput {
+  memoryScope?: import('@fateclaw/contracts/memory').MemoryRequestScope;
   accountId: string;
   executionId?: string;
   sessionId?: string;
@@ -51,6 +52,7 @@ export type { SessionBoardContext } from '@fateclaw/contracts/agent';
 import type { SessionBoardContext } from '@fateclaw/contracts/agent';
 
 export interface ChatTaskInboxRequest {
+  memoryScope?: import('@fateclaw/contracts/memory').MemoryRequestScope;
   piSessionBase?: import('@fateclaw/contracts/agent').PiSessionBase | null;
   acceptedAtMs?: number;
   executionId?: string;

@@ -86,6 +86,16 @@
       "import": "./dist/agent/paipan.js",
       "default": "./dist/agent/paipan.js"
     },
+    "./memory": {
+      "types": "./dist/memory/index.d.ts",
+      "import": "./dist/memory/index.js",
+      "default": "./dist/memory/index.js"
+    },
+    "./agent/memory": {
+      "types": "./dist/agent/memory.d.ts",
+      "import": "./dist/agent/memory.js",
+      "default": "./dist/agent/memory.js"
+    },
     "./visualization": {
       "types": "./dist/visualization/index.d.ts",
       "import": "./dist/visualization/index.js",

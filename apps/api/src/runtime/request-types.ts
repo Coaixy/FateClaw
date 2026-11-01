@@ -4,6 +4,8 @@ import type { RuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
 import type { NewMessage } from '#shared/types';
 
 export interface AiChatSubmission extends AgentRequestData {
+  memoryMode?: 'disabled';
+  memoryActorId?: string;
   sessionId: string;
   userMessageId?: string;
   requestId?: string;

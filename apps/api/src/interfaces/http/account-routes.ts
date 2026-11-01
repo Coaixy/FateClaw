@@ -32,31 +32,41 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/account/me/soul — 更新当前用户级 Soul 自定义人格
-  app.put<{ Body: { content: string; edit_enabled?: boolean } }>(
-    '/me/soul',
-    async (request, reply) => {
-      await request.requireAuth();
-      const { content, edit_enabled: editEnabled } = request.body as {
-        content: string;
-        edit_enabled?: boolean;
-      };
-      if (typeof content !== 'string') {
-        return reply.code(400).send({ error: '缺少 content 字段' });
-      }
-      if (editEnabled !== undefined && typeof editEnabled !== 'boolean') {
-        return reply.code(400).send({ error: 'edit_enabled 必须是布尔值' });
-      }
-      const result = await updateOwnedUserSoulContent(
-        request.user.userId,
-        content,
-        editEnabled,
-      );
-      if (!result.ok) {
-        return reply.code(result.statusCode).send({ error: result.error });
-      }
-      return result.data;
-    },
-  );
+  app.put<{
+    Body: { content: string; edit_enabled?: boolean; base_hash?: string };
+  }>('/me/soul', async (request, reply) => {
+    await request.requireAuth();
+    const {
+      content,
+      edit_enabled: editEnabled,
+      base_hash: baseHash,
+    } = request.body as {
+      content: string;
+      edit_enabled?: boolean;
+      base_hash?: string;
+    };
+    if (typeof content !== 'string') {
+      return reply.code(400).send({ error: '缺少 content 字段' });
+    }
+    if (editEnabled !== undefined && typeof editEnabled !== 'boolean') {
+      return reply.code(400).send({ error: 'edit_enabled 必须是布尔值' });
+    }
+    if (
+      baseHash !== undefined &&
+      (typeof baseHash !== 'string' || !/^[a-f0-9]{64}$/i.test(baseHash))
+    )
+      return reply.code(400).send({ error: 'base_hash 格式不正确' });
+    const result = await updateOwnedUserSoulContent(
+      request.user.userId,
+      content,
+      editEnabled,
+      baseHash,
+    );
+    if (!result.ok) {
+      return reply.code(result.statusCode).send({ error: result.error });
+    }
+    return result.data;
+  });
 
   // PUT /api/account/me/soul/edit-enabled — 更新对话编辑 Soul 开关
   app.put<{ Body: { edit_enabled: boolean } }>(

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronRight,
+  Brain,
   Compass,
   Crown,
   KeyRound,
@@ -63,6 +64,12 @@ export function UserMenuDropdown({
       <div className="p-2 max-h-[calc(100vh-20rem)] overflow-y-auto">
         {/* 工作配置:卦师日常会调的断卦工具(人格话术/模型/技能)集中在一起 */}
         <MenuSection label={t('userMenu.sections.workspace')}>
+          <MenuItem
+            href="/memory"
+            icon={Brain}
+            label={t('memory.title')}
+            onNavigate={onNavigate}
+          />
           <MenuItem
             href="/persona"
             icon={Sparkles}

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { User } from '#shared/types';
 import type { DbQueryable } from '#infrastructure/db-pool';
 import { getDbPool } from '#infrastructure/db-pool';
@@ -201,11 +202,38 @@ export async function getUserSoulEditEnabled(userId: string): Promise<boolean> {
 export async function updateUserSoulContent(
   userId: string,
   content: string,
-): Promise<void> {
-  await getDbPool().query('UPDATE users SET soul_content = $1 WHERE id = $2', [
-    content,
-    userId,
-  ]);
+  options: { editEnabled?: boolean; baseHash?: string } = {},
+): Promise<string | null> {
+  const client = await getDbPool().connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query<{ soul_content: string }>(
+      'SELECT soul_content FROM users WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    const stale =
+      !current.rows[0] ||
+      (options.baseHash !== undefined &&
+        soulHash(current.rows[0].soul_content) !==
+          options.baseHash.toLowerCase());
+    if (!stale)
+      await client.query(
+        'UPDATE users SET soul_content = $2, soul_edit_enabled = COALESCE($3::boolean, soul_edit_enabled) WHERE id = $1',
+        [userId, content, options.editEnabled ?? null],
+      );
+    await client.query('COMMIT');
+    return stale ? null : soulHash(content);
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Hash of the exact stored bytes; the web editor sends it back as `base_hash`. */
+export function soulHash(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
 /**

@@ -21,6 +21,7 @@ import { getUserById } from '#infrastructure/db';
 import { logger } from '#infrastructure/logger';
 import { resolveProjectRoot } from '#infrastructure/project-root';
 import { accountRoutes } from './account-routes.js';
+import { memoryRoutes } from './memory-routes.js';
 import { adminRoutes } from './admin-routes.js';
 import { apiKeysRoutes } from './api-keys-routes.js';
 import { authRoutes } from './auth-routes.js';
@@ -53,8 +54,8 @@ const FONT_ASSET_FILE_PATTERN =
   /(?:^|[/\\])_next[/\\]static[/\\]media[/\\].+\.(?:ttf|otf|woff2?|eot)$/i;
 
 function requestLogUrl(request: FastifyRequest): string {
-  // Stream credentials, invitation codes and issue search text must stay out of request logs.
-  return /^(?:\/login(?:[/?]|$)|\/api\/auth\/invites(?:[/?]|$)|\/api\/admin\/registration-invites(?:[/?]|$)|\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)|\/api\/(?:admin\/)?issues(?:[/?]|$))/.test(
+  // Private search text and one-use credentials must stay out of request logs.
+  return /^(?:\/login(?:[/?]|$)|\/api\/auth\/invites(?:[/?]|$)|\/api\/admin\/registration-invites(?:[/?]|$)|\/api\/chat-sessions\/s\/[^/?]+\/stream(?:\?|$)|\/api\/(?:admin\/)?(?:issues|memory)(?:[/?]|$))/.test(
     request.url,
   )
     ? request.url.split('?')[0]
@@ -333,6 +334,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(registrationInviteRoutes, { prefix: '/api/auth/invites' });
   await app.register(accountRoutes, { prefix: '/api/account' });
+  await app.register(memoryRoutes, { prefix: '/api/memory' });
   await app.register(chatSessionsRoutes, { prefix: '/api/chat-sessions' });
   await app.register(clientProfilesRoutes, { prefix: '/api/client-profiles' });
   await app.register(messagesRoutes, { prefix: '/api/messages' });

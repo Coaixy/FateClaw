@@ -20,6 +20,10 @@ vi.mock('#infrastructure/logger', () => ({
     warn: mockLoggerWarn,
   },
 }));
+vi.mock('#modules/memory/repository', () => ({
+  ensureOwnerMemoryScope: vi.fn(async () => ({ id: 'synthetic-root' })),
+  lockMemoryRoot: vi.fn(async () => ({ id: 'synthetic-root' })),
+}));
 
 import {
   getArchivedChatSessionsByUserId,
@@ -347,7 +351,11 @@ describe('chat repository', () => {
       'account-2',
       'web:user-1',
     ]);
-    expect(clientCalls[2]?.sql).toBe('COMMIT');
+    expect(clientCalls[2]?.sql).toContain(
+      'memory_context_generation=memory_context_generation+1',
+    );
+    expect(clientCalls[3]?.sql).toContain('cancel_requested_at');
+    expect(clientCalls[4]?.sql).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledOnce();
   });
 });

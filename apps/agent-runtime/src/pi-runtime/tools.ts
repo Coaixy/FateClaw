@@ -16,11 +16,16 @@ import { createPiSkillReadTool } from '#agent/pi-runtime/tools/skill-read-tool';
 import {
   createPiSoulEditTool,
   createPiSoulReadTool,
+  soulToolsAvailable,
 } from '#agent/pi-runtime/tools/soul-tool';
 import type { RequestScope } from '#agent/request-scope';
 import type { PiToolExecutionRecord } from './types.js';
 import type { SessionBoardContext } from '#agent/types';
 import type { SoulStore } from '#agent/deps';
+import type { MemoryCaller } from '@fateclaw/contracts/agent/memory';
+import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
+import type { RequestMemoryExcerpts } from '#agent/memory-client';
+import { createPiManagedMemoryTools } from './tools/memory-tool.js';
 
 /**
  * 创建 Pi custom tools 所需的运行时参数。
@@ -48,6 +53,10 @@ export interface CreatePiToolsOptions {
   accountId: string;
   soulStore: SoulStore;
   soulEditEnabled?: boolean;
+  memory?: MemoryCaller;
+  memoryScope?: MemoryRequestScope;
+  /** Request-local read text shared with the provider projection. */
+  memoryExcerpts?: RequestMemoryExcerpts;
   recordExecution(record: PiToolExecutionRecord): void;
   now?: () => Date;
   defaultTimeZone?: string;
@@ -81,17 +90,10 @@ export function createPiCustomTools(
       requestScope: options.requestScope,
       recordExecution: options.recordExecution,
     }),
-    createPiSoulReadTool({
-      requestScope: options.requestScope,
-      recordExecution: options.recordExecution,
-      accountId: options.accountId,
-      soulStore: options.soulStore,
-      soulEditEnabled: options.soulEditEnabled,
-    }),
   ];
-  if (options.soulEditEnabled ?? true) {
+  if (soulToolsAvailable(options)) {
     tools.push(
-      createPiSoulEditTool({
+      createPiSoulReadTool({
         requestScope: options.requestScope,
         recordExecution: options.recordExecution,
         accountId: options.accountId,
@@ -99,7 +101,28 @@ export function createPiCustomTools(
         soulEditEnabled: options.soulEditEnabled,
       }),
     );
+    if (options.soulEditEnabled ?? true) {
+      tools.push(
+        createPiSoulEditTool({
+          requestScope: options.requestScope,
+          recordExecution: options.recordExecution,
+          accountId: options.accountId,
+          soulStore: options.soulStore,
+          soulEditEnabled: options.soulEditEnabled,
+        }),
+      );
+    }
   }
+  if (options.memoryScope)
+    tools.push(
+      ...createPiManagedMemoryTools({
+        requestScope: options.requestScope,
+        recordExecution: options.recordExecution,
+        memory: options.memory,
+        memoryScope: options.memoryScope,
+        excerpts: options.memoryExcerpts ?? new Map(),
+      }),
+    );
   if (options.readableSkills?.length) {
     tools.push(
       createPiSkillGrepTool({

@@ -173,12 +173,13 @@ export async function resetBillingScope(
     return fail(404, '用户不存在');
   }
 
-  const clearSoul = async () => {
+  // Soul is the persona, not memory; this reset clears both.
+  const clearSoulAndMemory = async (accountIds: string[]) => {
     await updateUserSoulContent(user.id, '');
-    const accountIds = (await getAccountsByUserId(user.id)).map((a) => a.id);
-    for (const accountId of accountIds) {
+    for (const accountId of accountIds)
       await updateSoulContent(accountId, '');
-    }
+    const { clearMemory } = await import('#modules/memory/service');
+    await clearMemory(user.id);
   };
 
   switch (scope) {
@@ -186,15 +187,13 @@ export async function resetBillingScope(
       await resetUserMessages(user.id);
       break;
     case 'memories':
-      await clearSoul();
+      await clearSoulAndMemory(
+        (await getAccountsByUserId(user.id)).map((a) => a.id),
+      );
       break;
     case 'all':
     default: {
-      const accountIds = await resetUserData(user.id);
-      await updateUserSoulContent(user.id, '');
-      for (const accountId of accountIds) {
-        await updateSoulContent(accountId, '');
-      }
+      await clearSoulAndMemory(await resetUserData(user.id));
       break;
     }
   }

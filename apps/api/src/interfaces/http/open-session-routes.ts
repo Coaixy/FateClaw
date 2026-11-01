@@ -257,6 +257,8 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
         sessionId: runtimeSessionId,
         requestId,
         personaPrompt,
+        memoryMode: 'disabled',
+        memoryActorId: principal.apiKeyId,
         authorizedSkillIds,
         llmRuntime: runtime,
         entitlementSnapshot: entitlement,

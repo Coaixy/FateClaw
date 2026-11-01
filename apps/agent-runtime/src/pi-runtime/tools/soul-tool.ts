@@ -7,6 +7,7 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { Type, type Static } from 'typebox';
 
+import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
 import type { SoulStore } from '#agent/deps';
 import {
   completePiToolExecution,
@@ -68,6 +69,16 @@ export interface CreatePiSoulToolOptions extends PiToolRuntimeOptions {
   accountId: string;
   soulStore: SoulStore;
   soulEditEnabled?: boolean;
+}
+
+/**
+ * Soul tools read and rewrite the owner's persona, so an admitted request offers them only when
+ * the host bound the actual speaker to the owner. Requests without a scope keep the old contract.
+ */
+export function soulToolsAvailable(input: {
+  memoryScope?: MemoryRequestScope;
+}): boolean {
+  return !input.memoryScope || input.memoryScope.ownerAudience === true;
 }
 
 function hashSoul(content: string): string {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
 
 // Unit tests must not depend on a workspace credential file.
 vi.mock('#infrastructure/env', () => ({ readEnvFile: () => ({}) }));
@@ -37,6 +38,8 @@ const {
   mockRedisEval,
   mockRedisGet,
   mockRedisSet,
+  mockPrepareMemoryAdmissionScope,
+  mockReadMemoryPiContext,
 } = vi.hoisted(() => ({
   mockArchiveChatSession: vi.fn(),
   mockGetChatSession: vi.fn(),
@@ -71,7 +74,37 @@ const {
   mockRedisEval: vi.fn(async () => 1),
   mockRedisGet: vi.fn(),
   mockRedisSet: vi.fn(async () => 'OK'),
+  mockPrepareMemoryAdmissionScope: vi.fn(),
+  mockReadMemoryPiContext: vi.fn(),
 }));
+
+vi.mock('#modules/memory/repository', () => ({
+  prepareMemoryAdmissionScope: mockPrepareMemoryAdmissionScope,
+}));
+vi.mock('#modules/memory/pi-contexts', () => ({
+  readMemoryPiContext: mockReadMemoryPiContext,
+}));
+vi.mock('#modules/chat/session-context-access', () => ({
+  filterSessionContextMessages: vi.fn(
+    async (args: { messages: unknown[] }) => args.messages,
+  ),
+}));
+
+const memoryScope: MemoryRequestScope = {
+  scopeId: 'root',
+  ownerUserId: 'user-1',
+  actorKey: 'user:user-1',
+  audienceKey: 'owner',
+  subjectId: 'self:user-1',
+  epoch: 1,
+  learnRevision: 1,
+  useRevision: 1,
+  contextGeneration: 0,
+  contextAudience: '',
+  learningEnabled: true,
+  recallEnabled: true,
+  chatEditingEnabled: true,
+};
 
 vi.mock('#infrastructure/db', () => ({
   getRuntimeConfig: vi.fn(async () => ({ wechat_claw_enabled: false })),
@@ -240,11 +273,19 @@ describe('chat-session-service selected board context', () => {
     expect(mockWritePiSessionSnapshotArchiveToFiles).toHaveBeenCalledWith(
       'session-1',
       snapshot,
+      0,
+      '',
     );
     expect(mockGetChatSessionPiSessionArchive).not.toHaveBeenCalled();
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrepareMemoryAdmissionScope.mockReset().mockResolvedValue(memoryScope);
+    mockReadMemoryPiContext.mockReset().mockImplementation(async () => ({
+      contextGeneration: 0,
+      contextAudience: '',
+      initialized: Boolean(await mockHasFinalAiChatSessionReply()),
+    }));
 
     mockGetChatSession.mockResolvedValue({
       id: 'session-1',
@@ -380,6 +421,92 @@ describe('chat-session-service selected board context', () => {
       metadata: null,
     });
     mockCancelAiChatSessionRequest.mockResolvedValue(true);
+  });
+
+  it('starts a fresh guest audience even when the business session has owner history', async () => {
+    const guest = {
+      ...memoryScope,
+      scopeId: 'guest',
+      actorKey: 'wechat:account:guest',
+      audienceKey: 'guest-audience',
+      contextAudience: 'guest-audience',
+      subjectId: 'sender:guest',
+    };
+    mockPrepareMemoryAdmissionScope.mockResolvedValue(guest);
+    mockReadMemoryPiContext.mockResolvedValue({
+      contextGeneration: 0,
+      contextAudience: 'guest-audience',
+      initialized: false,
+    });
+    mockHasFinalAiChatSessionReply.mockResolvedValue(true);
+    const result = await sendOwnedChatSessionMessage(
+      'user-1',
+      'session-1',
+      {
+        content: '你好',
+        inputKind: 'normal',
+        selectedBoardMessageId: undefined,
+        pastedBoard: undefined,
+      },
+      {
+        sourceMetadata: {
+          source_channel: 'wechat',
+          wechat_account_id: 'account',
+          sender_hash: 'guest',
+        },
+      },
+    );
+    expect(result.ok).toBe(true);
+    expect(mockReadPiSessionFileState).not.toHaveBeenCalled();
+    expect(mockWritePiSessionArchiveToFiles).not.toHaveBeenCalled();
+    expect(getPiSessionBase).toHaveBeenCalledWith(
+      'session-1',
+      'web:user-1',
+      'guest-audience',
+    );
+    expect(mockDispatchAiChatPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ memoryScope: guest }),
+    );
+  });
+
+  it('refuses an owner snapshot when an initialized guest audience is missing its history', async () => {
+    mockPrepareMemoryAdmissionScope.mockResolvedValue({
+      ...memoryScope,
+      contextAudience: 'guest-audience',
+    });
+    mockReadMemoryPiContext.mockResolvedValue({
+      contextGeneration: 0,
+      contextAudience: 'guest-audience',
+      initialized: true,
+    });
+    mockReadPiSessionFileState.mockResolvedValue({ hasSessionFile: false });
+    vi.mocked(getPiSessionBase).mockResolvedValueOnce({
+      requestId: 'owner-frame',
+      messagesHash: '0'.repeat(64),
+      messageCount: 0,
+      checkpointDepth: 0,
+    });
+    vi.mocked(getPiSessionSnapshot).mockResolvedValueOnce({
+      persisted: true,
+      provider: 'synthetic',
+      model: 'synthetic',
+      userPrompt: 'synthetic',
+      systemPrompt: 'synthetic',
+      appendSystemPrompt: [],
+      allowedTools: [],
+      readableSkills: [],
+      messageCount: 0,
+      messages: [],
+    });
+    const result = await sendOwnedChatSessionMessage('user-1', 'session-1', {
+      content: '继续',
+      inputKind: 'normal',
+      selectedBoardMessageId: undefined,
+      pastedBoard: undefined,
+    });
+    expect(result).toMatchObject({ ok: false, statusCode: 410 });
+    expect(mockWritePiSessionSnapshotArchiveToFiles).not.toHaveBeenCalled();
+    expect(mockDispatchAiChatPrompt).not.toHaveBeenCalled();
   });
 
   it.each(['request-active', null])(
@@ -520,6 +647,8 @@ describe('chat-session-service selected board context', () => {
     });
     expect(mockReadPiSessionArchiveForSession).toHaveBeenCalledWith(
       'session-1',
+      0,
+      '',
     );
     expect(mockArchiveChatSession).toHaveBeenCalledWith('session-1');
     expect(mockMarkChatSessionPiSessionArchived).toHaveBeenCalledWith({
@@ -806,6 +935,8 @@ describe('chat-session-service selected board context', () => {
     expect(mockWritePiSessionArchiveToFiles).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({ version: 1 }),
+      0,
+      '',
     );
     expect(mockMarkChatSessionPiSessionArchiveRestored).toHaveBeenCalledWith(
       'session-1',
@@ -904,6 +1035,8 @@ describe('chat-session-service selected board context', () => {
     expect(mockWritePiSessionSnapshotArchiveToFiles).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({ model: 'gpt-4.1' }),
+      0,
+      '',
     );
     expect(mockMarkChatSessionPiSessionArchived).toHaveBeenCalledWith(
       expect.objectContaining({

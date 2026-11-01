@@ -37,6 +37,7 @@ import {
   createFateClawPiSessionManager,
   resolvePiSessionFile,
 } from '#agent/pi-runtime/session-manager';
+import { piSessionStorageKey } from '@fateclaw/contracts/agent/session';
 
 describe('createFateClawPiSessionManager', () => {
   beforeEach(() => {
@@ -48,6 +49,61 @@ describe('createFateClawPiSessionManager', () => {
     mockOpenedManager.isPersisted.mockReturnValue(true);
     mockSessionManager.create.mockClear();
     mockSessionManager.open.mockClear();
+  });
+
+  it('uses the shared audience storage key and never falls back to an owner mapping for a new audience', () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'fateclaw-pi-audience-'));
+    try {
+      const owner = resolvePiSessionFile({
+        cwd,
+        sessionId: 'business-session',
+        contextGeneration: 0,
+        contextAudience: '',
+      });
+      fs.mkdirSync(owner.sessionDir, { recursive: true });
+      fs.writeFileSync(owner.mappingFile, 'owner.jsonl');
+      fs.writeFileSync(
+        path.join(owner.sessionDir, 'owner.jsonl'),
+        '{"type":"session","version":3,"id":"business-session"}\n',
+      );
+      const sender = resolvePiSessionFile({
+        cwd,
+        sessionId: 'business-session',
+        contextGeneration: 0,
+        contextAudience: 'sender-a',
+      });
+      expect(sender.piSessionId).toBe(
+        piSessionStorageKey('business-session', 0, 'sender-a'),
+      );
+      expect(sender.sessionFile).toBeUndefined();
+      expect(sender.mappingFile).not.toBe(owner.mappingFile);
+      const generated = path.join(
+        sender.sessionDir,
+        `generated_${sender.piSessionId}.jsonl`,
+      );
+      mockCreatedManager.newSession.mockReturnValue(generated);
+      createFateClawPiSessionManager({
+        cwd,
+        sessionId: 'business-session',
+        contextGeneration: 0,
+        contextAudience: 'sender-a',
+      });
+      expect(mockSessionManager.open).not.toHaveBeenCalled();
+      expect(mockCreatedManager.newSession).toHaveBeenCalledWith({
+        id: sender.piSessionId,
+      });
+      expect(fs.readFileSync(owner.mappingFile, 'utf8')).toBe('owner.jsonl');
+      expect(
+        resolvePiSessionFile({
+          cwd,
+          sessionId: 'business-session',
+          contextGeneration: 0,
+          contextAudience: 'sender-b',
+        }).sessionFile,
+      ).toBeUndefined();
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it('maps a FateClaw chat session id to one stable Pi session file', () => {

@@ -12,6 +12,7 @@ import type {
   AiChatStreamEvent,
   TokenUsage,
 } from '#agent/types';
+import { memoryToolTraceArgs } from './tools/memory-tool.js';
 
 function textFromContent(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -597,13 +598,16 @@ export function createPiEventCollector(args: {
         }
         break;
       case 'tool_execution_start':
-        toolArgsById.set(event.toolCallId, event.args);
+        toolArgsById.set(
+          event.toolCallId,
+          memoryToolTraceArgs(event.toolName, event.args),
+        );
         traceEvent(
           {
             type: 'pi_tool_execution_start',
             toolCallId: event.toolCallId,
             toolName: event.toolName,
-            args: event.args,
+            args: memoryToolTraceArgs(event.toolName, event.args),
           },
           args.requestScope,
         );
@@ -611,7 +615,7 @@ export function createPiEventCollector(args: {
           type: 'tool_start',
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          args: event.args,
+          args: memoryToolTraceArgs(event.toolName, event.args),
         });
         args.pushOutboxProgress?.(
           buildToolProgressMessage({
@@ -619,18 +623,21 @@ export function createPiEventCollector(args: {
             requestId: args.requestId,
             toolCallId: event.toolCallId,
             toolName: event.toolName,
-            toolArgs: event.args,
+            toolArgs: memoryToolTraceArgs(event.toolName, event.args),
             status: 'running',
           }),
         );
         break;
       case 'tool_execution_update':
-        toolArgsById.set(event.toolCallId, event.args);
+        toolArgsById.set(
+          event.toolCallId,
+          memoryToolTraceArgs(event.toolName, event.args),
+        );
         publish({
           type: 'tool_update',
           toolCallId: event.toolCallId,
           toolName: event.toolName,
-          args: event.args,
+          args: memoryToolTraceArgs(event.toolName, event.args),
           partialResult: event.partialResult,
         });
         break;

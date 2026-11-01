@@ -9,6 +9,7 @@ FateClaw is an open-source Chinese metaphysics AI agent that combines determinis
 - Generate charts for systems such as Bazi, Ziwei, Qimen, and I Ching.
 - Ask questions and interpret charts in a web chat.
 - Build personal knowledge libraries for the agent to consult.
+- Reuse relevant memory across conversations, with source evidence and controls for learning, sharing and forgetting.
 - Manage models, usage, and users through a separate admin app.
 
 Built with TypeScript, Next.js, Fastify, PostgreSQL, Redis, and Pi SDK.
@@ -26,6 +27,7 @@ FateClaw（命枢）是一个开源玄学 AI Agent，结合确定性排盘、个
 - 支持八字、紫微斗数、奇门遁甲、易经等体系的排盘。
 - 在网页聊天中提问并解读盘面。
 - 构建个人知识库，供 Agent 检索参考。
+- 跨对话记住相关信息，可查看原话依据，并控制学习、共享和遗忘。
 - 通过独立管理后台管理模型、用量和用户。
 
 使用 TypeScript、Next.js、Fastify、PostgreSQL、Redis 和 Pi SDK 构建。

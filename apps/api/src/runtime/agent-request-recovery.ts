@@ -73,6 +73,8 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
     return;
   }
   if (
+    !row.memory_scope ||
+    !row.input.memoryScope ||
     row.cancel_requested_at ||
     new Date(row.deadline_at).getTime() <= Date.now()
   ) {
@@ -129,6 +131,7 @@ export async function recoverAgentRequest(row: DurableRequest): Promise<void> {
   await releaseGlobalAgentSlot(row.request_id);
   await submitAiChatInboxRequest({
     ...row.input,
+    memoryScope: row.memory_scope,
     requestId: row.request_id,
     accountId: row.account_id,
     sessionId: row.session_id,

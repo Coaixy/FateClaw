@@ -81,6 +81,8 @@ export interface TokenUsage {
 }
 
 export interface PiSessionSnapshot {
+  contextAudience?: string;
+  contextGeneration?: number;
   format?: never;
   id?: string;
   file?: string;
@@ -100,6 +102,8 @@ export interface PiSessionSnapshot {
 }
 
 export interface PiSessionBase {
+  contextAudience?: string;
+  contextGeneration?: number;
   requestId: string;
   messagesHash: string;
   messageCount: number;
@@ -115,6 +119,7 @@ export interface PiSessionFrame extends Omit<PiSessionSnapshot, 'format'> {
 }
 
 export interface AgentRequestData {
+  memoryScope?: import('../memory/index.js').MemoryRequestScope;
   accountId: string;
   userMessage: string;
   history: HistoryMessage[];

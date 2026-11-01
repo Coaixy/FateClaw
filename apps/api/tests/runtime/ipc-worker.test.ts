@@ -293,6 +293,7 @@ describe('Redis IPC listener lifecycle', () => {
       queue,
       `ipc:${accountId}:paipan`,
       `ipc:${accountId}:visualization`,
+      `ipc:${accountId}:memory`,
       1,
     );
     expect(processOutboxPayload).toHaveBeenCalledWith(

@@ -2,13 +2,9 @@ import fs from 'fs';
 import path from 'path';
 
 import { SessionManager } from '@earendil-works/pi-coding-agent';
+import { piSessionStorageKey } from '@fateclaw/contracts/agent/session';
 
 const PI_SESSION_DIR_ENV = 'FATECLAW_PI_SESSION_DIR';
-
-function sanitizeSessionId(value: string): string {
-  const normalized = value.trim().replace(/[^a-zA-Z0-9._-]/g, '_');
-  return normalized || 'default';
-}
 
 export function resolvePiSessionDir(cwd: string): string {
   const configured = process.env[PI_SESSION_DIR_ENV]?.trim();
@@ -20,6 +16,8 @@ export function resolvePiSessionDir(cwd: string): string {
 export function resolvePiSessionFile(args: {
   cwd: string;
   sessionId: string;
+  contextGeneration?: number;
+  contextAudience?: string;
 }): {
   sessionDir: string;
   mappingFile: string;
@@ -27,7 +25,11 @@ export function resolvePiSessionFile(args: {
   piSessionId: string;
 } {
   const sessionDir = resolvePiSessionDir(args.cwd);
-  const piSessionId = sanitizeSessionId(args.sessionId);
+  const piSessionId = piSessionStorageKey(
+    args.sessionId,
+    args.contextGeneration,
+    args.contextAudience,
+  );
   const mappingFile = path.join(sessionDir, `${piSessionId}.path`);
   let sessionFile: string | undefined;
   try {
@@ -51,6 +53,8 @@ export function resolvePiSessionFile(args: {
 export function createFateClawPiSessionManager(args: {
   cwd: string;
   sessionId?: string;
+  contextGeneration?: number;
+  contextAudience?: string;
 }): {
   manager: SessionManager;
   sessionFile?: string;
@@ -64,10 +68,13 @@ export function createFateClawPiSessionManager(args: {
     };
   }
 
-  const { sessionDir, mappingFile, sessionFile, piSessionId } = resolvePiSessionFile({
-    cwd: args.cwd,
-    sessionId: args.sessionId,
-  });
+  const { sessionDir, mappingFile, sessionFile, piSessionId } =
+    resolvePiSessionFile({
+      cwd: args.cwd,
+      sessionId: args.sessionId,
+      contextGeneration: args.contextGeneration,
+      contextAudience: args.contextAudience,
+    });
   fs.mkdirSync(sessionDir, { recursive: true });
 
   if (sessionFile && fs.existsSync(sessionFile)) {

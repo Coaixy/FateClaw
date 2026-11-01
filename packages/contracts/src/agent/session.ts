@@ -7,6 +7,19 @@ import type {
 
 export const PI_SESSION_CHECKPOINT_INTERVAL = 16;
 
+/** Audience and generation are part of the provider history identity, not the business session ID. */
+export function piSessionStorageKey(
+  sessionId: string,
+  contextGeneration = 0,
+  contextAudience = '',
+): string {
+  const id = sessionId.trim().replace(/[^a-zA-Z0-9._-]/g, '_') || 'default';
+  const audience = contextAudience
+    ? `.aud-${createHash('sha256').update(contextAudience).digest('hex').slice(0, 32)}`
+    : '';
+  return `${id}${audience}${contextGeneration > 0 ? `.memory-${contextGeneration}` : ''}`;
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') {
@@ -34,6 +47,12 @@ export function isPiSessionFrame(value: unknown): value is PiSessionFrame {
     frame.format === 'fateclaw-pi-frame-v1' &&
     (frame.kind === 'checkpoint' || frame.kind === 'delta') &&
     Array.isArray(frame.messages) &&
+    (frame.contextGeneration === undefined ||
+      (Number.isSafeInteger(frame.contextGeneration) &&
+        frame.contextGeneration >= 0)) &&
+    (frame.contextAudience === undefined ||
+      (typeof frame.contextAudience === 'string' &&
+        frame.contextAudience.length <= 256)) &&
     Number.isSafeInteger(frame.messageCount) &&
     frame.messageCount >= 0 &&
     typeof frame.messagesHash === 'string' &&
@@ -50,6 +69,8 @@ export function createPiSessionFrame(
 ): PiSessionFrame {
   const delta =
     base &&
+    (base.contextGeneration ?? 0) === (snapshot.contextGeneration ?? 0) &&
+    (base.contextAudience ?? '') === (snapshot.contextAudience ?? '') &&
     base.checkpointDepth < PI_SESSION_CHECKPOINT_INTERVAL - 1 &&
     base.messageCount <= snapshot.messages.length &&
     hashPiMessages(snapshot.messages.slice(0, base.messageCount)) ===
@@ -76,6 +97,8 @@ export function restorePiSessionFrame(
     frame.kind === 'delta' &&
     (!base ||
       !frame.base ||
+      (base.contextGeneration ?? 0) !== (frame.contextGeneration ?? 0) ||
+      (base.contextAudience ?? '') !== (frame.contextAudience ?? '') ||
       base.messages.length !== frame.base.messageCount ||
       hashPiMessages(base.messages) !== frame.base.messagesHash)
   )

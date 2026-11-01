@@ -49,6 +49,7 @@ import {
   stopServiceStatusWorker,
 } from '#runtime/service-status-worker';
 import { seedOfficialSkillsFromRegistry } from '#infrastructure/paths';
+import { startMemoryWorker, stopMemoryWorker } from '#runtime/memory-worker';
 
 // Re-export for CLI and external consumers
 export {
@@ -83,6 +84,7 @@ export async function main(): Promise<void> {
   startInboxStallSweeper();
   startAgentRequestRecovery();
   startServiceStatusWorker();
+  startMemoryWorker();
 
   await startApiServer();
 
@@ -98,6 +100,7 @@ export async function main(): Promise<void> {
       // 再断开 Redis/DB——否则子进程排空中的响应会因连接先被关闭而丢失。
       await stopAgentRequestRecovery();
       await stopServiceStatusWorker();
+      await stopMemoryWorker();
       await stopWechatRuntimeWorker();
       await stopAllLocalAgents();
       stopRetentionWorker();

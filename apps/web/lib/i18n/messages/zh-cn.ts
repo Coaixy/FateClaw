@@ -1,4 +1,7 @@
+import { zhCNMemoryMessages } from './memory';
+
 export const zhCNMessages = {
+  memory: zhCNMemoryMessages,
   acknowledgements: {
     navigation: '鸣谢',
     eyebrow: '致开源社区',
@@ -446,6 +449,10 @@ export const zhCNMessages = {
       loadFailed: '加载自定义人格失败',
       saved: '自定义人格已保存并注入运行时',
       saveFailed: '保存自定义人格失败',
+      conflict:
+        '自定义人格已在其他位置更新，当前草稿已保留。请载入最新内容后重新编辑。',
+      versionUnavailable: '暂时无法确认人格版本，请重新载入后再保存。',
+      loadLatest: '载入最新内容',
       editEnabled: '对话可编辑记忆',
       editDisabled: '对话不可编辑记忆',
       editEnabledToast: '对话记忆编辑已开启',
@@ -964,6 +971,11 @@ export const zhCNMessages = {
         read: '查阅',
         read_soul: '命主资料',
         edit_soul: '更新命主资料',
+        search_memory: '检索长期记忆',
+        get_memory_source: '查阅记忆来源',
+        remember_memory: '保存长期记忆',
+        update_memory: '修改长期记忆',
+        forget_memory: '遗忘长期记忆',
         reverse_ganzhi: '干支反推',
         get_ganzhi_by_datetime: '排八字',
         get_current_time: '当前时间',

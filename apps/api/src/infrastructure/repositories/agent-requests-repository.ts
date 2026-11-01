@@ -6,6 +6,12 @@ import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
 import type { AiChatSubmission } from '#runtime/request-types';
 import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
 import {
+  createMemoryAdmissionScope,
+  captureMemorySource,
+} from '#modules/memory/repository';
+import { getPiSessionBase } from './pi-session-frames-repository.js';
+import { MemoryError } from '#modules/memory/domain';
+import {
   reserveBenefitTurn,
   ModelSelectionError,
 } from './benefit-repository.js';
@@ -23,6 +29,7 @@ export interface DurableRequest {
   session_id: string;
   owner_user_id: string;
   user_message_id: string | null;
+  memory_scope?: import('@fateclaw/contracts/memory').MemoryRequestScope | null;
   input: AiChatSubmission;
   runtime: StoredRuntime;
   state: string;
@@ -49,6 +56,7 @@ export function durableSubmissionInput(
     userName: input.userName,
     assistantName: input.assistantName,
     personaPrompt: input.personaPrompt,
+    memoryScope: input.memoryScope,
     authorizedSkillIds: input.authorizedSkillIds,
     entitlementSnapshot: input.entitlementSnapshot,
     waitForResponse: false,
@@ -73,6 +81,64 @@ export async function admitAgentRequest(args: {
   let discardClient = false;
   try {
     await client.query('BEGIN');
+    if (args.input.messageToPersist || args.input.memoryMode === 'disabled') {
+      const metadata = args.input.messageToPersist?.metadata;
+      const preparedScope = args.input.memoryScope;
+      args.input.memoryScope = await createMemoryAdmissionScope(client, {
+        ownerUserId: args.ownerUserId,
+        sessionId: args.input.sessionId,
+        metadata:
+          args.input.memoryMode === 'disabled'
+            ? {
+                source_channel: 'openapi',
+                api_key_id: args.input.memoryActorId ?? args.input.sessionId,
+              }
+            : metadata &&
+                typeof metadata === 'object' &&
+                !Array.isArray(metadata)
+              ? (metadata as Record<string, unknown>)
+              : null,
+        learningAllowed: (
+          args.input as AiChatSubmission & { memoryLearningAllowed?: boolean }
+        ).memoryLearningAllowed,
+      });
+      if (
+        preparedScope &&
+        (
+          [
+            'scopeId',
+            'actorKey',
+            'audienceKey',
+            'subjectId',
+            'epoch',
+            'contextGeneration',
+            'contextAudience',
+            'bindingRevision',
+          ] as const
+        ).some((key) => preparedScope[key] !== args.input.memoryScope![key])
+      )
+        throw new MemoryError(
+          '会话身份或上下文已变化，请重新发送消息',
+          409,
+          'MEMORY.PREPARATION_CHANGED',
+        );
+      if (args.input.memoryMode === 'disabled')
+        args.input.memoryScope = {
+          ...args.input.memoryScope,
+          learningEnabled: false,
+          recallEnabled: false,
+          chatEditingEnabled: false,
+          ownerMemoryAccess: false,
+        };
+      if (args.input.piSessionBase !== undefined)
+        args.input.piSessionBase =
+          (await getPiSessionBase(
+            args.input.sessionId,
+            args.input.accountId,
+            args.input.memoryScope.contextAudience ?? '',
+            client,
+          )) ?? null;
+    }
     if (runtime.poolKey) {
       const session = await client.query<{ model_pool_key: string }>(
         `SELECT model_pool_key FROM chat_sessions
@@ -91,8 +157,8 @@ export async function admitAgentRequest(args: {
     const executionId = randomUUID();
     const inserted = await client.query<{ execution_id: string }>(
       `INSERT INTO agent_requests
-       (request_id,execution_id,account_id,session_id,user_message_id,owner_user_id,state,input,runtime,lease_owner,lease_until,deadline_at)
-       VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,now()+interval '60 seconds',$10)
+       (request_id,execution_id,account_id,session_id,user_message_id,owner_user_id,state,input,runtime,lease_owner,lease_until,deadline_at,memory_scope)
+       VALUES ($1,$2,$3,$4,$5,$6,'queued',$7,$8,$9,now()+interval '60 seconds',$10,$11)
        ON CONFLICT (request_id) DO NOTHING RETURNING execution_id`,
       [
         args.requestId,
@@ -105,6 +171,7 @@ export async function admitAgentRequest(args: {
         JSON.stringify(runtime),
         REQUEST_OWNER,
         new Date(args.deadlineAt),
+        args.input.memoryScope ? JSON.stringify(args.input.memoryScope) : null,
       ],
     );
     if (!inserted.rowCount)
@@ -126,8 +193,19 @@ export async function admitAgentRequest(args: {
         runtime.poolRevision,
       );
     }
-    if (args.input.messageToPersist)
+    if (args.input.messageToPersist) {
       await storeMessage(args.input.messageToPersist, client);
+      if (args.input.memoryScope)
+        await captureMemorySource(client, {
+          scope: args.input.memoryScope,
+          requestId: args.requestId,
+          messageId: args.input.messageToPersist.id,
+          accountId: args.input.accountId,
+          sessionId: args.input.sessionId,
+          content: args.input.messageToPersist.content,
+          observedAt: args.input.messageToPersist.timestamp,
+        });
+    }
     await client.query('COMMIT');
     return executionId;
   } catch (error) {

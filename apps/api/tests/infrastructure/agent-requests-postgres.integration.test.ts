@@ -7,12 +7,15 @@ import {
   it,
   vi,
 } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { closeDbPool, getDbPool, initDbPool } from '#infrastructure/db-pool';
 vi.mock('#infrastructure/config', () => ({
   MAX_OVERDRAFT_COINS: 50,
 }));
 import { listStalePendingReservations } from '#infrastructure/repositories/billing-repository';
 import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
+import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
 import {
   admitAgentRequest,
   markAgentRequestDispatched,
@@ -27,6 +30,18 @@ import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
 
 // Run only against an explicitly supplied disposable database, never DATABASE_URL.
 const connectionString = process.env.FATECLAW_TEST_DURABLE_DATABASE_URL;
+const schema = `durable_test_${randomUUID().replace(/-/g, '')}`;
+const sessionIds = [
+  'session-1',
+  'session-2',
+  'shared-session',
+  'other-session',
+  'session-unknown',
+  'session-synthetic',
+  'session-missing',
+  'session-actual',
+];
+let administrator: pg.Pool;
 const runtime: LlmRuntimeSnapshot = {
   source: 'official',
   billingMode: 'metered',
@@ -68,32 +83,54 @@ describe.skipIf(!connectionString)(
   'durable requests PostgreSQL integration',
   () => {
     beforeAll(async () => {
-      const pool = initDbPool(connectionString!);
-      const client = await pool.connect();
-      try {
-        await durableAgentRequestsMigration.up(client);
-      } finally {
-        client.release();
-      }
-      await pool.query(`CREATE TABLE messages (
+      administrator = new pg.Pool({ connectionString });
+      await administrator.query(`CREATE SCHEMA ${schema}`);
+      const target = new URL(connectionString!);
+      target.searchParams.set('options', `-c search_path=${schema},public`);
+      const pool = initDbPool(target.toString());
+      // Admission now freezes a memory scope, so the fixture needs the tables 0102 extends.
+      await pool.query(`
+      CREATE TABLE users (id text PRIMARY KEY, soul_content text NOT NULL DEFAULT '', soul_edit_enabled boolean NOT NULL DEFAULT true);
+      CREATE TABLE accounts (id text PRIMARY KEY, owner_id text REFERENCES users(id), soul_content text DEFAULT '', enabled boolean DEFAULT true, created_at timestamptz DEFAULT clock_timestamp());
+      CREATE TABLE client_profiles (id text PRIMARY KEY, user_id text REFERENCES users(id), name text NOT NULL, deleted_at timestamptz);
+      CREATE TABLE chat_sessions (id text PRIMARY KEY, account_id text NOT NULL, user_id text REFERENCES users(id), client_id text REFERENCES client_profiles(id), deleted_at timestamptz);
+      CREATE TABLE runtime_config (id text PRIMARY KEY, revision integer NOT NULL DEFAULT 1, updated_at timestamptz DEFAULT clock_timestamp());
+      INSERT INTO runtime_config(id) VALUES ('default');
+      CREATE TABLE messages (
       id text, account_id text, user_id text, sender text, sender_name text,
       content text NOT NULL, timestamp timestamptz, is_from_me boolean,
-      is_bot_message boolean, tool_context text, session_id text, metadata jsonb,
+      is_bot_message boolean, tool_context text, session_id text, metadata jsonb, deleted_at timestamptz,
       PRIMARY KEY (id, account_id));
       CREATE TABLE synthetic_deliveries (id text PRIMARY KEY);
       CREATE TABLE billing_request_reservations (request_id text PRIMARY KEY, charge_state text, created_at timestamptz);
       CREATE TABLE conversation_logs (request_id text)`);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await durableAgentRequestsMigration.up(client);
+        await crossConversationMemoryMigration.up(client);
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+      await pool.query("INSERT INTO users(id) VALUES ('user-1')");
+      await pool.query(
+        "INSERT INTO chat_sessions(id,account_id,user_id) SELECT unnest($1::text[]),'web:user-1','user-1'",
+        [sessionIds],
+      );
     });
     beforeEach(async () => {
       await getDbPool().query(
-        'TRUNCATE agent_requests, agent_result_deliveries, messages, synthetic_deliveries, billing_request_reservations, conversation_logs',
+        'TRUNCATE agent_requests, agent_result_deliveries, messages, synthetic_deliveries, billing_request_reservations, conversation_logs, memory_sources, memory_jobs, memory_index_entries CASCADE',
       );
     });
     afterAll(async () => {
-      await getDbPool().query(
-        'DROP TABLE synthetic_deliveries, messages, agent_result_deliveries, agent_requests, billing_request_reservations, conversation_logs',
-      );
-      await closeDbPool();
+      try {
+        await closeDbPool();
+      } finally {
+        await administrator.query(`DROP SCHEMA ${schema} CASCADE`);
+        await administrator.end();
+      }
     });
 
     it('commits admission and user message together without persisting credentials', async () => {
@@ -227,7 +264,7 @@ describe.skipIf(!connectionString)(
           called = true;
           return 'bad';
         }),
-      ).rejects.toThrow('account mismatch');
+      ).rejects.toThrow('context mismatch');
       expect(called).toBe(false);
       expect(
         (await getDbPool().query('SELECT * FROM agent_result_deliveries'))
@@ -304,7 +341,7 @@ describe.skipIf(!connectionString)(
           const { rowCount } = await getDbPool()
             .query(`SELECT 1 FROM pg_stat_activity
             WHERE datname=current_database() AND wait_event_type='Lock'
-              AND query LIKE 'SELECT account_id FROM agent_requests%'`);
+              AND query LIKE 'SELECT account_id,session_id,owner_user_id,user_message_id FROM agent_requests%'`);
           if (rowCount) {
             waiting = true;
             break;
@@ -423,6 +460,20 @@ describe.skipIf(!connectionString)(
         1,
       );
       expect(selected.map((row) => row.request_id)).toEqual(['actual']);
+    });
+
+    it('delivers the assistant reply even when the admitted memory scope no longer exists', async () => {
+      await admitAgentRequest(admission());
+      await getDbPool().query(
+        `UPDATE agent_requests SET memory_scope=memory_scope||'{"scopeId":"deleted-scope"}'::jsonb`,
+      );
+      expect(
+        await withAgentResultDelivery(
+          'request-1',
+          'web:user-1',
+          async () => 'final-1',
+        ),
+      ).toBe('final-1');
     });
 
     it('rejects result reuse for a different account', async () => {

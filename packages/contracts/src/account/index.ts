@@ -13,6 +13,7 @@ export interface AccountDto {
 }
 
 export interface AccountSoulDto {
+  sha256?: string;
   /** 是否允许 Pi 在对话中通过 edit_soul 更新 Soul。 */
   edit_enabled: boolean;
   content: string;

@@ -65,7 +65,7 @@ describe.skipIf(!databaseUrl)(
       initDbPool(databaseUrl!);
       await getDbPool().query(`
       CREATE TABLE chat_sessions (id text PRIMARY KEY, account_id text, user_id text, client_id text, deleted_at timestamptz, updated_at timestamptz DEFAULT now());
-      CREATE TABLE agent_requests (request_id text PRIMARY KEY, execution_id text, account_id text, session_id text REFERENCES chat_sessions(id), owner_user_id text, state text, cancel_requested_at timestamptz, deadline_at timestamptz);
+      CREATE TABLE agent_requests (request_id text PRIMARY KEY, execution_id text, account_id text, session_id text REFERENCES chat_sessions(id), owner_user_id text, state text, cancel_requested_at timestamptz, deadline_at timestamptz,memory_scope jsonb);
       CREATE TABLE messages (id text, account_id text, user_id text, sender text, sender_name text, content text, timestamp timestamptz, is_from_me boolean, is_bot_message boolean, tool_context text, session_id text REFERENCES chat_sessions(id), metadata jsonb, deleted_at timestamptz, PRIMARY KEY(id, account_id));
     `);
     });
@@ -78,7 +78,7 @@ describe.skipIf(!databaseUrl)(
         [accountId],
       );
       await getDbPool().query(
-        "INSERT INTO agent_requests VALUES ($1,$2,$3,'synthetic-session','synthetic-user','running',NULL,now()+interval '5 minutes')",
+        "INSERT INTO agent_requests VALUES ($1,$2,$3,'synthetic-session','synthetic-user','running',NULL,now()+interval '5 minutes',NULL)",
         [requestId, executionId, accountId],
       );
     });

@@ -89,7 +89,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       initDbPool(databaseUrl!);
       await getDbPool().query(`
       CREATE TABLE chat_sessions (id text PRIMARY KEY, account_id text, user_id text, client_id text, deleted_at timestamptz, updated_at timestamptz DEFAULT now());
-      CREATE TABLE agent_requests (request_id text PRIMARY KEY, execution_id text, account_id text, session_id text REFERENCES chat_sessions(id), owner_user_id text, state text, cancel_requested_at timestamptz, deadline_at timestamptz);
+      CREATE TABLE agent_requests (request_id text PRIMARY KEY, execution_id text, account_id text, session_id text REFERENCES chat_sessions(id), owner_user_id text, state text, cancel_requested_at timestamptz, deadline_at timestamptz,memory_scope jsonb);
       CREATE TABLE messages (id text, account_id text, user_id text, sender text, sender_name text, content text, timestamp timestamptz, is_from_me boolean, is_bot_message boolean, tool_context text, session_id text REFERENCES chat_sessions(id), metadata jsonb, deleted_at timestamptz, PRIMARY KEY(id, account_id));
       CREATE TABLE skill_global_config (skill_name text, globally_enabled boolean);
       CREATE TABLE client_profiles (id text, user_id text, name text, gender text, solar_date text, hour int, minute int, birthplace text, notes text, tags text[], status text, created_at timestamptz, updated_at timestamptz, deleted_at timestamptz);
@@ -139,7 +139,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       await getDbPool()
         .query(`TRUNCATE messages, agent_requests, chat_sessions, skill_global_config, client_profiles;
       INSERT INTO chat_sessions(id,account_id,user_id) VALUES ('synthetic-session','${accountId}','synthetic-user');
-      INSERT INTO agent_requests VALUES ('${requestId}','${executionId}','${accountId}','synthetic-session','synthetic-user','running',NULL,now()+interval '5 minutes');`);
+      INSERT INTO agent_requests VALUES ('${requestId}','${executionId}','${accountId}','synthetic-session','synthetic-user','running',NULL,now()+interval '5 minutes',NULL);`);
       for (const skill of listPaipanRegistry())
         await getDbPool().query(
           'INSERT INTO skill_global_config VALUES ($1,true)',
@@ -355,7 +355,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       ).toBe(0);
     });
 
-    it('prefills the owned session profile and keeps a committed chart when stream publication fails', async () => {
+    it('keeps explicit chart inputs usable without assuming a legacy session grants profile access', async () => {
       await getDbPool()
         .query(`INSERT INTO client_profiles(id,user_id,gender,solar_date,hour,minute) VALUES ('profile-1','synthetic-user','男','1990-05-15',10,30);
       UPDATE chat_sessions SET client_id='profile-1'`);
@@ -369,7 +369,7 @@ describe.skipIf(!databaseUrl || !redisUrl)(
       })({
         mode: 'create',
         skill: 'bazi-paipan',
-        input: { include: ['bazi'] },
+        input: { ...baziInput, include: ['bazi'] },
         toolCallId: 'prefill',
       });
       expect(result).toMatchObject({

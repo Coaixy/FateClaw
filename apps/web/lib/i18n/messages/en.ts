@@ -1,4 +1,7 @@
+import { enMemoryMessages } from './memory';
+
 export const enMessages = {
+  memory: enMemoryMessages,
   acknowledgements: {
     navigation: 'Credits',
     eyebrow: 'To the open source community',
@@ -192,7 +195,8 @@ export const enMessages = {
       'Archived conversations stay here. Restore one to return it to recent chats.',
     archivedAt: 'Archived {time}',
     emptyArchived: 'No archived conversations',
-    loadArchivedFailed: 'Failed to load archived conversations. Please try again.',
+    loadArchivedFailed:
+      'Failed to load archived conversations. Please try again.',
     retry: 'Retry',
     restore: 'Restore',
     restoring: 'Restoring…',
@@ -474,6 +478,11 @@ export const enMessages = {
       loadFailed: 'Failed to load custom persona',
       saved: 'Custom persona saved and injected into runtime',
       saveFailed: 'Failed to save custom persona',
+      conflict:
+        'The custom persona changed elsewhere. Your draft is preserved. Load the latest content before editing again.',
+      versionUnavailable:
+        'The persona version could not be confirmed. Reload it before saving.',
+      loadLatest: 'Load latest content',
       editEnabled: 'Conversation memory editable',
       editDisabled: 'Conversation memory locked',
       editEnabledToast: 'Conversation memory editing enabled',
@@ -1004,6 +1013,11 @@ export const enMessages = {
         read: 'Read',
         read_soul: 'Subject profile',
         edit_soul: 'Update profile',
+        search_memory: 'Search long-term memory',
+        get_memory_source: 'Read memory source',
+        remember_memory: 'Save long-term memory',
+        update_memory: 'Update long-term memory',
+        forget_memory: 'Forget long-term memory',
         reverse_ganzhi: 'Reverse ganzhi',
         get_ganzhi_by_datetime: 'Compute chart',
         get_current_time: 'Current time',

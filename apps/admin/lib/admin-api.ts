@@ -106,6 +106,10 @@ export function isAdminForbiddenError(error: unknown): error is AdminApiError {
   return error instanceof AdminApiError && error.status === 403;
 }
 
+export function isAdminConflictError(error: unknown): error is AdminApiError {
+  return error instanceof AdminApiError && error.status === 409;
+}
+
 /**
  * 将管理端 API 错误转换成页面可直接展示的中文提示。
  */

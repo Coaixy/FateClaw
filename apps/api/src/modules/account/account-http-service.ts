@@ -16,13 +16,12 @@ import {
   bindAccountToUser,
   getAccount,
   getAccountsByUserId,
-  getSoulContent,
   getUserById,
   getUserSoulEditEnabled,
   getUserSoulContent,
   updateSoulContent,
-  updateUserSoulEditEnabled,
   updateUserSoulContent,
+  updateUserSoulEditEnabled,
   updateAccount,
 } from '#infrastructure/db';
 import { getLoginQrCode, getQrCodeStatus } from '#infrastructure/ilink';
@@ -37,6 +36,9 @@ import {
   toAccountDto,
   toAccountSoulDto,
 } from '#contracts-adapter/account-contract';
+
+const MAX_SOUL_CHARS = 50_000;
+const SOUL_TOO_LONG = '固定资料不能超过 50000 字符';
 
 export async function checkAccountBindingLimit(
   userId: string,
@@ -78,8 +80,7 @@ export async function getOwnedSoulContent(
   if (!account || account.owner_id !== userId) {
     return fail(404, '账号不存在');
   }
-  const content = await getSoulContent(account.id);
-  return ok(toAccountSoulDto(content));
+  return getOwnedUserSoulContent(userId);
 }
 
 /**
@@ -108,7 +109,8 @@ export async function updateOwnedSoulContent(
   if (!account || account.owner_id !== userId) {
     return fail(404, '账号不存在');
   }
-  await updateSoulContent(account.id, content);
+  if (content.length > MAX_SOUL_CHARS) return fail(400, SOUL_TOO_LONG);
+  await updateUserSoulContent(userId, content);
   return ok({ success: true });
 }
 
@@ -121,16 +123,19 @@ export async function updateOwnedUserSoulContent(
   userId: string,
   content: string,
   editEnabled?: boolean,
-): Promise<ServiceResult<{ success: true }>> {
+  baseHash?: string,
+): Promise<ServiceResult<{ success: true; sha256: string }>> {
   const user = await getUserById(userId);
   if (!user) {
     return fail(404, '用户不存在');
   }
-  await updateUserSoulContent(user.id, content);
-  if (editEnabled !== undefined) {
-    await updateUserSoulEditEnabled(user.id, editEnabled);
-  }
-  return ok({ success: true });
+  if (content.length > MAX_SOUL_CHARS) return fail(400, SOUL_TOO_LONG);
+  const sha256 = await updateUserSoulContent(user.id, content, {
+    editEnabled,
+    baseHash,
+  });
+  if (!sha256) return fail(409, '固定资料已变化，请重新读取后修改');
+  return ok({ success: true, sha256 });
 }
 
 /**

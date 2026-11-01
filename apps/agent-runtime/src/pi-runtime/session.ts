@@ -45,6 +45,12 @@ import { installModelPool } from './model-pool.js';
 import { createPaipanCaller } from '#agent/paipan-client';
 import { createHostToolCaller } from '#agent/host-tool-client';
 import {
+  createManagedMemoryCompactionExtension,
+  installManagedMemoryProjection,
+} from './memory-context.js';
+import type { RequestMemoryExcerpts } from '#agent/memory-client';
+import { soulToolsAvailable } from './tools/soul-tool.js';
+import {
   CancelledAgentRequestError,
   ModelCallError,
 } from '#agent/public-error';
@@ -82,6 +88,8 @@ function buildPiSessionSnapshot(args: {
     description?: string;
   }>;
   messages: unknown[];
+  contextGeneration?: number;
+  contextAudience?: string;
 }): PiSessionSnapshot {
   return {
     id: args.id,
@@ -96,6 +104,12 @@ function buildPiSessionSnapshot(args: {
     readableSkills: args.readableSkills,
     messageCount: args.messages.length,
     messages: args.messages,
+    ...(args.contextGeneration !== undefined
+      ? { contextGeneration: args.contextGeneration }
+      : {}),
+    ...(args.contextAudience !== undefined
+      ? { contextAudience: args.contextAudience }
+      : {}),
   };
 }
 
@@ -153,18 +167,31 @@ export async function runPiSession(args: {
           executionId: args.containerInput.executionId,
         })
       : undefined;
-  const contextPromise = args.runtime.deps.soulStore
-    .canEdit(args.containerInput.accountId)
-    .then(async (soulEditEnabled) => ({
-      ...(await createPiSessionContext({
-        containerInput: args.containerInput,
-        runtime: args.runtime,
-        requestScope: args.requestScope,
-        soulEditEnabled,
-        paipanEnabled: Boolean(paipan),
-      })),
+  const memoryScope = args.containerInput.memoryScope;
+  const contextAudience = memoryScope?.contextAudience ?? '';
+  const memory =
+    memoryScope && requestId && args.containerInput.executionId
+      ? createHostToolCaller('memory', {
+          accountId: args.containerInput.accountId,
+          requestId,
+          executionId: args.containerInput.executionId,
+        })
+      : undefined;
+  const memoryExcerpts: RequestMemoryExcerpts = new Map();
+  const contextPromise = (
+    soulToolsAvailable(args.containerInput)
+      ? args.runtime.deps.soulStore.canEdit(args.containerInput.accountId)
+      : Promise.resolve(false)
+  ).then(async (soulEditEnabled) => ({
+    ...(await createPiSessionContext({
+      containerInput: args.containerInput,
+      runtime: args.runtime,
+      requestScope: args.requestScope,
       soulEditEnabled,
-    }));
+      paipanEnabled: Boolean(paipan),
+    })),
+    soulEditEnabled,
+  }));
   const prepared = await Promise.allSettled([
     createPiProviderRuntime(args.containerInput.llmRuntime),
     contextPromise,
@@ -215,6 +242,9 @@ export async function runPiSession(args: {
       accountId: args.containerInput.accountId,
       soulStore: args.runtime.deps.soulStore,
       soulEditEnabled,
+      memoryScope,
+      memory,
+      memoryExcerpts,
       recordExecution(record) {
         records.push(record);
       },
@@ -261,7 +291,13 @@ export async function runPiSession(args: {
     const piSession = createFateClawPiSessionManager({
       cwd,
       sessionId: args.containerInput.sessionId,
+      contextGeneration: memoryScope?.contextGeneration,
+      contextAudience,
     });
+    const extensions = resourceLoader.getExtensions();
+    const memoryCompaction = memoryScope
+      ? createManagedMemoryCompactionExtension()
+      : undefined;
     installModelPool(providerRuntime, args.containerInput.llmRuntime, {
       trace: (event) => traceEvent(event, args.requestScope),
       answerSessionId: piSession.manager.getSessionId(),
@@ -277,6 +313,14 @@ export async function runPiSession(args: {
       resourceLoader: {
         ...resourceLoader,
         getAppendSystemPrompt: () => appendSystemPrompt,
+        ...(memoryCompaction
+          ? {
+              getExtensions: () => ({
+                ...extensions,
+                extensions: [...extensions.extensions, memoryCompaction],
+              }),
+            }
+          : {}),
       },
       sessionManager: piSession.manager,
       settingsManager,
@@ -284,6 +328,15 @@ export async function runPiSession(args: {
       tools: allowedToolNames,
       customTools,
     });
+    if (memoryScope)
+      installManagedMemoryProjection({
+        agent: session.agent,
+        memory,
+        scope: memoryScope,
+        query: args.containerInput.userMessage,
+        requestScope: args.requestScope,
+        excerpts: memoryExcerpts,
+      });
 
     let cancelled = false;
 
@@ -384,6 +437,8 @@ export async function runPiSession(args: {
           description,
         })),
         messages: session.state.messages,
+        contextGeneration: memoryScope?.contextGeneration,
+        contextAudience: memoryScope ? contextAudience : undefined,
       });
       return {
         text: latestAssistant?.text ?? lastAssistantText,
@@ -394,7 +449,12 @@ export async function runPiSession(args: {
           args.containerInput.piSessionBase !== undefined
             ? createPiSessionFrame(
                 snapshot,
-                args.containerInput.piSessionBase ?? undefined,
+                (args.containerInput.piSessionBase?.contextGeneration ?? 0) ===
+                  (memoryScope?.contextGeneration ?? 0) &&
+                  (args.containerInput.piSessionBase?.contextAudience ?? '') ===
+                    contextAudience
+                  ? (args.containerInput.piSessionBase ?? undefined)
+                  : undefined,
               )
             : snapshot,
       };

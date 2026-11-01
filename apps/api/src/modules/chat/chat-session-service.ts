@@ -21,6 +21,14 @@ import type {
   SharedChatSessionDto,
 } from '@fateclaw/contracts/chat';
 import type { SuccessResponse } from '@fateclaw/contracts/common';
+import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
+import { prepareMemoryAdmissionScope } from '#modules/memory/repository';
+import {
+  readMemoryPiContext,
+  type MemoryPiContext,
+} from '#modules/memory/pi-contexts';
+import { MemoryError } from '#modules/memory/domain';
+import { filterSessionContextMessages } from './session-context-access.js';
 
 import {
   archiveChatSession,
@@ -149,6 +157,7 @@ interface PreparedOwnedChatSessionTurn {
   sessionBoardContexts: SessionBoardContextDto[];
   sessionTitle: string;
   entitlementSnapshot: RuntimeEntitlementSnapshot;
+  memoryScope: MemoryRequestScope;
 }
 
 function isPaymentRequiredError(errorMessage: string): boolean {
@@ -308,8 +317,13 @@ function readRequestIdFromMessage(message: NewMessage): string | null {
     : null;
 }
 
+function ownerContextAudience(session: ChatSession): string {
+  return session.id.startsWith('openapi:') ? `owner:${session.user_id}` : '';
+}
+
 async function restorePiSessionFromConversationSnapshot(
   session: ChatSession,
+  context: MemoryPiContext,
 ): Promise<boolean> {
   const recentMessages = await getRecentMessages(
     session.account_id,
@@ -335,9 +349,16 @@ async function restorePiSessionFromConversationSnapshot(
     if (!snapshot) {
       continue;
     }
+    if (
+      (snapshot.contextGeneration ?? 0) !== context.contextGeneration ||
+      (snapshot.contextAudience ?? '') !== context.contextAudience
+    )
+      continue;
     const result = await writePiSessionSnapshotArchiveToFiles(
       session.id,
       snapshot,
+      context.contextGeneration,
+      context.contextAudience,
     );
     if (!result?.writtenMappingFile || result.writtenSessionFiles <= 0) {
       continue;
@@ -362,32 +383,40 @@ async function restorePiSessionFromConversationSnapshot(
   return false;
 }
 
-async function resolveSessionContinuationState(session: ChatSession): Promise<{
+async function resolveSessionContinuationState(
+  session: ChatSession,
+  context: MemoryPiContext,
+): Promise<{
   blocked: boolean;
   reason?: 'pi_session_missing';
   message?: string;
 }> {
-  const hasFinalReply = await hasFinalAiChatSessionReply(
-    session.account_id,
-    session.id,
-  );
-  if (!hasFinalReply) {
-    return { blocked: false };
-  }
+  const { contextGeneration: generation, contextAudience: audience } = context;
+  if (!context.initialized) return { blocked: false };
 
-  const piSession = await readPiSessionFileState(session.id);
+  const piSession = await readPiSessionFileState(
+    session.id,
+    generation,
+    audience,
+  );
   if (piSession.hasSessionFile) {
     return { blocked: false };
   }
 
-  const base = await getPiSessionBase(session.id, session.account_id);
+  const base = await getPiSessionBase(session.id, session.account_id, audience);
   const durableSnapshot = base
     ? await getPiSessionSnapshot(base.requestId, session.account_id)
     : undefined;
-  if (durableSnapshot) {
+  if (
+    durableSnapshot &&
+    (durableSnapshot.contextGeneration ?? 0) === generation &&
+    (durableSnapshot.contextAudience ?? '') === audience
+  ) {
     const restored = await writePiSessionSnapshotArchiveToFiles(
       session.id,
       durableSnapshot,
+      generation,
+      audience,
     );
     if (restored?.writtenMappingFile && restored.writtenSessionFiles > 0) {
       await markChatSessionPiSessionArchiveRestored(session.id);
@@ -400,16 +429,26 @@ async function resolveSessionContinuationState(session: ChatSession): Promise<{
     await writePiSessionArchiveToFiles(
       session.id,
       archive.pi_session_archive_payload as PiSessionArchivePayload,
+      generation,
+      audience,
     );
     await markChatSessionPiSessionArchiveRestored(session.id);
-    const restoredPiSession = await readPiSessionFileState(session.id);
+    const restoredPiSession = await readPiSessionFileState(
+      session.id,
+      generation,
+      audience,
+    );
     if (restoredPiSession.hasSessionFile) {
       return { blocked: false };
     }
   }
 
-  if (await restorePiSessionFromConversationSnapshot(session)) {
-    const restoredPiSession = await readPiSessionFileState(session.id);
+  if (await restorePiSessionFromConversationSnapshot(session, context)) {
+    const restoredPiSession = await readPiSessionFileState(
+      session.id,
+      generation,
+      audience,
+    );
     if (restoredPiSession.hasSessionFile) {
       return { blocked: false };
     }
@@ -455,6 +494,7 @@ export async function listChatSessionsByClientForOwnedUser(
 export async function createChatSessionForOwnedUser(
   userId: string,
   title: string,
+  creatorActorKey?: string,
 ): Promise<ServiceResult<ChatSessionDto>> {
   const id = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const normalizedTitle = normalizeOwnedChatSessionTitle(title);
@@ -464,6 +504,7 @@ export async function createChatSessionForOwnedUser(
     accountId: getWebChatRuntimeId(userId),
     userId,
     title: normalizedTitle,
+    creatorActorKey,
   });
   return ok(toChatSessionDto(session));
 }
@@ -500,6 +541,14 @@ export async function archiveOwnedChatSession(
 
   const piSessionArchive = await readPiSessionArchiveForSession(
     sessionResult.data.id,
+    (
+      await readMemoryPiContext(
+        sessionResult.data.id,
+        userId,
+        ownerContextAudience(sessionResult.data),
+      )
+    ).contextGeneration,
+    ownerContextAudience(sessionResult.data),
   );
   await archiveChatSession(sessionResult.data.id);
   await markChatSessionPiSessionArchived({
@@ -553,7 +602,14 @@ export async function getOwnedChatSessionMessages(
     ),
     getRedis().get(sessionProcessingLockKey(session.id)),
   ]);
-  const continuation = await resolveSessionContinuationState(session);
+  const continuation = await resolveSessionContinuationState(
+    session,
+    await readMemoryPiContext(
+      session.id,
+      userId,
+      ownerContextAudience(session),
+    ),
+  );
 
   return ok(
     toSessionMessageListResponseDto(messages, Boolean(processingRequestId), {
@@ -781,7 +837,25 @@ async function prepareOwnedChatSessionTurn(
   }
 
   const session = sessionResult.data;
-  const continuation = await resolveSessionContinuationState(session);
+  let memoryScope: MemoryRequestScope;
+  let continuation: Awaited<ReturnType<typeof resolveSessionContinuationState>>;
+  try {
+    memoryScope = await prepareMemoryAdmissionScope({
+      ownerUserId: userId,
+      sessionId: session.id,
+      metadata: options.sourceMetadata as Record<string, unknown> | undefined,
+    });
+    const context = await readMemoryPiContext(
+      session.id,
+      userId,
+      memoryScope.contextAudience ?? '',
+    );
+    continuation = await resolveSessionContinuationState(session, context);
+  } catch (error) {
+    if (error instanceof MemoryError)
+      return fail(error.statusCode, error.message);
+    throw error;
+  }
   if (continuation.blocked) {
     return fail(
       410,
@@ -877,10 +951,16 @@ async function prepareOwnedChatSessionTurn(
       is_bot_message: false,
       session_id: session.id,
     };
-    const boardMessages = await getSessionMessagesWithToolContext(
-      session.account_id,
-      session.id,
-    );
+    const boardMessages = await filterSessionContextMessages({
+      scope: memoryScope,
+      accountId: session.account_id,
+      sessionId: session.id,
+      messages: await getSessionMessagesWithToolContext(
+        session.account_id,
+        session.id,
+      ),
+      selectedBoardMessageId,
+    });
     const sessionBoardContexts = buildSessionBoardContexts(boardMessages, {
       selectedBoardMessageId,
       currentPastedBoard:
@@ -927,6 +1007,7 @@ async function prepareOwnedChatSessionTurn(
         normalizeOwnedChatSessionTitle(session.title) ||
         DEFAULT_OWNED_CHAT_SESSION_TITLE,
       entitlementSnapshot: entitlement,
+      memoryScope,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -936,6 +1017,7 @@ async function prepareOwnedChatSessionTurn(
       'AI 对话: 请求准备失败',
     );
 
+    if (err instanceof MemoryError) return fail(err.statusCode, errorMessage);
     if (err instanceof ModelSelectionError) return fail(409, errorMessage);
     if (err instanceof BenefitAdmissionError)
       return fail(err.statusCode, errorMessage);
@@ -961,7 +1043,12 @@ async function enqueuePreparedOwnedChatSessionTurn(
       history: [],
       sessionBoardContexts: prepared.sessionBoardContexts,
       piSessionBase:
-        (await getPiSessionBase(session.id, session.account_id)) ?? null,
+        (await getPiSessionBase(
+          session.id,
+          session.account_id,
+          prepared.memoryScope.contextAudience ?? '',
+        )) ?? null,
+      memoryScope: prepared.memoryScope,
       userName: structured.userName,
       assistantName: structured.assistantName,
       personaPrompt: structured.personaPrompt,
@@ -998,6 +1085,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       'AI 对话: 请求入队失败',
     );
 
+    if (err instanceof MemoryError) return fail(err.statusCode, errorMessage);
     if (err instanceof ModelSelectionError) return fail(409, errorMessage);
     if (err instanceof BenefitAdmissionError)
       return fail(err.statusCode, errorMessage);
@@ -1023,7 +1111,12 @@ async function completeOwnedChatSessionTurn(
       history: [],
       sessionBoardContexts: prepared.sessionBoardContexts,
       piSessionBase:
-        (await getPiSessionBase(session.id, session.account_id)) ?? null,
+        (await getPiSessionBase(
+          session.id,
+          session.account_id,
+          prepared.memoryScope.contextAudience ?? '',
+        )) ?? null,
+      memoryScope: prepared.memoryScope,
       userName: structured.userName,
       assistantName: structured.assistantName,
       personaPrompt: structured.personaPrompt,

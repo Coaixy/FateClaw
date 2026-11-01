@@ -6,6 +6,7 @@ import { adminIssueRoutes } from './issues-routes.js';
 import { adminAnnouncementRoutes } from './announcements-routes.js';
 import { adminRegistrationInviteRoutes } from './registration-invite-routes.js';
 import { runtimeConfigRoutes } from './runtime-config-routes.js';
+import { adminMemoryRoutes } from './admin-memory-routes.js';
 
 import {
   BILLING_RESERVATION_STALE_MS,
@@ -575,6 +576,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get('/status', async () => getAdminStatusOverview());
 
   app.register(runtimeConfigRoutes);
+  app.register(adminMemoryRoutes);
   app.get('/system-config', async () => getSystemConfigOverview());
   app.get('/system-config/benefit', async () =>
     getSystemConfigOverview('benefit'),

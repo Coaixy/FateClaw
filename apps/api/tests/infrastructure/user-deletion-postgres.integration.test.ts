@@ -26,6 +26,7 @@ vi.mock('#modules/skills/legacy-skill-import', () => ({
 
 import { closeDatabase, deleteUser, initDatabase } from '#infrastructure/db';
 import { saveModelPoolPreference } from '#infrastructure/repositories/benefit-repository';
+import { createManualMemory } from '#modules/memory/service';
 
 // Only the explicit disposable test server is used; workspace configuration is never read.
 const connectionString = process.env.FATECLAW_TEST_BENEFIT_DATABASE_URL;
@@ -84,6 +85,36 @@ describe.skipIf(!connectionString)('user deletion with benefit records', () => {
     ).toBe(0);
   });
 
+  it('deletes a client and its memory dependency graph without affecting the owner memory', async () => {
+    await state.pool!.query(
+      "INSERT INTO users(id,phone,created_at) VALUES('client-owner','13000000009',now()); INSERT INTO client_profiles(id,user_id,name) VALUES('removable-client','client-owner','Synthetic client')",
+    );
+    const retained = await createManualMemory('client-owner', {
+      content: 'Synthetic owner preference',
+    });
+    await createManualMemory('client-owner', {
+      content: 'Synthetic client statement',
+      subject_id: 'client:removable-client',
+    });
+    await state.pool!.query(
+      "DELETE FROM client_profiles WHERE id='removable-client'",
+    );
+    expect(
+      (
+        await state.pool!.query(
+          "SELECT 1 FROM memory_sources WHERE subject_id='client:removable-client'",
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await state.pool!.query('SELECT 1 FROM memory_items WHERE id=$1', [
+          retained.id,
+        ])
+      ).rowCount,
+    ).toBe(1);
+  });
+
   it('removes personal free records while preserving other users, probes and idempotent late usage settlement', async () => {
     await state.pool!.query(`
       INSERT INTO users(id,phone,created_at) VALUES ('free-user','13000000002',now()),('other-user','13000000003',now());
@@ -105,7 +136,36 @@ describe.skipIf(!connectionString)('user deletion with benefit records', () => {
         ('probe-attempt',NULL,'synthetic-node',true,1,1,0,'settled');
     `);
 
+    await createManualMemory('free-user', {
+      content: 'Synthetic removable memory',
+    });
+    const otherMemory = await createManualMemory('other-user', {
+      content: 'Synthetic retained memory',
+    });
     await deleteUser('free-user');
+
+    for (const table of [
+      'memory_scopes',
+      'memory_entities',
+      'memory_sources',
+      'memory_items',
+      'memory_jobs',
+      'memory_exclusions',
+    ])
+      expect(
+        (
+          await state.pool!.query(
+            `SELECT 1 FROM ${table} WHERE owner_user_id='free-user'`,
+          )
+        ).rowCount,
+      ).toBe(0);
+    expect(
+      (
+        await state.pool!.query('SELECT 1 FROM memory_items WHERE id=$1', [
+          otherMemory.id,
+        ])
+      ).rowCount,
+    ).toBe(1);
 
     for (const [table, column] of [
       ['users', 'id'],

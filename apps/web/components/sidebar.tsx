@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Archive,
   Activity,
+  Brain,
   Megaphone,
   CircleDot,
   Heart,
@@ -27,7 +28,10 @@ import {
   Users,
 } from 'lucide-react';
 import { useReducer, useState, useEffect, useMemo } from 'react';
-import { isAiChatPath, useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
+import {
+  isAiChatPath,
+  useChatSessions,
+} from '@/features/chat/hooks/use-chat-sessions';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useIssueUnreadCount } from '@/features/issues/use-issue-unread';
@@ -369,11 +373,10 @@ export function Sidebar({
     0,
     SIDEBAR_SESSION_PREVIEW_LIMIT,
   );
-  const activeDateFilterLabel =
-    t(
-      SESSION_DATE_FILTERS.find((item) => item.value === dateFilter)
-        ?.labelKey ?? 'sidebar.filters.all',
-    );
+  const activeDateFilterLabel = t(
+    SESSION_DATE_FILTERS.find((item) => item.value === dateFilter)?.labelKey ??
+      'sidebar.filters.all',
+  );
   const emptyStateMessage = normalizedSearch
     ? dateFilter === 'all'
       ? t('sidebar.noMatchedSearch', { query: search.trim() })
@@ -453,7 +456,9 @@ export function Sidebar({
                   : 'border-hairline/70 bg-surface-card/80 text-ink hover:border-primary/30 hover:bg-primary/8'
               }`}
               aria-label={
-                open ? t('sidebar.mobileMenuClose') : t('sidebar.mobileMenuOpen')
+                open
+                  ? t('sidebar.mobileMenuClose')
+                  : t('sidebar.mobileMenuOpen')
               }
               aria-expanded={open}
               aria-controls="app-sidebar"
@@ -492,7 +497,6 @@ export function Sidebar({
         id="app-sidebar"
         className={`fixed top-0 left-0 h-full w-[260px] bg-sidebar border-r border-hairline flex flex-col z-50 transition-[width,transform] duration-300 ease-out motion-reduce:transition-none lg:translate-x-0 ${collapsed ? 'lg:w-16' : ''} ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
-
         {/* Logo 区域：点击后统一回到新建对话首屏。 */}
         <div
           className={`relative flex h-16 shrink-0 items-center justify-between px-5 ${collapsed ? 'lg:justify-center lg:px-3' : ''}`}
@@ -554,6 +558,25 @@ export function Sidebar({
               {t('hub.newChat')}
             </span>
           </button>
+          <Link
+            href="/memory"
+            onClick={closeSidebar}
+            aria-label={t('memory.title')}
+            title={t('memory.title')}
+            aria-current={
+              pathname.replace(/\/+$/, '') === '/memory' ? 'page' : undefined
+            }
+            className={`mt-1 flex h-10 w-full min-w-0 items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${pathname.replace(/\/+$/, '') === '/memory' ? 'bg-primary/10 text-primary' : 'text-muted'} ${collapsed ? 'lg:w-10 lg:justify-center lg:px-0' : ''}`}
+          >
+            <Brain
+              size={15}
+              className={`shrink-0 ${collapsed ? 'lg:size-[18px]' : ''}`}
+              aria-hidden="true"
+            />
+            <span className={`truncate ${collapsed ? 'lg:hidden' : ''}`}>
+              {t('memory.navigation')}
+            </span>
+          </Link>
         </div>
 
         {collapsed && (
@@ -562,9 +585,7 @@ export function Sidebar({
               href="/history"
               onClick={closeSidebar}
               className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-canvas/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 ${
-                isHistoryPage
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted'
+                isHistoryPage ? 'bg-primary/10 text-primary' : 'text-muted'
               }`}
               aria-label={t('sidebar.chatHistory')}
               title={t('sidebar.chatHistory')}
@@ -581,7 +602,10 @@ export function Sidebar({
         >
           <div className="flex shrink-0 items-center justify-between gap-2 pl-5 pr-3 pb-1.5">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted/60">
-              <span className="h-3 w-[2.5px] rounded-full bg-primary/70" aria-hidden="true" />
+              <span
+                className="h-3 w-[2.5px] rounded-full bg-primary/70"
+                aria-hidden="true"
+              />
               {t('hub.recentChats')}
             </p>
             <Link
@@ -622,14 +646,13 @@ export function Sidebar({
                 <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-canvas/70 flex items-center justify-center">
                   <Search size={16} className="text-muted/40" />
                 </div>
-                <p className="text-[11px] text-muted/60">
-                  {emptyStateMessage}
-                </p>
+                <p className="text-[11px] text-muted/60">{emptyStateMessage}</p>
               </div>
             ) : (
               <div className="space-y-1.5">
                 {sidebarPreviewSessions.map((session) => {
-                  const active = session.id === selectedSession && isAiChatPath(pathname);
+                  const active =
+                    session.id === selectedSession && isAiChatPath(pathname);
                   const isEditing = session.id === editingSessionId;
                   const isRenaming = session.id === renamingSessionId;
                   const openSession = () => {
@@ -687,7 +710,9 @@ export function Sidebar({
                               </p>
                               <div className="flex items-center gap-1.5">
                                 <button
-                                  onClick={() => void saveSessionTitle(session.id)}
+                                  onClick={() =>
+                                    void saveSessionTitle(session.id)
+                                  }
                                   disabled={isRenaming}
                                   className="h-7 px-2.5 rounded-lg flex items-center gap-1 text-[11px] font-medium bg-primary/12 text-primary hover:bg-primary/18 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                                 >
@@ -750,7 +775,11 @@ export function Sidebar({
                           )}
                         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] leading-tight text-muted/70">
                           <span>
-                            {formatSessionTime(session.updated_at, t, formatDate)}
+                            {formatSessionTime(
+                              session.updated_at,
+                              t,
+                              formatDate,
+                            )}
                           </span>
                           {session.share_token ? (
                             <span className="inline-flex items-center gap-1 text-primary">
@@ -890,7 +919,9 @@ export function Sidebar({
                   </span>
                 )}
               </span>
-              <span className={`whitespace-nowrap ${collapsed ? 'lg:hidden' : ''}`}>
+              <span
+                className={`whitespace-nowrap ${collapsed ? 'lg:hidden' : ''}`}
+              >
                 {t('sidebar.issues')}
               </span>
             </Link>

@@ -10,6 +10,7 @@ All paths below are relative to the repository root.
 | --- | --- | --- |
 | HTTP routes and authentication | `apps/api/src/interfaces/http/server.ts`, then the relevant `*-routes.ts` | [API guide](apps/api/src/interfaces/http/AGENT.md), [API reference](docs/api-reference.md) |
 | Chat turns, history, and session state | `apps/api/src/modules/chat/chat-session-service.ts` | [Runtime architecture](docs/agent-architecture.md) |
+| Cross-conversation memory | `apps/api/src/modules/memory/`, `apps/agent-runtime/src/pi-runtime/memory-context.ts` | [Memory architecture](docs/memory.md) |
 | Dispatch, process lifecycle, or missing replies | `apps/api/src/runtime/resident-agent.ts`, `local-runner.ts`, `ipc-worker.ts`, `ipc-ai-chat-outbox-handler.ts`, `ai-chat-stream.ts` (all in the same directory) | [Runtime architecture](docs/agent-architecture.md) |
 | Model execution and tools | `apps/agent-runtime/src/daemon.ts`, `request-boundary.ts`, `pi-runtime/` (all under `src/`) | [Runtime architecture](docs/agent-architecture.md) |
 | Chart calculation | `apps/api/src/modules/chat/paipan-registry.ts`, `apps/api/src/modules/chat/paipan-runners/` | [API reference](docs/api-reference.md) |

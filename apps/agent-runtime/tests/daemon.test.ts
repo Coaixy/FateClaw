@@ -58,6 +58,19 @@ const VALID_LLM_RUNTIME = {
   authMode: 'anthropic_api_key',
 };
 
+const VALID_MEMORY_SCOPE = {
+  scopeId: 'root',
+  ownerUserId: 'user-1',
+  actorKey: 'user:user-1',
+  audienceKey: 'owner',
+  subjectId: 'self:user-1',
+  epoch: 1,
+  contextGeneration: 0,
+  learningEnabled: true,
+  recallEnabled: true,
+  chatEditingEnabled: true,
+};
+
 describe('daemon cancel queue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -143,6 +156,76 @@ describe('daemon request timeout', () => {
     vi.clearAllMocks();
   });
 
+  it('rejects a queued legacy inbox request without admitted memory identity before starting the model', async () => {
+    vi.mocked(executeContainerInput).mockResolvedValue({
+      status: 'success',
+      result: 'should not run',
+    });
+    const lpush = vi.fn().mockResolvedValue(1);
+    vi.mocked(getRedis).mockReturnValue({ lpush } as never);
+    await __processInboxMessageForTests(
+      'web:user-1',
+      JSON.stringify({
+        type: 'chat',
+        requestId: 'legacy-unscoped',
+        accountId: 'web:user-1',
+        userMessage: 'Synthetic legacy question',
+        llmRuntime: VALID_LLM_RUNTIME,
+      }),
+      new Map(),
+      new Map(),
+      new Map(),
+    );
+    expect(executeContainerInput).not.toHaveBeenCalled();
+    expect(lpush).toHaveBeenCalledOnce();
+    const [queue, payload] = lpush.mock.calls[0];
+    expect(
+      JSON.parse(decodeAgentIpc(queue as string, payload as string)),
+    ).toMatchObject({
+      status: 'error',
+      publicErrorText: '这条历史请求缺少身份信息，请重新发送消息。',
+    });
+  });
+
+  it('forwards admitted memory scope through the inbox boundary', async () => {
+    vi.mocked(executeContainerInput).mockResolvedValue({
+      status: 'success',
+      result: 'Synthetic memory response',
+    });
+    vi.mocked(getRedis).mockReturnValue({
+      lpush: vi.fn().mockResolvedValue(1),
+    } as never);
+    const memoryScope = {
+      scopeId: 'synthetic-scope',
+      ownerUserId: 'synthetic-owner',
+      actorKey: 'synthetic-actor',
+      audienceKey: 'private',
+      subjectId: 'synthetic-subject',
+      epoch: 1,
+      learningEnabled: true,
+      recallEnabled: true,
+      chatEditingEnabled: false,
+      contextGeneration: 3,
+    };
+    await __processInboxMessageForTests(
+      'web:user-1',
+      JSON.stringify({
+        type: 'chat',
+        requestId: 'synthetic-memory-request',
+        accountId: 'web:user-1',
+        userMessage: 'Synthetic question',
+        memoryScope,
+        llmRuntime: VALID_LLM_RUNTIME,
+      }),
+      new Map(),
+      new Map(),
+      new Map(),
+    );
+    expect(
+      vi.mocked(executeContainerInput).mock.calls[0][0].memoryScope,
+    ).toEqual(memoryScope);
+  });
+
   it('pushes a timeout error response when executeContainerInput never settles', async () => {
     vi.useFakeTimers();
     try {
@@ -169,6 +252,7 @@ describe('daemon request timeout', () => {
         accountId: 'web:user-1',
         userMessage: 'hi',
         llmRuntime: VALID_LLM_RUNTIME,
+        memoryScope: VALID_MEMORY_SCOPE,
       });
 
       const sessions = new Map();
@@ -239,6 +323,7 @@ describe('daemon request timeout', () => {
         accountId: 'web:user-1',
         userMessage: 'hi',
         llmRuntime: VALID_LLM_RUNTIME,
+        memoryScope: VALID_MEMORY_SCOPE,
       });
 
       const runPromise = __processInboxMessageForTests(
@@ -304,6 +389,7 @@ describe('daemon fatal error response', () => {
       userMessage: 'hi',
       outboxQueue: 'ipc:web:user-1:outbox',
       llmRuntime: VALID_LLM_RUNTIME,
+      memoryScope: VALID_MEMORY_SCOPE,
     } as never;
 
     const response = __buildFatalOutboxResponseForTests(
@@ -332,6 +418,7 @@ describe('daemon fatal error response', () => {
       accountId: 'web:user-2',
       userMessage: 'hi',
       llmRuntime: VALID_LLM_RUNTIME,
+      memoryScope: VALID_MEMORY_SCOPE,
     } as never;
 
     const response = __buildFatalOutboxResponseForTests(

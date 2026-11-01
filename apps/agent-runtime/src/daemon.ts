@@ -71,6 +71,10 @@ class AgentRequestTimeoutError extends Error {
   readonly publicReasonCode = 'agent_timeout' as const;
 }
 
+class MissingMemoryScopeError extends Error {
+  readonly publicErrorText = '这条历史请求缺少身份信息，请重新发送消息。';
+}
+
 /**
  * 创建请求 watchdog：区分「连续无进展」和「活跃但总时长失控」。
  *
@@ -362,6 +366,8 @@ async function processInboxMessage(
 
     if (!(await claimDurableExecution(request))) return;
     ownsExecution = true;
+    if (!request.memoryScope)
+      throw new MissingMemoryScopeError('Missing admitted memory identity');
     stopLease = startDurableExecutionHeartbeat(request, () => {
       const controls = activeSessions.get(request!.requestId);
       if (controls) void controls.abort().catch(() => {});
@@ -397,6 +403,7 @@ async function processInboxMessage(
             sessionBoardContexts: request.sessionBoardContexts,
             piSessionBase: request.piSessionBase,
             acceptedAtMs: request.acceptedAtMs,
+            memoryScope: request.memoryScope,
             history: request.history ?? [],
             userName: request.userName,
             assistantName: request.assistantName,
@@ -499,7 +506,9 @@ async function processInboxMessage(
           error instanceof AgentRequestTimeoutError ? error : undefined;
         const publicErrorText =
           timeoutError?.publicErrorText ??
-          '这次没有完成，原因：处理收件箱请求失败。';
+          (error instanceof MissingMemoryScopeError
+            ? error.publicErrorText
+            : '这次没有完成，原因：处理收件箱请求失败。');
         const errorResponse: OutboxResponse = {
           type: 'response',
           requestId: request.requestId,

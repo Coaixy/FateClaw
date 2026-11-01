@@ -4,12 +4,10 @@ import type { ChatSessionDto, MessageDto } from '@fateclaw/contracts/chat';
 
 import {
   createChatSessionForOwnedUser,
-  listChatSessionsForOwnedUser,
   runOwnedChatSessionTurn,
 } from './chat-session-service.js';
 import {
   deleteWechatChatSessionLink,
-  getChatSession,
   getWechatChatSessionLink,
   touchWechatChatSessionLink,
   upsertWechatChatSessionLink,
@@ -18,10 +16,18 @@ import { getRedis } from '#infrastructure/redis';
 import { logger } from '#infrastructure/logger';
 import { sessionProcessingLockKey } from '#runtime/ipc-payloads';
 import type { Account, User } from '#shared/types';
+import {
+  ensureWechatSessionActor,
+  getWechatAccessibleSession,
+  listWechatAccessibleSessions,
+  type WechatSessionIdentity,
+} from './wechat-session-access.js';
 
 const WECHAT_SESSION_LIST_LIMIT = 5;
 const WECHAT_SESSION_LIST_CACHE_SECONDS = 600;
 const WECHAT_DEFAULT_SESSION_TITLE = '微信对话';
+const WECHAT_SESSION_ACCESS_HELP =
+  '无法接续这个会话。请发送 /new 新建微信对话；如需接续本人网页会话，请在网页 /memory 中将该联系人绑定为本人并开启共享。';
 
 export const WECHAT_CHAT_THINKING_ACK =
   '收到，正在思考。完成后会直接回复；期间新消息不会进入本轮。';
@@ -109,7 +115,7 @@ function formatSessionTitle(session: ChatSessionDto): string {
 
 function formatSessionList(sessions: ChatSessionDto[]): string {
   if (sessions.length === 0) {
-    return '还没有网页 AI Chat 会话。发送 /new 新建一个微信对话。';
+    return '还没有可接续的会话。请发送 /new 新建微信对话；如需接续本人网页会话，请在网页 /memory 中绑定本人并开启共享。';
   }
   const rows = sessions.map(
     (session, index) =>
@@ -136,12 +142,10 @@ function helpText(): string {
   ].join('\n');
 }
 
-async function listRecentSessions(userId: string): Promise<ChatSessionDto[]> {
-  const result = await listChatSessionsForOwnedUser(userId);
-  if (!result.ok) {
-    throw new Error(result.error);
-  }
-  return result.data.slice(0, WECHAT_SESSION_LIST_LIMIT);
+async function listRecentSessions(
+  identity: WechatSessionIdentity,
+): Promise<ChatSessionDto[]> {
+  return listWechatAccessibleSessions(identity, WECHAT_SESSION_LIST_LIMIT);
 }
 
 async function cacheSessionList(input: {
@@ -194,12 +198,12 @@ async function resolveResumeSessionId(input: {
     };
   }
   if (normalized === '最近') {
-    const sessions = await listRecentSessions(input.userId);
+    const sessions = await listRecentSessions(input);
     const latest = sessions[0];
     if (!latest) {
       return {
         ok: false,
-        replyText: '还没有网页 AI Chat 会话。发送 /new 新建一个。',
+        replyText: WECHAT_SESSION_ACCESS_HELP,
       };
     }
     return { ok: true, sessionId: latest.id };
@@ -220,17 +224,10 @@ async function bindSenderToSession(input: {
   userId: string;
   sessionId: string;
 }): Promise<ChatSessionDto | null> {
-  const session = await getChatSession(input.sessionId);
-  if (!session || session.user_id !== input.userId) return null;
+  const session = await getWechatAccessibleSession(input, input.sessionId);
+  if (!session) return null;
   await upsertWechatChatSessionLink(input);
-  return {
-    id: session.id,
-    account_id: session.account_id,
-    title: session.title,
-    created_at: session.created_at,
-    updated_at: session.updated_at,
-    share_token: session.share_token ?? null,
-  };
+  return session;
 }
 
 function parseWechatChatCommand(content: string): WechatChatCommand | null {
@@ -265,7 +262,11 @@ export async function handleWechatChatCommand(input: {
 
   const senderHash = buildWechatSenderHash(input.account.id, input.sender);
   if (command.type === 'sessions') {
-    const sessions = await listRecentSessions(input.owner.id);
+    const sessions = await listRecentSessions({
+      userId: input.owner.id,
+      accountId: input.account.id,
+      senderHash,
+    });
     await cacheSessionList({
       accountId: input.account.id,
       senderHash,
@@ -288,7 +289,8 @@ export async function handleWechatChatCommand(input: {
       userId: input.owner.id,
       sessionId: resolved.sessionId,
     });
-    if (!session) return { handled: true, replyText: '会话不存在或已删除。' };
+    if (!session)
+      return { handled: true, replyText: WECHAT_SESSION_ACCESS_HELP };
     return {
       handled: true,
       replyText: `已接续网页会话：${formatSessionTitle(session)}`,
@@ -296,9 +298,15 @@ export async function handleWechatChatCommand(input: {
   }
 
   if (command.type === 'new') {
+    const actor = await ensureWechatSessionActor({
+      userId: input.owner.id,
+      accountId: input.account.id,
+      senderHash,
+    });
     const sessionResult = await createChatSessionForOwnedUser(
       input.owner.id,
       command.title || WECHAT_DEFAULT_SESSION_TITLE,
+      actor.actorKey,
     );
     if (!sessionResult.ok) {
       return { handled: true, replyText: sessionResult.error };
@@ -318,8 +326,11 @@ export async function handleWechatChatCommand(input: {
   if (command.type === 'where') {
     const link = await getWechatChatSessionLink(input.account.id, senderHash);
     if (!link) return { handled: true, replyText: '当前没有接续网页会话。' };
-    const session = await getChatSession(link.session_id);
-    if (!session || session.user_id !== input.owner.id) {
+    const session = await getWechatAccessibleSession(
+      { userId: input.owner.id, accountId: input.account.id, senderHash },
+      link.session_id,
+    );
+    if (!session) {
       await deleteWechatChatSessionLink(input.account.id, senderHash);
       return { handled: true, replyText: '当前没有接续网页会话。' };
     }
@@ -347,23 +358,27 @@ async function ensureWechatLinkedSession(input: {
     input.senderHash,
   );
   if (link) {
-    const session = await getChatSession(link.session_id);
-    if (session && session.user_id === input.owner.id) {
-      return {
-        id: session.id,
-        account_id: session.account_id,
-        title: session.title,
-        created_at: session.created_at,
-        updated_at: session.updated_at,
-        share_token: session.share_token ?? null,
-      };
-    }
+    const session = await getWechatAccessibleSession(
+      {
+        userId: input.owner.id,
+        accountId: input.account.id,
+        senderHash: input.senderHash,
+      },
+      link.session_id,
+    );
+    if (session) return session;
     await deleteWechatChatSessionLink(input.account.id, input.senderHash);
   }
 
+  const actor = await ensureWechatSessionActor({
+    userId: input.owner.id,
+    accountId: input.account.id,
+    senderHash: input.senderHash,
+  });
   const sessionResult = await createChatSessionForOwnedUser(
     input.owner.id,
     WECHAT_DEFAULT_SESSION_TITLE,
+    actor.actorKey,
   );
   if (!sessionResult.ok) {
     throw new Error(sessionResult.error);

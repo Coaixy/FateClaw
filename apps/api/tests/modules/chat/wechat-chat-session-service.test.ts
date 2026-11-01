@@ -3,36 +3,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockCreateChatSessionForOwnedUser,
   mockDeleteWechatChatSessionLink,
-  mockGetChatSession,
   mockGetRedisGet,
   mockGetRedisSet,
   mockGetWechatChatSessionLink,
-  mockListChatSessionsForOwnedUser,
   mockRunOwnedChatSessionTurn,
   mockTouchWechatChatSessionLink,
   mockUpsertWechatChatSessionLink,
+  mockEnsureActor,
+  mockAccessibleSession,
+  mockAccessibleSessions,
 } = vi.hoisted(() => ({
   mockCreateChatSessionForOwnedUser: vi.fn(),
   mockDeleteWechatChatSessionLink: vi.fn(),
-  mockGetChatSession: vi.fn(),
   mockGetRedisGet: vi.fn(),
   mockGetRedisSet: vi.fn(async () => 'OK'),
   mockGetWechatChatSessionLink: vi.fn(),
-  mockListChatSessionsForOwnedUser: vi.fn(),
   mockRunOwnedChatSessionTurn: vi.fn(),
   mockTouchWechatChatSessionLink: vi.fn(),
   mockUpsertWechatChatSessionLink: vi.fn(),
+  mockEnsureActor: vi.fn(),
+  mockAccessibleSession: vi.fn(),
+  mockAccessibleSessions: vi.fn(),
 }));
 
 vi.mock('#modules/chat/chat-session-service', () => ({
   createChatSessionForOwnedUser: mockCreateChatSessionForOwnedUser,
-  listChatSessionsForOwnedUser: mockListChatSessionsForOwnedUser,
   runOwnedChatSessionTurn: mockRunOwnedChatSessionTurn,
 }));
 
 vi.mock('#infrastructure/db', () => ({
   deleteWechatChatSessionLink: mockDeleteWechatChatSessionLink,
-  getChatSession: mockGetChatSession,
   getWechatChatSessionLink: mockGetWechatChatSessionLink,
   touchWechatChatSessionLink: mockTouchWechatChatSessionLink,
   upsertWechatChatSessionLink: mockUpsertWechatChatSessionLink,
@@ -50,6 +50,11 @@ vi.mock('#infrastructure/logger', () => ({
     info: vi.fn(),
     warn: vi.fn(),
   },
+}));
+vi.mock('#modules/chat/wechat-session-access', () => ({
+  ensureWechatSessionActor: mockEnsureActor,
+  getWechatAccessibleSession: mockAccessibleSession,
+  listWechatAccessibleSessions: mockAccessibleSessions,
 }));
 
 import {
@@ -88,21 +93,12 @@ function createSession(id = 'session-1') {
 describe('wechat-chat-session-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListChatSessionsForOwnedUser.mockResolvedValue({
-      ok: true,
-      data: [
-        {
-          id: 'session-1',
-          account_id: 'web:user-1',
-          title: '事业复盘',
-          created_at: '2026-06-03T07:00:00.000Z',
-          updated_at: '2026-06-03T08:00:00.000Z',
-          share_token: null,
-        },
-      ],
-    });
     mockGetRedisGet.mockResolvedValue(null);
-    mockGetChatSession.mockResolvedValue(createSession());
+    mockAccessibleSession.mockResolvedValue(createSession());
+    mockAccessibleSessions.mockResolvedValue([createSession()]);
+    mockEnsureActor.mockImplementation(async ({ accountId, senderHash }) => ({
+      actorKey: `wechat:${accountId}:${senderHash}`,
+    }));
     mockGetWechatChatSessionLink.mockResolvedValue(undefined);
     mockCreateChatSessionForOwnedUser.mockResolvedValue({
       ok: true,
@@ -137,7 +133,7 @@ describe('wechat-chat-session-service', () => {
     });
   });
 
-  it('lists recent web sessions and caches resume choices', async () => {
+  it('lists authorized web sessions and caches resume choices for an explicitly shared owner', async () => {
     const account = createAccount();
     const result = await handleWechatChatCommand({
       account,
@@ -198,6 +194,7 @@ describe('wechat-chat-session-service', () => {
     expect(mockCreateChatSessionForOwnedUser).toHaveBeenCalledWith(
       'user-1',
       '微信对话',
+      `wechat:${account.id}:${buildWechatSenderHash(account.id, sender)}`,
     );
     expect(mockRunOwnedChatSessionTurn).toHaveBeenCalledWith(
       'user-1',
@@ -240,5 +237,69 @@ describe('wechat-chat-session-service', () => {
     expect(result.status).toBe('discarded');
     expect(mockRunOwnedChatSessionTurn).not.toHaveBeenCalled();
     expect(mockTouchWechatChatSessionLink).not.toHaveBeenCalled();
+  });
+
+  it('does not disclose owner titles to a sender without authorized sessions', async () => {
+    mockAccessibleSessions.mockResolvedValueOnce([]);
+    const result = await handleWechatChatCommand({
+      account: createAccount(),
+      owner: { id: 'user-1' },
+      sender: 'unknown-sender',
+      content: '/sessions',
+    });
+    expect(result.replyText).not.toContain('事业复盘');
+    expect(result.replyText).toContain('/new');
+    expect(result.replyText).toContain('/memory');
+    expect(mockGetRedisSet).toHaveBeenCalledWith(
+      expect.any(String),
+      '[]',
+      'EX',
+      600,
+    );
+  });
+
+  it('rechecks cached resume targets after owner sharing is revoked', async () => {
+    mockGetRedisGet.mockResolvedValueOnce(JSON.stringify(['session-1']));
+    mockAccessibleSession.mockResolvedValueOnce(null);
+    const result = await handleWechatChatCommand({
+      account: createAccount(),
+      owner: { id: 'user-1' },
+      sender: 'sender-1@im.weixin',
+      content: '/resume 1',
+    });
+    expect(result.replyText).not.toContain('事业复盘');
+    expect(result.replyText).toContain('/memory');
+    expect(mockUpsertWechatChatSessionLink).not.toHaveBeenCalled();
+  });
+
+  it('uses the actor-safe title for where and records the server actor on explicit new sessions', async () => {
+    const account = createAccount();
+    const sender = 'sender-1@im.weixin';
+    mockGetWechatChatSessionLink.mockResolvedValueOnce({
+      session_id: 'session-1',
+    });
+    mockAccessibleSession.mockResolvedValueOnce({
+      ...createSession(),
+      title: '本人原始标题',
+    });
+    const where = await handleWechatChatCommand({
+      account,
+      owner: { id: 'user-1' },
+      sender,
+      content: '/where',
+    });
+    expect(where.replyText).toBe('当前接续：本人原始标题');
+    expect(where.replyText).not.toContain('事业复盘');
+    await handleWechatChatCommand({
+      account,
+      owner: { id: 'user-1' },
+      sender,
+      content: '/new 本人新对话',
+    });
+    expect(mockCreateChatSessionForOwnedUser).toHaveBeenCalledWith(
+      'user-1',
+      '本人新对话',
+      `wechat:${account.id}:${buildWechatSenderHash(account.id, sender)}`,
+    );
   });
 });

@@ -40,6 +40,23 @@ import {
   runAgentRequestRecoveryOnce,
 } from '#runtime/agent-request-recovery';
 import type { DurableRequest } from '#infrastructure/repositories/agent-requests-repository';
+import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
+
+const memoryScope: MemoryRequestScope = {
+  scopeId: 'root',
+  ownerUserId: 'user',
+  actorKey: 'user:user',
+  audienceKey: 'owner',
+  subjectId: 'self:user',
+  epoch: 1,
+  learnRevision: 1,
+  useRevision: 1,
+  contextGeneration: 0,
+  contextAudience: '',
+  learningEnabled: true,
+  recallEnabled: true,
+  chatEditingEnabled: true,
+};
 
 function request(overrides: Partial<DurableRequest> = {}): DurableRequest {
   return {
@@ -49,11 +66,13 @@ function request(overrides: Partial<DurableRequest> = {}): DurableRequest {
     owner_user_id: 'user',
     session_id: 'session',
     user_message_id: 'message',
+    memory_scope: memoryScope,
     input: {
       accountId: 'web:user',
       sessionId: 'session',
       userMessage: 'question',
       history: [],
+      memoryScope,
     },
     runtime: {
       source: 'official',
@@ -103,6 +122,15 @@ describe('durable request recovery', () => {
         }),
       }),
     );
+  });
+  it('fails unstarted legacy requests without a frozen memory identity before provider resolution', async () => {
+    const row = request({ memory_scope: null });
+    delete row.input.memoryScope;
+    await recoverAgentRequest(row);
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.runtime).not.toHaveBeenCalled();
+    expect(f.failure).toHaveBeenCalledOnce();
+    expect(f.deliver).toHaveBeenCalledOnce();
   });
   it('uses the current backend thinking level for unstarted historical requests', async () => {
     const row = request();

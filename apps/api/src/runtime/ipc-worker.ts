@@ -5,6 +5,8 @@ import { paipanRequestQueue } from '@fateclaw/contracts/agent/paipan';
 import { processPaipanToolPayload } from './paipan-tool-handler.js';
 import { visualizationRequestQueue } from '@fateclaw/contracts/agent/visualization';
 import { processVisualizationToolPayload } from './visualization-tool-handler.js';
+import { memoryRequestQueue } from '@fateclaw/contracts/agent/memory';
+import { processMemoryToolPayload } from './memory-tool-handler.js';
 import {
   acquireAgentExecution,
   releaseGlobalAgentSlot,
@@ -496,6 +498,7 @@ async function listenForAccount(accountId: string): Promise<void> {
               queueName,
               paipanRequestQueue(accountId),
               visualizationRequestQueue(accountId),
+              memoryRequestQueue(accountId),
               1,
             );
 
@@ -529,6 +532,8 @@ async function listenForAccount(accountId: string): Promise<void> {
             await processPaipanToolPayload(payload, accountId);
           } else if (queue === visualizationRequestQueue(accountId)) {
             await processVisualizationToolPayload(payload, accountId);
+          } else if (queue === memoryRequestQueue(accountId)) {
+            await processMemoryToolPayload(payload, accountId);
           } else if (queue.endsWith(':ai-chat:outbox')) {
             // AI Chat 专属队列：永远不发微信
             await processAiChatOutboxPayload(
@@ -973,13 +978,16 @@ export function submitAiChatInboxRequest(
           entitlementSnapshot: entitlementMetadata(entitlement),
         });
         const priority = resolveInboxPriority(entitlement);
+        const admissionInput = { ...input, entitlementSnapshot: entitlement };
         executionId ??= await admitAgentRequest({
-          input: { ...input, entitlementSnapshot: entitlement },
+          input: admissionInput,
           requestId,
           ownerUserId,
           runtime: baseRuntime,
           deadlineAt: deadlineAtMs,
         });
+        input.memoryScope = admissionInput.memoryScope;
+        input.piSessionBase = admissionInput.piSessionBase;
 
         timeout = setTimeout(
           async () => {
@@ -1105,6 +1113,7 @@ export function submitAiChatInboxRequest(
           history: input.history,
           sessionBoardContexts: input.sessionBoardContexts,
           piSessionBase: input.piSessionBase,
+          memoryScope: input.memoryScope,
           acceptedAtMs: startedAtMs,
           sessionId: input.sessionId,
           userMessageId: input.userMessageId,

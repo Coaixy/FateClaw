@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { Loader2, Save, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react';
 
 import { accountsApi } from '@/features/accounts/api';
+import { ApiError } from '@/lib/http/client';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
@@ -60,6 +61,8 @@ export function UserSoulCard() {
   const { formatNumber, t } = useI18n();
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
+  const [baseHash, setBaseHash] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [editEnabled, setEditEnabled] = useState(true);
   const [status, statusDispatch] = useReducer(soulStatusReducer, {
     loading: true,
@@ -69,61 +72,111 @@ export function UserSoulCard() {
   });
   const { loading, saving, savingEditEnabled, error } = status;
   const dirty = content !== savedContent;
+  const alive = useRef(true);
+  const read = useRef<AbortController | null>(null);
+  const mutation = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-
-    async function loadSoul() {
-      statusDispatch({ type: 'loadStart' });
-      try {
-        const result = await accountsApi.getUserSoul();
-        if (!alive) return;
-        setContent(result.content);
-        setSavedContent(result.content);
-        setEditEnabled(result.edit_enabled);
-      } catch (err) {
-        if (!alive) return;
+  const loadSoul = async () => {
+    if (mutation.current) return;
+    read.current?.abort();
+    const controller = new AbortController();
+    read.current = controller;
+    statusDispatch({ type: 'loadStart' });
+    try {
+      const result = await accountsApi.getUserSoul(controller.signal);
+      if (controller.signal.aborted) return;
+      setContent(result.content);
+      setSavedContent(result.content);
+      setEditEnabled(result.edit_enabled);
+      const hash =
+        result.sha256 && /^[a-f0-9]{64}$/i.test(result.sha256)
+          ? result.sha256
+          : null;
+      setBaseHash(hash);
+      setConflict(false);
+      if (!hash)
         statusDispatch({
           type: 'error',
-          message:
-            err instanceof Error ? err.message : t('pages.persona.loadFailed'),
+          message: t('pages.persona.versionUnavailable'),
         });
-      } finally {
-        if (alive) statusDispatch({ type: 'loadEnd' });
-      }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      statusDispatch({
+        type: 'error',
+        message:
+          err instanceof Error ? err.message : t('pages.persona.loadFailed'),
+      });
+    } finally {
+      if (!controller.signal.aborted) statusDispatch({ type: 'loadEnd' });
     }
+  };
 
+  useEffect(() => {
+    alive.current = true;
     void loadSoul();
     return () => {
-      alive = false;
+      alive.current = false;
+      read.current?.abort();
+      mutation.current?.abort();
     };
   }, []);
 
   const saveSoul = async () => {
-    if (!dirty || saving) return;
+    if (
+      !dirty ||
+      saving ||
+      loading ||
+      !baseHash ||
+      conflict ||
+      mutation.current
+    )
+      return;
+    const submitted = content;
+    const controller = new AbortController();
+    mutation.current = controller;
     statusDispatch({ type: 'saveStart' });
     try {
-      await accountsApi.updateUserSoul(content, editEnabled);
-      setSavedContent(content);
+      const result = await accountsApi.updateUserSoul(
+        submitted,
+        baseHash,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      if (!/^[a-f0-9]{64}$/i.test(result.sha256)) {
+        setBaseHash(null);
+        throw new Error(t('pages.persona.versionUnavailable'));
+      }
+      setBaseHash(result.sha256);
+      setSavedContent(submitted);
       toast('success', t('pages.persona.saved'));
     } catch (err) {
+      if (controller.signal.aborted) return;
+      const changed = err instanceof ApiError && err.status === 409;
+      setConflict(changed);
       statusDispatch({
         type: 'error',
-        message:
-          err instanceof Error ? err.message : t('pages.persona.saveFailed'),
+        message: changed
+          ? t('pages.persona.conflict')
+          : err instanceof Error
+            ? err.message
+            : t('pages.persona.saveFailed'),
       });
     } finally {
-      statusDispatch({ type: 'saveEnd' });
+      mutation.current = null;
+      if (alive.current) statusDispatch({ type: 'saveEnd' });
     }
   };
 
   const toggleEditEnabled = async () => {
-    if (loading || saving || savingEditEnabled) return;
+    if (loading || saving || savingEditEnabled || mutation.current) return;
+    const controller = new AbortController();
+    mutation.current = controller;
     const nextValue = !editEnabled;
     setEditEnabled(nextValue);
     statusDispatch({ type: 'toggleStart' });
     try {
-      await accountsApi.updateUserSoulEditEnabled(nextValue);
+      await accountsApi.updateUserSoulEditEnabled(nextValue, controller.signal);
+      if (controller.signal.aborted) return;
       toast(
         'success',
         nextValue
@@ -131,6 +184,7 @@ export function UserSoulCard() {
           : t('pages.persona.editDisabledToast'),
       );
     } catch (err) {
+      if (controller.signal.aborted) return;
       setEditEnabled(!nextValue);
       statusDispatch({
         type: 'error',
@@ -140,7 +194,8 @@ export function UserSoulCard() {
             : t('pages.persona.editToggleFailed'),
       });
     } finally {
-      statusDispatch({ type: 'toggleEnd' });
+      mutation.current = null;
+      if (alive.current) statusDispatch({ type: 'toggleEnd' });
     }
   };
 
@@ -179,7 +234,14 @@ export function UserSoulCard() {
           <button
             type="button"
             onClick={() => void saveSoul()}
-            disabled={!dirty || loading || saving || savingEditEnabled}
+            disabled={
+              !dirty ||
+              !baseHash ||
+              conflict ||
+              loading ||
+              saving ||
+              savingEditEnabled
+            }
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-[13px] font-semibold text-on-primary disabled:cursor-not-allowed disabled:opacity-45"
           >
             {saving ? (
@@ -197,7 +259,9 @@ export function UserSoulCard() {
       ) : (
         <div className="relative">
           <textarea
+            aria-label={t('pages.persona.soulTitle')}
             value={content}
+            disabled={saving}
             onChange={(event) => setContent(event.target.value)}
             className="h-[220px] w-full resize-y rounded-xl border border-hairline bg-surface-card/70 px-3.5 py-3 pr-20 font-mono text-[12px] leading-[1.7] text-ink transition-colors focus:border-primary/60 focus:bg-surface-card/90 focus:outline-none"
             placeholder={t('pages.persona.placeholder')}
@@ -210,14 +274,27 @@ export function UserSoulCard() {
       )}
 
       <div className="flex flex-col gap-1 text-[11px] text-muted sm:flex-row sm:items-center sm:justify-between">
-        <span className={error ? 'text-error' : ''}>
-          {error ||
+        <span
+          role={error || conflict ? 'alert' : undefined}
+          className={error || conflict ? 'text-error' : ''}
+        >
+          {(conflict ? t('pages.persona.conflict') : error) ||
             (dirty ? t('pages.persona.dirty') : t('pages.persona.synced'))}
         </span>
         <span className="font-mono">
           {t('pages.persona.chars', { count: formatNumber(content.length) })}
         </span>
       </div>
+      {(conflict || !baseHash) && !loading && (
+        <button
+          type="button"
+          disabled={saving || savingEditEnabled}
+          onClick={() => void loadSoul()}
+          className="min-h-10 rounded-lg border border-hairline px-3 text-[12px] text-primary disabled:opacity-40"
+        >
+          {t('pages.persona.loadLatest')}
+        </button>
+      )}
     </div>
   );
 }

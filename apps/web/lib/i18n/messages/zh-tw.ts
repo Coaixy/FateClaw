@@ -1,4 +1,7 @@
+import { zhTWMemoryMessages } from './memory';
+
 export const zhTWMessages = {
+  memory: zhTWMemoryMessages,
   acknowledgements: {
     navigation: '鳴謝',
     eyebrow: '致開源社群',
@@ -446,6 +449,10 @@ export const zhTWMessages = {
       loadFailed: '載入自訂人格失敗',
       saved: '自訂人格已儲存並注入執行環境',
       saveFailed: '儲存自訂人格失敗',
+      conflict:
+        '自訂人格已在其他位置更新，目前草稿已保留。請載入最新內容後重新編輯。',
+      versionUnavailable: '暫時無法確認人格版本，請重新載入後再儲存。',
+      loadLatest: '載入最新內容',
       editEnabled: '對話可編輯記憶',
       editDisabled: '對話不可編輯記憶',
       editEnabledToast: '對話記憶編輯已開啟',
@@ -964,6 +971,11 @@ export const zhTWMessages = {
         read: '查閱',
         read_soul: '命主資料',
         edit_soul: '更新命主資料',
+        search_memory: '檢索長期記憶',
+        get_memory_source: '查閱記憶來源',
+        remember_memory: '儲存長期記憶',
+        update_memory: '修改長期記憶',
+        forget_memory: '遺忘長期記憶',
         reverse_ganzhi: '干支反推',
         get_ganzhi_by_datetime: '排八字',
         get_current_time: '當前時間',
