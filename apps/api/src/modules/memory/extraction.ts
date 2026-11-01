@@ -67,8 +67,9 @@ const candidateSchema = z.strictObject({
   validTo: timestamp.optional(),
   supersedesId: cleanText(200).optional(),
 });
+// Candidates are checked one by one, so one malformed entry does not discard the others.
 const extractionSchema = z.strictObject({
-  candidates: z.array(candidateSchema).max(128),
+  candidates: z.array(z.unknown()).max(128),
 });
 
 const EXTRACTION_PROMPT = `Extract durable memory from the supplied JSON data. Return only JSON with the shape {"candidates": []}.
@@ -89,8 +90,15 @@ export function estimateMemoryExtractionInput(
   );
 }
 
-function invalidOutput(message: string): never {
-  throw new MemoryModelError('MEMORY_INVALID_CANDIDATE', message);
+/** A refused candidate; the rest of the model output still applies. */
+class CandidateRejected extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
+function reject(code: string): never {
+  throw new CandidateRejected(code);
 }
 
 function parseJson(text: string): unknown {
@@ -162,18 +170,25 @@ function checkAssertion(
   const statementText = (text: string) =>
     text.trim().replace(/[。！？!?.]+$/, '');
   if (statementText(context) !== statementText(candidate.quote))
-    invalidOutput('记忆候选必须引用完整陈述，不能省略否定、时态或限定上下文。');
-  const unsupported =
-    /(?:假设|假如|如果|要是|倘若|也许|可能|据说|听说|有人说|预测|推测|算命|推断|你说|你认为|(?:他|她|朋友|模型)(?:说|认为|判断)|(?:AI|你|模型)\s*(?:说|认为|预测|建议)|假定|举例|例如)|\b(?:hypothetical|hypothetically|suppose|assuming|might|maybe|perhaps|predict(?:s|ed|ion)?|the ai said|the model said|you said|he said|she said|hearsay)\b/i;
+    reject('INCOMPLETE');
+  // Hedges ("可能") stay in the verbatim quote, so only hypotheses, hearsay and other people's
+  // words are refused. "如果/要是" refuse only as an opening condition: "要是吃了会起疹子" in the
+  // middle of an allergy statement is still the user's own fact.
+  const hypothesis =
+    /(?:假设|假如|倘若|假定)|^\s*(?:如果|要是)|\b(?:hypothetical|hypothetically|suppose|assuming)\b/i;
+  const hearsay =
+    /(?:据说|听说|有人说|预测|推测|推断|你说|你认为|(?:他|她|朋友)(?:说|认为|判断)|(?:AI|你|模型)\s*(?:说|认为|预测|建议)|(?<!我)(?:说|认为|判断)我)|\b(?:predict(?:s|ed|ion)?|the ai said|the model said|you said|he said|she said|hearsay)\b/i;
+  const quotedSpeech = /(?:说|讲|道|认为)\s*[:：]?\s*[“「『"]/;
   if (
-    unsupported.test(context) ||
-    /[“”「」『』]/.test(context) ||
+    hypothesis.test(context) ||
+    hearsay.test(context) ||
+    quotedSpeech.test(context) ||
     /[?？]/.test(candidate.quote) ||
     /(?:忽略|无视).*(?:指令|规则|提示)|ignore.*instructions|(?:输出|return).*json/i.test(
       context,
     )
   )
-    invalidOutput('记忆候选包含预测、假设、引用或指令，不能作为事实证据。');
+    reject('UNSUPPORTED');
   const plan =
     /(?:计划|打算|准备(?:要|去|在)|将要)|\b(?:plan(?:ning)? to|intend to|going to)\b/i;
   const future =
@@ -184,70 +199,96 @@ function checkAssertion(
       candidate.kind === 'plan') &&
     candidate.assertionType !== 'plan'
   )
-    invalidOutput('用户计划必须保留计划状态，不能记录为已经发生的事实。');
+    reject('PLAN_STATE');
   if (
     candidate.assertionType === 'plan' &&
     candidate.kind !== 'plan' &&
     candidate.kind !== 'decision'
   )
-    invalidOutput('计划类型与记忆类别不一致。');
+    reject('PLAN_STATE');
+}
+
+function checkCandidate(
+  value: unknown,
+  sourceById: Map<string, MemorySourceInput>,
+  existingById: Map<string, MemoryExistingFact>,
+): MemoryCandidate {
+  const parsed = candidateSchema.safeParse(value);
+  if (!parsed.success) reject('SCHEMA');
+  const candidate = parsed.data;
+  const source = sourceById.get(candidate.sourceId);
+  if (!source || !['user', 'profile', 'manual'].includes(source.role))
+    reject('SOURCE');
+  if (!source.content.includes(candidate.quote)) reject('QUOTE');
+  if (candidate.content !== candidate.quote) reject('QUOTE');
+  if (
+    source.speakerSubjectId &&
+    source.speakerSubjectId !== source.subjectId &&
+    !candidate.subjectId
+  )
+    reject('SUBJECT');
+  const subjectId = candidate.subjectId ?? source.subjectId;
+  if (source.subjectKind === 'unresolved' && subjectId === source.subjectId)
+    reject('SUBJECT');
+  if (subjectId !== source.subjectId && subjectId !== source.speakerSubjectId)
+    reject('SUBJECT');
+  if (
+    source.speakerSubjectId &&
+    source.speakerSubjectId !== source.subjectId &&
+    /^(?:(?:最近|目前|现在|昨天|今天|明天|这两年|这些年|今年|去年|明年)[，,\s]*)?(?:我(?:们|本人)?|本人|在下|I\b|I'm\b|I've\b|my\b|we\b)/i.test(
+      candidate.quote,
+    ) &&
+    subjectId !== source.speakerSubjectId
+  )
+    reject('SUBJECT');
+  checkAssertion(source, candidate);
+  if (
+    candidate.validFrom &&
+    candidate.validTo &&
+    Date.parse(candidate.validFrom) > Date.parse(candidate.validTo)
+  )
+    reject('VALIDITY');
+  if (candidate.supersedesId) {
+    const previous = existingById.get(candidate.supersedesId);
+    if (!previous) reject('SUPERSEDES');
+    if (previous.subjectId && previous.subjectId !== subjectId)
+      reject('SUPERSEDES');
+  }
+  return { ...candidate, subjectId };
 }
 
 function validateCandidates(
-  candidates: MemoryCandidate[],
+  candidates: unknown[],
   sources: MemorySourceInput[],
   existing: MemoryExistingFact[],
-): MemoryCandidate[] {
+): { candidates: MemoryCandidate[]; rejected: Record<string, number> } {
   const sourceById = new Map(sources.map((source) => [source.id, source]));
-  if (sourceById.size !== sources.length) invalidOutput('记忆来源标识重复。');
+  if (sourceById.size !== sources.length)
+    throw new MemoryModelError(
+      'MEMORY_INVALID_CANDIDATE',
+      '记忆来源标识重复。',
+    );
   const existingById = new Map(existing.map((fact) => [fact.id, fact]));
   const seen = new Set<string>();
-  return candidates.map((candidate) => {
-    const source = sourceById.get(candidate.sourceId);
-    if (!source || !['user', 'profile', 'manual'].includes(source.role))
-      invalidOutput('记忆候选必须引用本批次的用户陈述、手工记录或档案。');
-    if (!source.content.includes(candidate.quote))
-      invalidOutput('记忆候选的引用与原始来源不一致。');
-    if (candidate.content !== candidate.quote)
-      invalidOutput('记忆候选必须保留完整证据原文，不能添加或改写事实。');
-    if (
-      source.speakerSubjectId &&
-      source.speakerSubjectId !== source.subjectId &&
-      !candidate.subjectId
-    )
-      invalidOutput('说话人与讨论对象不同时，记忆候选必须明确归属。');
-    const subjectId = candidate.subjectId ?? source.subjectId;
-    if (source.subjectKind === 'unresolved' && subjectId === source.subjectId)
-      invalidOutput('讨论对象尚未确认，不能自动记录记忆。');
-    if (subjectId !== source.subjectId && subjectId !== source.speakerSubjectId)
-      invalidOutput('记忆候选的主体不属于当前来源。');
-    if (
-      source.speakerSubjectId &&
-      source.speakerSubjectId !== source.subjectId &&
-      /^(?:(?:最近|目前|现在|昨天|今天|明天|这两年|这些年|今年|去年|明年)[，,\s]*)?(?:我(?:们|本人)?|本人|在下|I\b|I'm\b|I've\b|my\b|we\b)/i.test(
-        candidate.quote,
-      ) &&
-      subjectId !== source.speakerSubjectId
-    )
-      invalidOutput('第一人称陈述必须归属于实际说话人。');
-    checkAssertion(source, candidate);
-    if (
-      candidate.validFrom &&
-      candidate.validTo &&
-      Date.parse(candidate.validFrom) > Date.parse(candidate.validTo)
-    )
-      invalidOutput('记忆候选的有效期结束时间早于开始时间。');
-    if (candidate.supersedesId) {
-      const previous = existingById.get(candidate.supersedesId);
-      if (!previous) invalidOutput('记忆候选引用了不存在的旧事实。');
-      if (previous.subjectId && previous.subjectId !== subjectId)
-        invalidOutput('记忆候选不能替代其他主体的事实。');
+  const accepted: MemoryCandidate[] = [];
+  const rejected: Record<string, number> = {};
+  for (const value of candidates) {
+    try {
+      const candidate = checkCandidate(value, sourceById, existingById);
+      const key = JSON.stringify([
+        candidate.sourceId,
+        candidate.subjectId,
+        candidate.content,
+      ]);
+      if (seen.has(key)) reject('DUPLICATE');
+      seen.add(key);
+      accepted.push(candidate);
+    } catch (error) {
+      if (!(error instanceof CandidateRejected)) throw error;
+      rejected[error.code] = (rejected[error.code] ?? 0) + 1;
     }
-    const key = JSON.stringify([source.id, subjectId, candidate.content]);
-    if (seen.has(key)) invalidOutput('记忆模型返回了重复候选。');
-    seen.add(key);
-    return { ...candidate, subjectId };
-  });
+  }
+  return { candidates: accepted, rejected };
 }
 
 export async function extractMemoryCandidates(
@@ -255,7 +296,13 @@ export async function extractMemoryCandidates(
     sources: MemorySourceInput[];
     existing: MemoryExistingFact[];
   },
-): Promise<MemoryModelResult & { candidates: MemoryCandidate[] }> {
+): Promise<
+  MemoryModelResult & {
+    candidates: MemoryCandidate[];
+    /** Refused candidates by reason code, for diagnostics without memory bodies. */
+    rejected?: Record<string, number>;
+  }
+> {
   if (!args.sources.length)
     throw new MemoryModelError('MEMORY_EMPTY_INPUT', '没有可提炼的记忆来源。');
   const input = JSON.stringify({
@@ -279,7 +326,7 @@ export async function extractMemoryCandidates(
       );
     return {
       ...result,
-      candidates: validateCandidates(
+      ...validateCandidates(
         parsed.data.candidates,
         args.sources,
         args.existing,

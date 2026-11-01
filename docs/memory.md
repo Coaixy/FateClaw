@@ -48,7 +48,7 @@ Sources and facts are authoritative; the keyword index can be rebuilt. Source te
 
 `epoch` advances when memory is cleared and invalidates all earlier work. `binding_revision` advances when a sender's identity binding changes. Settings, items and bindings also carry an ordinary `revision` used for compare-and-swap edits, which return `409` on conflict.
 
-Extraction keeps exact, complete source statements. It preserves negation, attribution and uncertainty, distinguishes a plan from a completed event, and rejects questions, hypothetical examples, hearsay and assistant text as evidence. First-person statements refer to the actual speaker, even in a conversation about a client. Ambiguous historical identity stays unresolved.
+Extraction keeps exact, complete source statements. It preserves negation, attribution and uncertainty, distinguishes a plan from a completed event, and rejects questions, hypothetical examples, hearsay and assistant text as evidence. First-person statements refer to the actual speaker, even in a conversation about a client. Ambiguous historical identity stays unresolved. Each candidate is checked separately: a refused candidate is counted by reason code in the job payload (`rejectedCandidates`) and the others still apply. Hedged statements such as "可能" are kept verbatim; opening conditions ("如果…"), hypotheses, hearsay and quoted speech are refused.
 
 Repeated facts merge their evidence. A newer automatic statement with the same fact key can supersede an older automatic statement; observation order prevents a delayed old job from replacing a newer fact. Automatic extraction never supersedes a manual or explicitly remembered item. Direct edits use revision checks, and conflict resolution never rewrites source messages.
 

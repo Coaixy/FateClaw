@@ -61,15 +61,15 @@ describe('evidence-bound memory extraction', () => {
   });
 
   it.each(['assistant', 'unknown'])(
-    'rejects %s messages as a user fact source',
+    'refuses %s messages as a user fact source',
     async (role) => {
-      await expect(
-        extractMemoryCandidates({
-          ...args,
-          sources: [{ ...source, role: role as MemorySourceInput['role'] }],
-          runner: output({ candidates: [candidate] }),
-        }),
-      ).rejects.toMatchObject({ code: 'MEMORY_INVALID_CANDIDATE', usage });
+      const result = await extractMemoryCandidates({
+        ...args,
+        sources: [{ ...source, role: role as MemorySourceInput['role'] }],
+        runner: output({ candidates: [candidate] }),
+      });
+      expect(result.candidates).toEqual([]);
+      expect(result.rejected).toEqual({ SOURCE: 1 });
     },
   );
 
@@ -79,43 +79,78 @@ describe('evidence-bound memory extraction', () => {
     { ...candidate, content: '我在北京工作。' },
     { ...candidate, supersedesId: 'invented-existing-fact' },
     { ...candidate, subjectId: 'another-person' },
+    { ...candidate, unexpected: true },
   ])(
-    'rejects fabricated source bindings, content, prior facts and subjects',
+    'refuses fabricated bindings, content, prior facts, subjects and malformed entries',
     async (proposed) => {
-      await expect(
-        extractMemoryCandidates({
-          ...args,
-          runner: output({ candidates: [proposed] }),
-        }),
-      ).rejects.toMatchObject({ code: 'MEMORY_INVALID_CANDIDATE', usage });
+      const result = await extractMemoryCandidates({
+        ...args,
+        runner: output({ candidates: [proposed] }),
+      });
+      expect(result.candidates).toEqual([]);
+      expect(Object.values(result.rejected ?? {})).toEqual([1]);
     },
   );
 
+  it('keeps valid candidates when another candidate in the same output is refused', async () => {
+    const content = '我对海鲜过敏，要是吃了会起疹子。朋友说我明年结婚。';
+    const allergy = '我对海鲜过敏，要是吃了会起疹子。';
+    const hearsay = '朋友说我明年结婚。';
+    const result = await extractMemoryCandidates({
+      ...args,
+      sources: [{ ...source, content }],
+      runner: output({
+        candidates: [
+          { ...candidate, quote: hearsay, content: hearsay, kind: 'event' },
+          { ...candidate, quote: allergy, content: allergy, kind: 'fact' },
+        ],
+      }),
+    });
+    expect(result.candidates.map((item) => item.content)).toEqual([allergy]);
+    expect(result.rejected).toEqual({ UNSUPPORTED: 1 });
+  });
+
   it.each([
     ['假如我明年结婚，我会搬家。', '我明年结婚'],
+    ['如果我辞职，就去北京。', '如果我辞职，就去北京。'],
     ['我并没有在北京工作。', '北京工作'],
     ['我计划明年结婚。', '我计划明年结婚。'],
     ['模型预测我明年结婚。', '模型预测我明年结婚。'],
     ['朋友说我明年结婚。', '朋友说我明年结婚。'],
+    ['算命先生说我克夫。', '算命先生说我克夫。'],
     ['我可能明年结婚。', '我可能明年结婚。'],
     ['我明年结婚。', '我明年结婚。'],
     ['客户说：“我已经结婚。”', '客户说：“我已经结婚。”'],
   ])(
-    'preserves qualifiers and excludes predictions, hypotheses and quoted claims',
+    'refuses hypotheses, hearsay, quoted speech, clipped quotes and plans as events: %s',
     async (content, quote) => {
-      await expect(
-        extractMemoryCandidates({
-          ...args,
-          sources: [{ ...source, content }],
-          runner: output({
-            candidates: [
-              { ...candidate, quote, content: quote, kind: 'event' },
-            ],
-          }),
+      const result = await extractMemoryCandidates({
+        ...args,
+        sources: [{ ...source, content }],
+        runner: output({
+          candidates: [{ ...candidate, quote, content: quote, kind: 'event' }],
         }),
-      ).rejects.toMatchObject({ code: 'MEMORY_INVALID_CANDIDATE' });
+      });
+      expect(result.candidates).toEqual([]);
     },
   );
+
+  it.each([
+    '我在「腾讯」工作。',
+    '我从事算命行业十年了。',
+    '我对海鲜过敏，要是吃了会起疹子。',
+    '我可能是O型血。',
+    '我以前找人算过命，但我不信。',
+  ])('accepts the user’s own statement: %s', async (content) => {
+    const result = await extractMemoryCandidates({
+      ...args,
+      sources: [{ ...source, content }],
+      runner: output({
+        candidates: [{ ...candidate, quote: content, content, kind: 'fact' }],
+      }),
+    });
+    expect(result.candidates.map((item) => item.content)).toEqual([content]);
+  });
 
   it('retains negation and plans without upgrading them into accomplished events', async () => {
     const content = '我没有结婚。\n我计划明年结婚。';
@@ -166,13 +201,12 @@ describe('evidence-bound memory extraction', () => {
       kind: 'event',
     };
     for (const subjectId of [undefined, 'client']) {
-      await expect(
-        extractMemoryCandidates({
-          ...args,
-          sources: [ownerSource],
-          runner: output({ candidates: [{ ...ownerCandidate, subjectId }] }),
-        }),
-      ).rejects.toMatchObject({ code: 'MEMORY_INVALID_CANDIDATE' });
+      const refused = await extractMemoryCandidates({
+        ...args,
+        sources: [ownerSource],
+        runner: output({ candidates: [{ ...ownerCandidate, subjectId }] }),
+      });
+      expect(refused.rejected).toEqual({ SUBJECT: 1 });
     }
     const result = await extractMemoryCandidates({
       ...args,

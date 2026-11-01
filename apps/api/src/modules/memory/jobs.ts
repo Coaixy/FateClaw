@@ -708,12 +708,20 @@ async function processExtract(
         'UPDATE memory_sources SET extracted_revision=$2 WHERE id=$1 AND revision=$2',
         [source.id, source.revision],
       );
+    const rejected = {
+      ...(job.payload.rejectedCandidates as Record<string, number> | undefined),
+    };
+    for (const [code, count] of Object.entries(result.rejected ?? {}))
+      rejected[code] = (rejected[code] ?? 0) + count;
     return {
       state: done ? 'succeeded' : 'pending',
       payload: {
         ...job.payload,
         extractionBatches: spans,
         extractionCursor: cursor + 1,
+        ...(Object.keys(rejected).length
+          ? { rejectedCandidates: rejected }
+          : {}),
       },
       processedCount: cursor + 1,
       totalCount: batches.length,
