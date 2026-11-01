@@ -5,8 +5,10 @@ import { getRedis } from '#infrastructure/redis';
 import { getAccountsByUserId } from './accounts-repository.js';
 import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
 import {
+  beginBulkMemoryRemoval,
   ensureOwnerMemoryScope,
   lockMemoryRoot,
+  reconcileRemovedMemorySources,
 } from '#modules/memory/repository';
 import { mergePiSessionArchivePayload } from '#modules/chat/pi-session-files';
 
@@ -579,6 +581,7 @@ export async function resetUserMessages(userId: string): Promise<string[]> {
     await client.query('BEGIN');
     const root = await ensureOwnerMemoryScope(userId, client);
     await lockMemoryRoot(root.id, client);
+    await beginBulkMemoryRemoval(client);
     await client.query(
       `UPDATE messages
        SET deleted_at = $1
@@ -589,6 +592,7 @@ export async function resetUserMessages(userId: string): Promise<string[]> {
          )`,
       [now, userId, accountIds],
     );
+    await reconcileRemovedMemorySources(client, [userId]);
     await client.query(
       'UPDATE chat_sessions SET memory_context_generation=memory_context_generation+1 WHERE user_id=$1',
       [userId],

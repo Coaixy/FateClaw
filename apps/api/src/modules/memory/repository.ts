@@ -643,6 +643,54 @@ export async function revokeMemorySource(
   );
 }
 
+/** Must run in the bulk transaction; the per-row revocation triggers are suppressed there. */
+export async function beginBulkMemoryRemoval(db: DbQueryable): Promise<void> {
+  await db.query("SELECT set_config('fateclaw.memory_bulk','on',true)");
+}
+
+/**
+ * Set-based equivalent of the memory_message_changed and memory_source_* triggers for owners
+ * whose messages were removed in bulk.
+ */
+export async function reconcileRemovedMemorySources(
+  db: DbQueryable,
+  ownerUserIds: string[],
+): Promise<void> {
+  const owners = [...new Set(ownerUserIds)];
+  if (!owners.length) return;
+  const { rows } = await db.query<{ id: string }>(
+    `UPDATE memory_sources s SET excluded_at=clock_timestamp()
+     WHERE s.owner_user_id=ANY($1::text[]) AND s.excluded_at IS NULL AND s.source_kind='message'
+       AND NOT EXISTS(SELECT 1 FROM messages m WHERE m.id=s.message_id AND m.account_id=s.account_id AND m.deleted_at IS NULL)
+     RETURNING s.id`,
+    [owners],
+  );
+  const excluded = rows.map((row) => row.id);
+  await db.query(
+    "UPDATE memory_evidence SET revoked_at=clock_timestamp(),quote='' WHERE source_id=ANY($1::text[]) AND revoked_at IS NULL",
+    [excluded],
+  );
+  // Evidence of hard-deleted sources is already gone by cascade.
+  await db.query(
+    `UPDATE memory_items i SET status='forgotten',content='[来源已撤销]',updated_at=clock_timestamp()
+     WHERE i.owner_user_id=ANY($1::text[]) AND i.status<>'forgotten'
+       AND NOT EXISTS(SELECT 1 FROM memory_evidence e WHERE e.item_id=i.id AND e.revoked_at IS NULL)`,
+    [owners],
+  );
+  await db.query(
+    `DELETE FROM memory_index_entries x WHERE x.owner_user_id=ANY($1::text[]) AND (
+       x.object_kind='source' AND NOT EXISTS(SELECT 1 FROM memory_sources s WHERE s.id=x.object_id AND s.excluded_at IS NULL)
+       OR x.object_kind='item' AND EXISTS(SELECT 1 FROM memory_items i WHERE i.id=x.object_id AND i.status='forgotten'))`,
+    [owners],
+  );
+  await db.query(
+    `UPDATE memory_jobs SET state='cancelled',lease_token=NULL,lease_until=NULL,error_code='SOURCE_REVOKED',updated_at=clock_timestamp()
+     WHERE owner_user_id=ANY($1::text[]) AND kind='extract' AND state IN ('pending','running','paused')
+       AND (source_id IS NULL OR source_id=ANY($2::text[]))`,
+    [owners, excluded],
+  );
+}
+
 export async function getCurrentMemorySource(
   sourceId: string,
   db: DbQueryable = getDbPool(),

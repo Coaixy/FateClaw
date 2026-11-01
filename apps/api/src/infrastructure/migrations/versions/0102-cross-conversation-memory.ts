@@ -65,6 +65,9 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       );
       CREATE INDEX memory_entities_owner ON memory_entities(owner_user_id,kind) WHERE deleted_at IS NULL;
       CREATE INDEX memory_entities_client ON memory_entities(client_id) WHERE client_id IS NOT NULL;
+      -- Plain indexes on cascade columns: a partial or non-leading index cannot serve the
+      -- per-parent cascade lookup, which then scans the whole child table.
+      CREATE INDEX memory_entities_scope ON memory_entities(scope_id);
 
       CREATE TABLE memory_sources (
         id text PRIMARY KEY,
@@ -96,6 +99,8 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       CREATE INDEX memory_sources_message ON memory_sources(message_id,account_id) WHERE message_id IS NOT NULL;
       CREATE INDEX memory_sources_owner_ref ON memory_sources(owner_user_id,source_ref);
       CREATE INDEX memory_sources_session ON memory_sources(session_id) WHERE session_id IS NOT NULL;
+      CREATE INDEX memory_sources_subject ON memory_sources(subject_id);
+      CREATE INDEX memory_sources_space ON memory_sources(memory_space_id) WHERE memory_space_id IS NOT NULL;
 
       CREATE TABLE memory_items (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -122,7 +127,8 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
         updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
         UNIQUE(family_id,revision)
       );
-      CREATE INDEX memory_items_scope ON memory_items(scope_id,subject_id,observed_at DESC) WHERE status='active';
+      CREATE INDEX memory_items_scope ON memory_items(scope_id,subject_id,observed_at DESC);
+      CREATE INDEX memory_items_subject ON memory_items(subject_id);
       CREATE INDEX memory_items_owner ON memory_items(owner_user_id,updated_at DESC,id);
       CREATE INDEX memory_items_merged_into ON memory_items(merged_into_id) WHERE merged_into_id IS NOT NULL;
       CREATE INDEX memory_items_supersedes ON memory_items(supersedes_id) WHERE supersedes_id IS NOT NULL;
@@ -164,6 +170,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       );
       CREATE INDEX memory_index_scope ON memory_index_entries(scope_id,subject_id,object_kind);
       CREATE INDEX memory_index_owner ON memory_index_entries(owner_user_id);
+      CREATE INDEX memory_index_subject ON memory_index_entries(subject_id);
 
       CREATE TABLE memory_jobs (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -193,6 +200,8 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       CREATE INDEX memory_jobs_owner ON memory_jobs(owner_user_id,created_at DESC);
       CREATE INDEX memory_jobs_source ON memory_jobs(source_id) WHERE source_id IS NOT NULL;
       CREATE INDEX memory_jobs_finished ON memory_jobs(updated_at) WHERE state IN ('succeeded','skipped','cancelled');
+      CREATE INDEX memory_jobs_scope ON memory_jobs(scope_id);
+      CREATE INDEX memory_jobs_subject ON memory_jobs(subject_id) WHERE subject_id IS NOT NULL;
 
       CREATE TABLE memory_exclusions (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -216,6 +225,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       CREATE INDEX memory_exclusions_scope ON memory_exclusions(scope_id,subject_id);
       CREATE INDEX memory_exclusions_source ON memory_exclusions(source_id) WHERE source_id IS NOT NULL;
       CREATE INDEX memory_exclusions_source_ref ON memory_exclusions(owner_user_id,source_ref) WHERE source_ref IS NOT NULL;
+      CREATE INDEX memory_exclusions_subject ON memory_exclusions(subject_id) WHERE subject_id IS NOT NULL;
 
       CREATE TABLE memory_tool_results (
         owner_user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -268,10 +278,13 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       CREATE INDEX memory_budget_job ON memory_budget_reservations(job_id) WHERE job_id IS NOT NULL;
       CREATE INDEX memory_budget_deadline ON memory_budget_reservations(deadline_at,id) WHERE state='pending';
 
+      -- Bulk callers set fateclaw.memory_bulk and run reconcileRemovedMemorySources once, because
+      -- these per-row triggers cost several statements for every removed message.
       CREATE FUNCTION memory_revoke_source_dependencies() RETURNS trigger LANGUAGE plpgsql AS $$
       DECLARE affected_ids text[];
       BEGIN
-        IF NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_user_id) THEN
+        IF current_setting('fateclaw.memory_bulk',true)='on'
+          OR NOT EXISTS(SELECT 1 FROM users WHERE id=OLD.owner_user_id) THEN
           IF TG_OP='DELETE' THEN RETURN OLD; END IF;
           RETURN NEW;
         END IF;
@@ -295,6 +308,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
         EXECUTE FUNCTION memory_revoke_source_dependencies();
       CREATE FUNCTION memory_message_source_changed() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
+        IF current_setting('fateclaw.memory_bulk',true)='on' THEN RETURN NEW; END IF;
         UPDATE memory_sources SET excluded_at=clock_timestamp()
           WHERE message_id=OLD.id AND account_id=OLD.account_id AND excluded_at IS NULL;
         RETURN NEW;

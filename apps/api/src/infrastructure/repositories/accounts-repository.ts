@@ -1,5 +1,9 @@
 import { Account } from '#shared/types';
 import { getDbPool } from '#infrastructure/db-pool';
+import {
+  beginBulkMemoryRemoval,
+  reconcileRemovedMemorySources,
+} from '#modules/memory/repository';
 
 export async function createAccount(account: Account): Promise<void> {
   await getDbPool().query(
@@ -165,7 +169,14 @@ export async function deleteAccount(id: string): Promise<void> {
     await client.query('DELETE FROM conversation_logs WHERE account_id = $1', [
       id,
     ]);
+    const owner = await client.query<{ owner_id: string | null }>(
+      'SELECT owner_id FROM accounts WHERE id = $1',
+      [id],
+    );
+    await beginBulkMemoryRemoval(client);
     await client.query('DELETE FROM messages WHERE account_id = $1', [id]);
+    const ownerId = owner.rows[0]?.owner_id;
+    if (ownerId) await reconcileRemovedMemorySources(client, [ownerId]);
     // chat_sessions.account_id 是 NOT NULL FK，必须先删除会话。
     await client.query('DELETE FROM chat_sessions WHERE account_id = $1', [id]);
     await client.query('DELETE FROM accounts WHERE id = $1', [id]);

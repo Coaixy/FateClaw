@@ -9,6 +9,10 @@ import {
 import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
 import { logger } from './logger.js';
 import { importLegacySkillContent } from '#modules/skills/legacy-skill-import';
+import {
+  beginBulkMemoryRemoval,
+  reconcileRemovedMemorySources,
+} from '#modules/memory/repository';
 export {
   getRuntimeConfig,
   saveRuntimeConfig,
@@ -479,6 +483,8 @@ export async function deleteUser(userId: string): Promise<void> {
     await client.query('BEGIN');
     // Payment settlement takes the same user-before-order lock order.
     await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [userId]);
+    // Every memory row cascades from the user row deleted below.
+    await beginBulkMemoryRemoval(client);
     // 删除用户作为订阅者 / 创作者 / 拥有者的全部关系数据
     await client.query(
       `DELETE FROM user_skill_subscriptions
@@ -562,6 +568,7 @@ export async function resetUserData(userId: string): Promise<string[]> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await beginBulkMemoryRemoval(client);
 
     await client.query(
       `UPDATE messages
@@ -573,6 +580,7 @@ export async function resetUserData(userId: string): Promise<string[]> {
          )`,
       [now, userId, accountIds],
     );
+    await reconcileRemovedMemorySources(client, [userId]);
 
     await client.query('COMMIT');
   } catch (err) {

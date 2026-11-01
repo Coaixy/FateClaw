@@ -28,6 +28,7 @@ import {
 } from './domain.js';
 import {
   assertMemorySubject,
+  beginBulkMemoryRemoval,
   ensureOwnerMemoryScope,
   getCurrentMemorySource,
   insertMemoryItem,
@@ -598,6 +599,8 @@ export async function clearMemory(
       "UPDATE memory_evidence SET revoked_at=clock_timestamp(),quote='' WHERE item_id IN(SELECT id FROM memory_items WHERE owner_user_id=$1)",
       [ownerUserId],
     );
+    // The statements around this one already revoke everything for the owner.
+    await beginBulkMemoryRemoval(db);
     await db.query(
       'UPDATE memory_sources SET excluded_at=clock_timestamp(),manual_content=NULL WHERE owner_user_id=$1',
       [ownerUserId],

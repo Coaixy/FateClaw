@@ -22,6 +22,7 @@ import { createPiSessionFrame } from '@fateclaw/contracts/agent/session';
 import { readMemoryPiContext } from '#modules/memory/pi-contexts';
 import { updateMemoryScopeBinding } from '#modules/memory/scope-management';
 import { admitAgentRequest } from '#infrastructure/repositories/agent-requests-repository';
+import { resetUserMessages } from '#infrastructure/repositories/chat-repository';
 import type { AiChatSubmission } from '#runtime/request-types';
 import type { LlmRuntimeSnapshot } from '@fateclaw/contracts/agent';
 import {
@@ -310,6 +311,72 @@ describe.skipIf(!connectionString)(
       await forgetManualMemory('owner', item.id, item.revision);
       expect((await search(b.scope, '咖啡')).excerpts).toEqual([]);
       expect(a.scope.scopeId).toBe(b.scope.scopeId);
+    });
+
+    it('bulk message reset revokes learned facts, source index and pending work, keeping manual memory', async () => {
+      const learned = await turn('session-a', '我喜欢咖啡。');
+      const runner: MemoryTextRunner = async (request) => {
+        const input = JSON.parse(request.input) as {
+          sources: Array<{ id: string; subjectId: string; content: string }>;
+        };
+        return {
+          text: JSON.stringify({
+            candidates: input.sources.map((source) => ({
+              sourceId: source.id,
+              subjectId: source.subjectId,
+              quote: source.content,
+              content: source.content,
+              kind: 'preference',
+              assertionType: 'stated',
+            })),
+          }),
+          usage: { inputTokens: 20, outputTokens: 5 },
+        };
+      };
+      const policy = await getMemoryRuntimePolicy();
+      for (const job of await claimMemoryJobs(policy, 10))
+        await processMemoryJob(job, policy, {
+          modelOptions: { runner, resolveModel: async () => runtime },
+        });
+      const pending = await turn('session-b', '我住在杭州。');
+      const manual = await createManualMemory('owner', {
+        content: '我对花生过敏',
+      });
+
+      await resetUserMessages('owner');
+
+      const items = (
+        await getDbPool().query<{ id: string; status: string }>(
+          "SELECT id,status FROM memory_items WHERE owner_user_id='owner'",
+        )
+      ).rows;
+      expect(items.find((row) => row.id === manual.id)?.status).toBe('active');
+      expect(
+        items.filter((row) => row.id !== manual.id).map((row) => row.status),
+      ).toEqual(['forgotten']);
+      expect(
+        (
+          await getDbPool().query(
+            "SELECT 1 FROM memory_index_entries WHERE owner_user_id='owner' AND object_kind='source'",
+          )
+        ).rowCount,
+      ).toBe(0);
+      expect(
+        (
+          await getDbPool().query(
+            'SELECT state FROM memory_jobs WHERE request_id=$1',
+            [pending.requestId],
+          )
+        ).rows,
+      ).toEqual([{ state: 'cancelled' }]);
+      expect(
+        (
+          await getDbPool().query(
+            "SELECT 1 FROM memory_evidence e JOIN memory_sources s ON s.id=e.source_id WHERE s.message_id=$1 AND e.revoked_at IS NULL",
+            [learned.messageId],
+          )
+        ).rowCount,
+      ).toBe(0);
     });
 
     it('does not echo the current conversation back as a remembered source', async () => {

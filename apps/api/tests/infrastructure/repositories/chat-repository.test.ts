@@ -23,6 +23,8 @@ vi.mock('#infrastructure/logger', () => ({
 vi.mock('#modules/memory/repository', () => ({
   ensureOwnerMemoryScope: vi.fn(async () => ({ id: 'synthetic-root' })),
   lockMemoryRoot: vi.fn(async () => ({ id: 'synthetic-root' })),
+  beginBulkMemoryRemoval: vi.fn(async () => undefined),
+  reconcileRemovedMemorySources: vi.fn(async () => undefined),
 }));
 
 import {
