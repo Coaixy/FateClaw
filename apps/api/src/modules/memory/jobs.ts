@@ -996,8 +996,11 @@ async function processBackfill(
      LEFT JOIN LATERAL(SELECT COALESCE(captured.scope_id,r.memory_scope->>'scopeId',
        CASE WHEN m.metadata->>'source_channel'='wechat' THEN
          (SELECT scoped.id FROM memory_scopes scoped WHERE scoped.owner_user_id=$1 AND scoped.actor_key=concat('wechat:',m.metadata->>'wechat_account_id',':',m.metadata->>'sender_hash') LIMIT 1)
-         ELSE NULL END,$13::text) AS id) historical_scope ON true
+         ELSE $13::text END) AS id) historical_scope ON true
      WHERE s.user_id=$1 AND s.deleted_at IS NULL AND m.deleted_at IS NULL AND m.content<>''
+       -- Open API callers are not the owner, and a WeChat sender without its own scope must not
+       -- fall back to the owner space that shared senders read.
+       AND s.id NOT LIKE 'openapi:%' AND historical_scope.id IS NOT NULL
        AND ($2::text[] IS NULL OR s.id=ANY($2::text[])) AND ($3::text IS NULL OR s.client_id=$3)
        AND m.timestamp>=COALESCE($4::timestamptz,'-infinity') AND m.timestamp<=LEAST(COALESCE($5::timestamptz,'infinity'),$6::timestamptz)
        AND ($7::timestamptz IS NULL OR (m.timestamp,m.account_id,m.id)>($7::timestamptz,$8::text,$9::text))

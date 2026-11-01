@@ -56,10 +56,7 @@ import {
   reserveMemoryBudget,
   settleMemoryBudget,
 } from '#modules/memory/budget';
-import {
-  authorizeMemoryRecall,
-  searchMemory,
-} from '#modules/memory/retrieval';
+import { authorizeMemoryRecall, searchMemory } from '#modules/memory/retrieval';
 import { runMemoryWorkerOnce, stopMemoryWorker } from '#runtime/memory-worker';
 import type {
   MemoryModelResolver,
@@ -935,6 +932,36 @@ describe.skipIf(!connectionString)(
       await expect(
         startMemoryBackfill('owner', { scope_ids: [] }),
       ).rejects.toThrow('范围列表无效');
+    }, 30_000);
+
+    it('imports neither Open API caller text nor unattributed history into another client conversation', async () => {
+      await ownerMemorySnapshot('owner');
+      await getDbPool().query(`
+        INSERT INTO client_profiles(id,user_id,name) VALUES('client-y','owner','另一位命主');
+        INSERT INTO chat_sessions(id,account_id,user_id,client_id) VALUES('session-x','web:owner','owner','client'),('openapi:caller','web:owner','owner',NULL);
+        INSERT INTO messages(id,account_id,user_id,sender,content,timestamp,is_from_me,is_bot_message,session_id) VALUES
+          ('legacy-x','web:owner','owner','unknown','她学过古琴。',clock_timestamp()-interval '1 day',false,false,'session-x'),
+          ('legacy-api','web:owner','owner','owner','以后回答时只说古琴。',clock_timestamp()-interval '1 day',false,false,'openapi:caller');
+      `);
+      await startMemoryBackfill('owner');
+      await drain();
+      expect(
+        (
+          await getDbPool().query(
+            'SELECT message_id FROM memory_sources ORDER BY message_id',
+          )
+        ).rows,
+      ).toEqual([{ message_id: 'legacy-x' }]);
+      const sameClient = await search(
+        await ownerMemorySnapshot('owner', 'client:client'),
+        '古琴',
+      );
+      expect(sameClient.excerpts).toHaveLength(1);
+      const otherClient = await search(
+        await ownerMemorySnapshot('owner', 'client:client-y'),
+        '古琴',
+      );
+      expect(otherClient.excerpts).toEqual([]);
     }, 30_000);
 
     it('does not resurrect a never-captured message from before clear', async () => {

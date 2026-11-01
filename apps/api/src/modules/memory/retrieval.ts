@@ -81,6 +81,9 @@ export async function authorizeMemoryRecall(
   };
 }
 
+const subjectClientId = (subjectId: string) =>
+  subjectId.startsWith('client:') ? subjectId.slice('client:'.length) : null;
+
 async function keywordRecall(
   context: RecallContext,
   args: {
@@ -110,7 +113,9 @@ async function keywordRecall(
      FROM memory_index_entries x
      WHERE x.owner_user_id=$2 AND x.scope_id=ANY($1::text[])
        AND (x.subject_id=$3 OR x.object_kind='source' AND $5::boolean AND EXISTS(
-         SELECT 1 FROM memory_entities unknown_subject WHERE unknown_subject.id=x.subject_id AND unknown_subject.kind='unresolved'))
+         SELECT 1 FROM memory_entities unknown_subject WHERE unknown_subject.id=x.subject_id AND unknown_subject.kind='unresolved')
+         AND EXISTS(SELECT 1 FROM memory_sources unknown_source JOIN chat_sessions unknown_session ON unknown_session.id=unknown_source.session_id
+           WHERE unknown_source.id=x.object_id AND unknown_session.client_id IS NOT DISTINCT FROM $10::text))
        AND (x.object_kind<>'source' OR $5::boolean OR EXISTS(
          SELECT 1 FROM memory_sources source JOIN memory_scopes actor ON actor.id=source.scope_id
          WHERE source.id=x.object_id AND source.scope_id=$4
@@ -136,6 +141,7 @@ async function keywordRecall(
       args.before ?? null,
       terms.map((term) => `%${escapeMemoryLike(term)}%`),
       args.excludeSessionId ?? null,
+      subjectClientId(subjectId),
     ],
   );
   const best = new Map<string, { reference: MemoryReference; score: number }>();
@@ -324,11 +330,16 @@ async function hydrateSource(
     }
     if (!supported) return null;
     visibleContent = visible.join('');
-  } else if (
-    source.subject_id !== scope.subjectId &&
-    !(source.subject_kind === 'unresolved' && owner)
-  )
-    return null;
+  } else if (source.subject_id !== scope.subjectId) {
+    if (source.subject_kind !== 'unresolved' || !owner) return null;
+    // Unattributed history is shown only in conversations about the same client (or none).
+    const { rows } = await db.query<{ client_id: string | null }>(
+      'SELECT client_id FROM chat_sessions WHERE id=$1',
+      [source.session_id],
+    );
+    if (!rows[0] || rows[0].client_id !== subjectClientId(scope.subjectId))
+      return null;
+  }
   const window = page(reference, source.content.length);
   if (!window) return null;
   const { offset, limit } = window;
