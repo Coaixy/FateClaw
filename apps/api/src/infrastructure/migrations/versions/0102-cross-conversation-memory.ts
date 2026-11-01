@@ -140,7 +140,9 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
         quote_end integer,
         created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
         revoked_at timestamptz,
-        UNIQUE(item_id,source_id,source_revision,quote)
+        -- The range identifies the quote; indexing the text itself would cap quote length and
+        -- collide once revocation blanks it.
+        UNIQUE NULLS NOT DISTINCT(item_id,source_id,source_revision,quote_start,quote_end)
       );
       CREATE INDEX memory_evidence_source ON memory_evidence(source_id);
 

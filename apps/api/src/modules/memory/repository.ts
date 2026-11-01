@@ -918,7 +918,7 @@ export async function insertMemoryItem(
       );
     await db.query(
       `INSERT INTO memory_evidence(item_id,source_id,source_revision,source_hash,quote,quote_start,quote_end)
-       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(item_id,source_id,source_revision,quote) DO NOTHING`,
+       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(item_id,source_id,source_revision,quote_start,quote_end) DO NOTHING`,
       [
         item.id,
         source.id,
