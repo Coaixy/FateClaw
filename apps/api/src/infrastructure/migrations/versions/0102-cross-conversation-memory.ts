@@ -12,6 +12,9 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
     await client.query(`
       ALTER TABLE runtime_config ADD COLUMN memory_policy jsonb NOT NULL DEFAULT '${JSON.stringify(DEFAULT_MEMORY_RUNTIME_POLICY)}'::jsonb;
       ALTER TABLE agent_requests ADD COLUMN memory_scope jsonb;
+      -- History import looks up each message's admitted scope; without this it scans the table
+      -- once per message. Empty at creation because the column is new.
+      CREATE INDEX agent_requests_memory_session ON agent_requests(session_id) WHERE memory_scope IS NOT NULL;
       ALTER TABLE chat_sessions ADD COLUMN memory_context_generation integer NOT NULL DEFAULT 0;
       ALTER TABLE chat_sessions ADD COLUMN created_actor_key text;
       ALTER TABLE chat_sessions ADD COLUMN created_actor_title text;
