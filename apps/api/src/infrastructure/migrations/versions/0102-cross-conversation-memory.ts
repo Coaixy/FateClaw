@@ -6,6 +6,9 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
   description:
     'Add scoped, evidence-backed cross-conversation memory and durable learning',
   async up(client) {
+    // ALTER TABLE and CREATE TRIGGER queue behind any long transaction on these hot tables, and
+    // every later query on them queues behind the migration. Fail fast and retry instead.
+    await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query(`
       ALTER TABLE runtime_config ADD COLUMN memory_policy jsonb NOT NULL DEFAULT '${JSON.stringify(DEFAULT_MEMORY_RUNTIME_POLICY)}'::jsonb;
       ALTER TABLE agent_requests ADD COLUMN memory_scope jsonb;

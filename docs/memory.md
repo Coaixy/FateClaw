@@ -106,7 +106,7 @@ The worker removes succeeded, skipped and cancelled jobs after seven days and ke
 
 ## Deployment
 
-Deploy API, agent-runtime, web, admin and contracts together. Migration `0102_cross_conversation_memory` adds the schema and seeds existing accounts with automatic learning **off**; new accounts inherit the platform default, initially **on**. The migration does not scan conversations with a model. The old first-account Soul fallback is copied once into the user Soul when the user Soul is empty, and the original account data is retained.
+Deploy API, agent-runtime, web, admin and contracts together. Migration `0102_cross_conversation_memory` adds the schema and seeds existing accounts with automatic learning **off**; new accounts inherit the platform default, initially **on**. The migration does not scan conversations with a model. It runs in one transaction with a 5-second `lock_timeout`: if a long transaction holds `chat_sessions`, `agent_requests`, `runtime_config` or `messages`, the migration fails and API startup stops instead of queueing every later query behind it; start the API again once the table is free. There is no down migration, so take a backup first; older application code ignores the added tables and columns. The old first-account Soul fallback is copied once into the user Soul when the user Soul is empty, and the original account data is retained.
 
 Memory runs on the existing `postgres:18-alpine` service and needs no extension. Trigram indexes do not serve two-character Chinese terms, so keyword recall scans the reader's own index entries. No embedding model or vector extension is used.
 
