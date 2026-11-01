@@ -75,10 +75,10 @@ On the first model step of a request the runtime sends one `prepare` call with t
 
 - core facts: the subject's active facts ordered by kind, then most recent observation;
 - recently accepted user statements whose extraction has not finished, from other conversations;
-- keyword recall for the query, using Chinese word segmentation and `ILIKE`, accelerated by `pg_trgm` when installed;
+- keyword recall for the query: words of two or more characters plus every bigram of a Han run, matched with `ILIKE` over the reader's own entries and ranked by the number of matched terms;
 - the supplied references, keeping the newest when there are more than `recall_max_results × 3`.
 
-Every reference is re-authorized against current item, evidence and exclusion state before its text is returned, and the result is cut to the `recall_token_budget`, estimated as one token per non-ASCII character and per three ASCII characters. The runtime reuses that result for every later step, retry and pool failover of the same request. `search_memory` and `get_memory_source` return text in the same tool call and add it to the request's excerpts. If any memory call fails or times out, the turn continues without memory.
+Every reference is re-authorized against current item, evidence and exclusion state before its text is returned, and the result is cut to the `recall_token_budget`, estimated as one token per non-ASCII character and per three ASCII characters. The budget is spent in this order: the first `recall_max_results` core facts, keyword recall, recent statements, supplied references, then the remaining core facts. The runtime reuses that result for every later step, retry and pool failover of the same request. `search_memory` and `get_memory_source` return text in the same tool call and add it to the request's excerpts. If any memory call fails or times out, the turn continues without memory.
 
 Memory text exists only in the cloned provider context built by `agent.transformContext`. Tool results in session files, snapshots and compaction input keep references, and a compaction extension strips memory text before summarizing. When there are no excerpts, nothing is added to the provider context; otherwise one block is placed immediately before the latest user message.
 
@@ -108,7 +108,7 @@ The worker removes succeeded, skipped and cancelled jobs after seven days and ke
 
 Deploy API, agent-runtime, web, admin and contracts together. Migration `0102_cross_conversation_memory` adds the schema and seeds existing accounts with automatic learning **off**; new accounts inherit the platform default, initially **on**. The migration does not scan conversations with a model. The old first-account Soul fallback is copied once into the user Soul when the user Soul is empty, and the original account data is retained.
 
-Memory runs on the existing `postgres:18-alpine` service. The migration installs `pg_trgm` when the role may do so and otherwise keeps working with plain `ILIKE` matching. No embedding model or vector extension is used.
+Memory runs on the existing `postgres:18-alpine` service and needs no extension. Trigram indexes do not serve two-character Chinese terms, so keyword recall scans the reader's own index entries. No embedding model or vector extension is used.
 
 Queued legacy requests without a frozen memory identity are not resubmitted after upgrade; host recovery and the daemon inbox reject them and ask the user to resend. Already generated durable results are still delivered, and possibly started requests keep the existing interrupted/unknown-usage recovery policy.
 

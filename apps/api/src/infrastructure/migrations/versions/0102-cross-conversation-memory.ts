@@ -318,22 +318,5 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
         EXECUTE FUNCTION memory_message_source_changed();
 
     `);
-    // Keyword search falls back to sequential ILIKE when pg_trgm is absent and cannot be installed.
-    // Checked up front because a failed CREATE EXTENSION would abort the runner's transaction.
-    const { rows: trgm } = await client.query<{ installable: boolean }>(
-      `SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='pg_trgm') OR (
-         EXISTS(SELECT 1 FROM pg_available_extensions WHERE name='pg_trgm')
-         AND has_database_privilege(current_database(),'CREATE')) AS installable`,
-    );
-    if (trgm[0]?.installable) {
-      await client.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
-      const { rows: opclass } = await client.query<{ schema: string }>(
-        `SELECT n.nspname AS schema FROM pg_opclass o JOIN pg_namespace n ON n.oid=o.opcnamespace
-         WHERE o.opcname='gin_trgm_ops' LIMIT 1`,
-      );
-      await client.query(
-        `CREATE INDEX memory_index_text ON memory_index_entries USING gin(search_text ${client.escapeIdentifier(opclass[0].schema)}.gin_trgm_ops)`,
-      );
-    }
   },
 };

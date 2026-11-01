@@ -372,11 +372,36 @@ describe.skipIf(!connectionString)(
       expect(
         (
           await getDbPool().query(
-            "SELECT 1 FROM memory_evidence e JOIN memory_sources s ON s.id=e.source_id WHERE s.message_id=$1 AND e.revoked_at IS NULL",
+            'SELECT 1 FROM memory_evidence e JOIN memory_sources s ON s.id=e.source_id WHERE s.message_id=$1 AND e.revoked_at IS NULL',
             [learned.messageId],
           )
         ).rowCount,
       ).toBe(0);
+    });
+
+    it('recalls an older relevant fact ahead of many newer partial matches', async () => {
+      const target = await createManualMemory('owner', {
+        content: '我女儿在准备考研。',
+      });
+      const root = (
+        await getDbPool().query<{ id: string }>(
+          "SELECT id FROM memory_scopes WHERE owner_user_id='owner' AND parent_scope_id IS NULL",
+        )
+      ).rows[0].id;
+      await getDbPool().query(
+        "UPDATE memory_index_entries SET updated_at=clock_timestamp()-interval '1 day' WHERE object_id=$1",
+        [target.id],
+      );
+      await getDbPool().query(
+        `INSERT INTO memory_index_entries(owner_user_id,scope_id,subject_id,object_kind,object_id,object_revision,search_text)
+         SELECT 'owner',$1,'self:owner','item','noise-'||g,1,'今天的事情很多'||g FROM generate_series(1,150) g`,
+        [root],
+      );
+      const b = await turn('session-b', '随便聊聊。');
+      const recalled = await search(b.scope, '我女儿考研的事怎么样了');
+      expect(recalled.excerpts.map((row) => row.reference.id)).toContain(
+        target.id,
+      );
     });
 
     it('does not echo the current conversation back as a remembered source', async () => {
@@ -384,7 +409,8 @@ describe.skipIf(!connectionString)(
       const sourceText = (hydration: MemoryHydration) =>
         hydration.excerpts.filter(
           (excerpt) =>
-            excerpt.reference.kind === 'source' && excerpt.text.includes('体检'),
+            excerpt.reference.kind === 'source' &&
+            excerpt.text.includes('体检'),
         );
       expect(sourceText(await search(a.scope, '体检', 'session-a'))).toEqual(
         [],

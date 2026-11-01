@@ -28,7 +28,7 @@ Payment callbacks also follow this split: the Epay asynchronous notification `no
 
 Deploy API, agent-runtime, web, admin and contracts together for memory RPC and audience-aware session frames. Migration `0102_cross_conversation_memory` leaves existing users' automatic learning off; new users inherit the platform default. The full API entry point starts the durable memory worker. Configure the extraction model and budgets in admin `/system/memory`.
 
-Memory works on the existing `postgres:18-alpine` service and needs no extension beyond the optional `pg_trgm`. See [Memory deployment and recovery](memory.md#deployment) for activation, old queued requests, source controls and context reset semantics.
+Memory works on the existing `postgres:18-alpine` service and needs no extension. See [Memory deployment and recovery](memory.md#deployment) for activation, old queued requests, source controls and context reset semantics.
 
 ## User skill storage
 

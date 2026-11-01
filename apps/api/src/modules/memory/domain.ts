@@ -176,63 +176,69 @@ export function assertMemoryScopeCurrent(
     );
 }
 
+/**
+ * Single characters match nearly every row, so they are used only when the query has no longer
+ * term. Han runs also contribute every bigram, because the segmenter splits words such as "考研"
+ * into "考/研".
+ */
 export function memoryQueryTerms(query: string): string[] {
   const text = query.normalize('NFKC').toLowerCase().slice(0, 2000);
   const segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
   const terms = new Set<string>();
+  const singles = new Set<string>();
   for (const part of segmenter.segment(text)) {
     if (!part.isWordLike) continue;
     const word = part.segment.trim();
-    if (word.length >= 2 || /[\d\p{Script=Han}]/u.test(word)) terms.add(word);
-    if (/^[\p{Script=Han}]{4,}$/u.test(word)) {
-      for (let i = 0; i < word.length - 1; i++) terms.add(word.slice(i, i + 2));
-    }
+    if (word.length >= 2) terms.add(word);
+    else if (/[\d\p{Script=Han}]/u.test(word)) singles.add(word);
   }
-  return [...terms]
-    .filter(
-      (term) =>
-        ![
-          '什么',
-          '怎么',
-          '哪里',
-          '一下',
-          '那个',
-          '这个',
-          '之前',
-          '我们',
-          '现在',
-          '我',
-          '你',
-          '他',
-          '她',
-          '它',
-          '在',
-          '是',
-          '有',
-          '和',
-          '与',
-          '把',
-          '被',
-          '对',
-          '给',
-          '想',
-          '要',
-          '也',
-          '都',
-          '这',
-          '那',
-          '还',
-          '很',
-          '的',
-          '地',
-          '得',
-          '了',
-          '吗',
-          '吧',
-        ].includes(term),
-    )
-    .slice(0, 24);
+  for (const [run] of text.matchAll(/\p{Script=Han}{3,}/gu))
+    for (let i = 0; i < run.length - 1; i++) terms.add(run.slice(i, i + 2));
+  const meaningful = (values: Set<string>) =>
+    [...values].filter((term) => !MEMORY_STOP_TERMS.has(term));
+  const long = meaningful(terms);
+  return (long.length ? long : meaningful(singles)).slice(0, 24);
 }
+
+const MEMORY_STOP_TERMS = new Set([
+  '什么',
+  '怎么',
+  '哪里',
+  '一下',
+  '那个',
+  '这个',
+  '之前',
+  '我们',
+  '现在',
+  '我',
+  '你',
+  '他',
+  '她',
+  '它',
+  '在',
+  '是',
+  '有',
+  '和',
+  '与',
+  '把',
+  '被',
+  '对',
+  '给',
+  '想',
+  '要',
+  '也',
+  '都',
+  '这',
+  '那',
+  '还',
+  '很',
+  '的',
+  '地',
+  '得',
+  '了',
+  '吗',
+  '吧',
+]);
 
 export function memoryLexicalScore(
   content: string,
