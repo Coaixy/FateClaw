@@ -174,6 +174,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       CREATE INDEX memory_index_scope ON memory_index_entries(scope_id,subject_id,object_kind);
       CREATE INDEX memory_index_owner ON memory_index_entries(owner_user_id);
       CREATE INDEX memory_index_subject ON memory_index_entries(subject_id);
+      CREATE INDEX memory_index_source_age ON memory_index_entries(observed_at) WHERE object_kind='source';
 
       CREATE TABLE memory_jobs (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -202,7 +203,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       CREATE INDEX memory_jobs_claim ON memory_jobs(next_attempt_at,created_at) WHERE state IN ('pending','running');
       CREATE INDEX memory_jobs_owner ON memory_jobs(owner_user_id,created_at DESC);
       CREATE INDEX memory_jobs_source ON memory_jobs(source_id) WHERE source_id IS NOT NULL;
-      CREATE INDEX memory_jobs_finished ON memory_jobs(updated_at) WHERE state IN ('succeeded','skipped','cancelled');
+      CREATE INDEX memory_jobs_finished ON memory_jobs(updated_at) WHERE state IN ('succeeded','skipped','cancelled','failed');
       CREATE INDEX memory_jobs_scope ON memory_jobs(scope_id);
       CREATE INDEX memory_jobs_subject ON memory_jobs(subject_id) WHERE subject_id IS NOT NULL;
 
@@ -240,6 +241,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
         created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
         PRIMARY KEY(request_id,tool_call_id)
       );
+      CREATE INDEX memory_tool_results_created ON memory_tool_results(created_at);
 
       CREATE TABLE memory_usage (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -280,6 +282,7 @@ export const crossConversationMemoryMigration: DatabaseMigration = {
       );
       CREATE INDEX memory_budget_job ON memory_budget_reservations(job_id) WHERE job_id IS NOT NULL;
       CREATE INDEX memory_budget_deadline ON memory_budget_reservations(deadline_at,id) WHERE state='pending';
+      CREATE INDEX memory_budget_settled ON memory_budget_reservations(settled_at) WHERE state='settled';
 
       -- Bulk callers set fateclaw.memory_bulk and run reconcileRemovedMemorySources once, because
       -- these per-row triggers cost several statements for every removed message.

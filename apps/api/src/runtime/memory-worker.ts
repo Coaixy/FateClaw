@@ -4,7 +4,7 @@ import { getMemoryRuntimePolicy } from '#modules/memory/policy';
 import {
   claimMemoryJobs,
   processMemoryJob,
-  pruneFinishedMemoryJobs,
+  pruneMemoryRetention,
   type MemoryJobOptions,
 } from '#modules/memory/jobs';
 import { MemoryError } from '#modules/memory/domain';
@@ -16,7 +16,7 @@ export interface MemoryWorkerOptions extends MemoryJobOptions {
   claim?: typeof claimMemoryJobs;
   process?: typeof processMemoryJob;
   reconcile?: typeof reconcileMemoryBudgetReservations;
-  prune?: typeof pruneFinishedMemoryJobs;
+  prune?: typeof pruneMemoryRetention;
 }
 
 const POLL_MS = 1_000;
@@ -46,7 +46,7 @@ export function runMemoryWorkerOnce(
     });
     if (Date.now() - lastPrunedAt >= PRUNE_INTERVAL_MS) {
       lastPrunedAt = Date.now();
-      await (options.prune ?? pruneFinishedMemoryJobs)({ signal });
+      await (options.prune ?? pruneMemoryRetention)({ signal });
     }
     if (!policy.enabled || signal.aborted) return;
     const jobs = await (options.claim ?? claimMemoryJobs)(

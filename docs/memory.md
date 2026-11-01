@@ -102,7 +102,7 @@ History import is an explicit action with optional conversation, source, client 
 
 Defaults are two worker slots, a 45-second job timeout, three attempts, 40 messages per import batch and a daily budget of 1,000,000 estimated tokens. Policy validation requires one extraction reservation (input plus output tokens) to fit in the daily budget. The budget is one platform-wide UTC-day total; workers claim jobs in turn across accounts, so one account's backlog delays others by at most one round. Messages that cannot carry a statement, such as greetings, punctuation or a single question without a first-person clause, are recorded without a model call. Memory calls are accounted separately from chat billing. Reservations precede model calls, settlement is idempotent, and recovery charges uncertain consumption at its reserved bound. Job errors and logs keep codes and metadata, never memory bodies.
 
-The worker removes succeeded, skipped and cancelled jobs after seven days and keeps failed jobs for the platform owner to inspect and retry. The memory worker starts in the full API entry point `apps/api/src/app/index.ts`; `dev-api.ts` intentionally omits background workers.
+Every hour the worker removes, in bounded batches: succeeded, skipped and cancelled jobs after 7 days; failed jobs after 30 days; per-call usage after 90 days (daily totals remain); settled reservations and tool receipts after 7 days; and the raw-text index of extracted sources after 90 days. Sources, facts, evidence and exclusions are never pruned, and a fact stays searchable after its source text leaves the index. The memory worker starts in the full API entry point `apps/api/src/app/index.ts`; `dev-api.ts` intentionally omits background workers.
 
 ## Deployment
 

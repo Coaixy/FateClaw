@@ -1317,23 +1317,43 @@ export async function retryMemoryJob(jobId: string): Promise<MemoryJobDto> {
   });
 }
 
-const JOB_RETENTION_BATCH = 1000;
+const RETENTION_BATCH = 1000;
 
-/** Finished jobs are diagnostics only; failed jobs stay until the owner retries or clears them. */
-export async function pruneFinishedMemoryJobs(
-  options: { signal?: AbortSignal; retentionDays?: number } = {},
+/**
+ * Bounded deletes for diagnostic and rebuildable rows. Sources, facts, evidence and exclusions are
+ * authoritative and are never pruned here.
+ */
+const RETENTION = [
+  `DELETE FROM memory_jobs WHERE id IN(SELECT id FROM memory_jobs WHERE state IN ('succeeded','skipped','cancelled')
+     AND updated_at<clock_timestamp()-interval '7 days' LIMIT $1)`,
+  `DELETE FROM memory_jobs WHERE id IN(SELECT id FROM memory_jobs WHERE state='failed'
+     AND updated_at<clock_timestamp()-interval '30 days' LIMIT $1)`,
+  // Daily totals stay in memory_daily_budgets; admin reads only today's calls.
+  `DELETE FROM memory_usage WHERE id IN(SELECT id FROM memory_usage
+     WHERE created_at<clock_timestamp()-interval '90 days' LIMIT $1)`,
+  `DELETE FROM memory_budget_reservations WHERE id IN(SELECT id FROM memory_budget_reservations
+     WHERE state='settled' AND settled_at<clock_timestamp()-interval '7 days' LIMIT $1)`,
+  // Receipts only make tool retries idempotent, and retries end with the request deadline.
+  `DELETE FROM memory_tool_results WHERE (request_id,tool_call_id) IN(SELECT request_id,tool_call_id FROM memory_tool_results
+     WHERE created_at<clock_timestamp()-interval '7 days' LIMIT $1)`,
+  // Raw text of an extracted source stays findable for 90 days; its facts stay indexed.
+  `DELETE FROM memory_index_entries WHERE id IN(SELECT x.id FROM memory_index_entries x
+     JOIN memory_sources s ON s.id=x.object_id
+     WHERE x.object_kind='source' AND x.observed_at<clock_timestamp()-interval '90 days'
+       AND s.extracted_revision>=s.revision LIMIT $1)`,
+];
+
+export async function pruneMemoryRetention(
+  options: { signal?: AbortSignal } = {},
   db: DbQueryable = getDbPool(),
 ): Promise<number> {
   let total = 0;
-  for (;;) {
-    options.signal?.throwIfAborted();
-    const { rowCount } = await db.query(
-      `DELETE FROM memory_jobs WHERE id IN(
-         SELECT id FROM memory_jobs WHERE state IN ('succeeded','skipped','cancelled')
-           AND updated_at<clock_timestamp()-$1::int*interval '1 day' LIMIT $2)`,
-      [options.retentionDays ?? 7, JOB_RETENTION_BATCH],
-    );
-    total += rowCount ?? 0;
-    if ((rowCount ?? 0) < JOB_RETENTION_BATCH) return total;
-  }
+  for (const sql of RETENTION)
+    for (;;) {
+      options.signal?.throwIfAborted();
+      const { rowCount } = await db.query(sql, [RETENTION_BATCH]);
+      total += rowCount ?? 0;
+      if ((rowCount ?? 0) < RETENTION_BATCH) break;
+    }
+  return total;
 }

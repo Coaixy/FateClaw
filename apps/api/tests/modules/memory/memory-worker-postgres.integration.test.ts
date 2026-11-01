@@ -26,6 +26,7 @@ import {
   changeMemoryJobState,
   claimMemoryJobs,
   processMemoryJob,
+  pruneMemoryRetention,
   startMemoryBackfill,
 } from '#modules/memory/jobs';
 import { updateMemorySessionSettings } from '#modules/memory/session-settings';
@@ -325,6 +326,50 @@ describe.skipIf(!connectionString)(
       }
       throw new Error('Worker failed to finish the finite synthetic queue');
     }
+
+    it('prunes old diagnostics and extracted raw-text index, keeping facts and unextracted sources', async () => {
+      const extracted = await turn('我住在杭州。');
+      await drain();
+      const pending = await turn('我在杭州读研。');
+      const old = "clock_timestamp()-interval '120 days'";
+      await getDbPool().query(
+        `UPDATE memory_index_entries SET observed_at=${old} WHERE object_kind='source'`,
+      );
+      await getDbPool().query(
+        `UPDATE memory_jobs SET state='failed',updated_at=${old} WHERE source_id=$1`,
+        [extracted.sourceId],
+      );
+      await getDbPool().query(
+        `UPDATE memory_usage SET created_at=${old}; UPDATE memory_budget_reservations SET settled_at=${old}`,
+      );
+      await pruneMemoryRetention();
+      const remaining = async (sql: string) =>
+        (await getDbPool().query(sql)).rowCount;
+      expect(
+        (
+          await getDbPool().query(
+            "SELECT object_id FROM memory_index_entries WHERE object_kind='source'",
+          )
+        ).rows,
+      ).toEqual([{ object_id: pending.sourceId }]);
+      expect(
+        await remaining(
+          "SELECT 1 FROM memory_index_entries WHERE object_kind='item'",
+        ),
+      ).toBe(1);
+      expect(
+        await remaining(
+          `SELECT 1 FROM memory_jobs WHERE source_id='${extracted.sourceId}'`,
+        ),
+      ).toBe(0);
+      expect(await remaining('SELECT 1 FROM memory_usage')).toBe(0);
+      expect(await remaining('SELECT 1 FROM memory_budget_reservations')).toBe(
+        0,
+      );
+      expect(
+        await remaining("SELECT 1 FROM memory_items WHERE status='active'"),
+      ).toBe(1);
+    });
 
     it('claims across owners in turn so one backlog cannot starve another account', async () => {
       for (let index = 0; index < 5; index++)

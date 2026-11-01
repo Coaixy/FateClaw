@@ -17,7 +17,7 @@ vi.mock('#modules/memory/policy', () => ({
 vi.mock('#modules/memory/jobs', () => ({
   claimMemoryJobs: mocks.claim,
   processMemoryJob: mocks.process,
-  pruneFinishedMemoryJobs: mocks.prune,
+  pruneMemoryRetention: mocks.prune,
 }));
 vi.mock('#modules/memory/budget', () => ({
   reconcileMemoryBudgetReservations: mocks.reconcile,
