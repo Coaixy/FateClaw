@@ -272,6 +272,8 @@ function checkCandidate(
     if (!previous) reject('SUPERSEDES');
     if (previous.subjectId && previous.subjectId !== subjectId)
       reject('SUPERSEDES');
+    if (candidate.factKey && candidate.factKey !== previous.factKey)
+      reject('SUPERSEDES');
   }
   return { ...candidate, subjectId };
 }

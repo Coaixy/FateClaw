@@ -9,6 +9,7 @@ import type {
 import { getDbPool, type DbQueryable } from '#infrastructure/db-pool';
 import { getMemoryRuntimePolicy } from './policy.js';
 import { resolveMemoryPiContext } from './pi-contexts.js';
+import { deriveMemorySearchTerms, inferMemoryFactKey } from './search-terms.js';
 import {
   MemoryError,
   assertMemoryScopeCurrent,
@@ -532,6 +533,7 @@ export async function indexMemoryText(
     revision: number;
     text: string;
     observedAt?: Date | string;
+    searchTerms?: readonly string[];
   },
 ): Promise<void> {
   await db.query(
@@ -559,7 +561,10 @@ export async function indexMemoryText(
         args.revision,
         start,
         end,
-        args.text.slice(start, end),
+        args.text.slice(start, end) +
+          (start === 0 && args.searchTerms?.length
+            ? `\n${args.searchTerms.join(' ')}`
+            : ''),
         args.observedAt ?? new Date().toISOString(),
       ],
     );
@@ -763,6 +768,93 @@ export async function getCurrentMemorySource(
   return { ...source, content };
 }
 
+/** Explicit corrections and disputes are withheld; automatic changes retain their historical sources. */
+export async function memoryRecallSourceContent(
+  source: MemorySourceRow & { content: string },
+  db: DbQueryable = getDbPool(),
+): Promise<string> {
+  const { rows } = await db.query<{ quote: string }>(
+    `SELECT DISTINCT proof.quote FROM memory_evidence proof JOIN memory_items item ON item.id=proof.item_id
+     WHERE proof.source_id=$1 AND proof.source_revision=$2 AND proof.source_hash=$3
+       AND proof.revoked_at IS NULL AND proof.quote<>'' AND (item.status='disputed'
+         OR item.status='superseded' AND EXISTS(
+           SELECT 1 FROM memory_items correction WHERE correction.owner_user_id=item.owner_user_id
+             AND correction.scope_id=item.scope_id AND correction.subject_id=item.subject_id
+             AND correction.origin IN ('manual','explicit')
+             AND (correction.supersedes_id=item.id OR correction.id=item.merged_into_id)))`,
+    [source.id, source.revision, source.content_hash],
+  );
+  let content = source.content;
+  for (const { quote } of rows) {
+    let offset = content.indexOf(quote);
+    while (offset >= 0) {
+      content =
+        content.slice(0, offset) +
+        ' '.repeat(quote.length) +
+        content.slice(offset + quote.length);
+      offset = content.indexOf(quote, offset + quote.length);
+    }
+  }
+  const statements =
+    source.source_role === 'user' && source.extracted_revision < source.revision
+      ? Array.from(
+          new Intl.Segmenter('zh', { granularity: 'sentence' }).segment(
+            source.content,
+          ),
+          ({ segment, index }) => ({
+            text: segment,
+            offset: index,
+            factKey: inferMemoryFactKey(segment),
+          }),
+        ).filter((statement) => statement.factKey)
+      : [];
+  if (statements.length) {
+    const protectedFacts = await db.query<{
+      subject_id: string;
+      fact_key: string;
+      content: string;
+    }>(
+      `SELECT subject_id,fact_key,content FROM memory_items WHERE owner_user_id=$1 AND scope_id=$2 AND subject_id=ANY($3::text[])
+         AND status='active' AND origin IN ('manual','explicit') AND fact_key=ANY($4::text[]) AND epoch=$5`,
+      [
+        source.owner_user_id,
+        source.memory_space_id ??
+          source.identity_snapshot?.memorySpaceId ??
+          source.scope_id,
+        [
+          ...new Set([
+            source.subject_id,
+            source.identity_snapshot?.speakerSubjectId ?? source.subject_id,
+          ]),
+        ],
+        [...new Set(statements.map((statement) => statement.factKey))],
+        source.epoch,
+      ],
+    );
+    for (const statement of statements) {
+      const subjectId = /^(?:我|本人|I\b|I'm\b|my\b)/i.test(
+        statement.text.trim(),
+      )
+        ? (source.identity_snapshot?.speakerSubjectId ?? source.subject_id)
+        : source.subject_id;
+      const current = protectedFacts.rows.find(
+        (item) =>
+          item.subject_id === subjectId && item.fact_key === statement.factKey,
+      );
+      if (
+        current &&
+        memoryContentHash('fact', current.content, statement.factKey) !==
+          memoryContentHash('fact', statement.text, statement.factKey)
+      )
+        content =
+          content.slice(0, statement.offset) +
+          ' '.repeat(statement.text.length) +
+          content.slice(statement.offset + statement.text.length);
+    }
+  }
+  return content;
+}
+
 export async function insertMemoryItem(
   db: pg.PoolClient,
   args: {
@@ -771,6 +863,7 @@ export async function insertMemoryItem(
     content: string;
     kind?: MemoryKind;
     factKey?: string | null;
+    searchTerms?: readonly string[];
     assertionType?: 'stated' | 'experience' | 'plan';
     origin: 'automatic' | 'explicit' | 'manual';
     source?: MemorySourceRow;
@@ -819,36 +912,59 @@ export async function insertMemoryItem(
   await assertMemorySubject(args.scope, subjectId, db);
   const content = validateMemoryContent(args.content);
   const kind = args.kind ?? 'fact';
-  const hash = memoryContentHash(kind, content, args.factKey);
+  let factKey =
+    args.factKey ??
+    (kind === 'fact' ? inferMemoryFactKey(content) : undefined) ??
+    null;
+  let supersedesId = args.supersedesId;
+  let protectedTarget: MemoryItemRow | undefined;
+  if (supersedesId) {
+    const target = await db.query<MemoryItemRow>(
+      "SELECT * FROM memory_items WHERE id=$1 AND owner_user_id=$2 AND scope_id=$3 AND subject_id=$4 AND status='active'",
+      [supersedesId, args.scope.ownerUserId, namespace, subjectId],
+    );
+    const requested = target.rows[0];
+    if (requested?.fact_key && factKey && requested.fact_key !== factKey)
+      throw new MemoryError(
+        '修改目标与记忆字段不一致，请重新确认当前记忆',
+        409,
+        'MEMORY.FACT_CONFLICT',
+      );
+    factKey ??= requested?.fact_key ?? null;
+    if (args.origin === 'automatic' && requested?.origin !== 'automatic') {
+      protectedTarget = target.rows[0];
+      supersedesId = undefined;
+    }
+  }
+  const hash = memoryContentHash(kind, content, factKey);
   const excluded = await db.query(
     `SELECT 1 FROM memory_exclusions WHERE scope_id=$1 AND (subject_id IS NULL OR subject_id=$2)
      AND (persistent OR $6::timestamptz <= cutoff_at) AND
-       ((source_id=$3 AND reason='source_excluded') OR content_hash=$4 OR fact_key IS NOT NULL AND fact_key=$5) LIMIT 1`,
+       ((source_id=$3 AND reason='source_excluded') OR content_hash=$4 OR content_hash=$7 OR fact_key IS NOT NULL AND fact_key=$5) LIMIT 1`,
     [
       namespace,
       subjectId,
       args.source?.id ?? null,
       hash,
-      args.factKey ?? null,
+      factKey,
       args.source ? isoDate(args.source.observed_at) : new Date().toISOString(),
+      memoryContentHash(kind, content, null),
     ],
   );
   if (args.origin === 'automatic' && excluded.rows[0])
     throw new MemoryError('该来源或记忆已被用户排除', 409, 'MEMORY.EXCLUDED');
-  let supersedesId = args.supersedesId;
-  if (supersedesId && args.origin === 'automatic') {
-    // Automatic extraction never replaces what the user wrote or explicitly asked to save.
-    const target = await db.query<{ origin: MemoryItemRow['origin'] }>(
-      'SELECT origin FROM memory_items WHERE id=$1 AND owner_user_id=$2',
-      [supersedesId, args.scope.ownerUserId],
-    );
-    if (target.rows[0]?.origin !== 'automatic') supersedesId = undefined;
-  }
   const duplicate = await db.query<MemoryItemRow>(
     "SELECT * FROM memory_items WHERE scope_id=$1 AND subject_id=$2 AND content_hash=$3 AND status='active' FOR UPDATE",
     [namespace, subjectId, hash],
   );
   let item = duplicate.rows[0];
+  if (item && args.origin !== 'automatic' && item.origin === 'automatic') {
+    const promoted = await db.query<MemoryItemRow>(
+      'UPDATE memory_items SET origin=$2,updated_at=clock_timestamp() WHERE id=$1 RETURNING *',
+      [item.id, args.origin],
+    );
+    item = promoted.rows[0];
+  }
   if (item && supersedesId && supersedesId !== item.id) {
     const replaced = await db.query<{ id: string }>(
       "UPDATE memory_items SET status='superseded',merged_into_id=$6,valid_to=COALESCE($5::timestamptz,clock_timestamp()),updated_at=clock_timestamp() WHERE id=$1 AND owner_user_id=$2 AND scope_id=$3 AND subject_id=$4 AND status='active' RETURNING id",
@@ -870,15 +986,32 @@ export async function insertMemoryItem(
   }
   if (!item) {
     let previous: MemoryItemRow | undefined;
-    if (supersedesId || args.factKey) {
+    let disputed = false;
+    if (supersedesId && factKey) {
+      const field = await db.query(
+        "SELECT id FROM memory_items WHERE scope_id=$1 AND subject_id=$2 AND fact_key=$3 AND status='active' AND id<>$4 FOR UPDATE",
+        [namespace, subjectId, factKey, supersedesId],
+      );
+      if (field.rows[0])
+        throw new MemoryError(
+          '该字段已有另一条当前记忆，请编辑该记忆后重试',
+          409,
+          'MEMORY.FACT_CONFLICT',
+        );
+    }
+    if (supersedesId || factKey) {
       const found = await db.query<MemoryItemRow>(
         `SELECT existing.*,existing.observed_at::text AS observed_at FROM memory_items existing WHERE scope_id=$1 AND subject_id=$2 AND status='active'
           AND (($3::text IS NOT NULL AND id=$3) OR ($3::text IS NULL AND fact_key=$4))
          ORDER BY existing.source_sequence DESC,existing.observed_at DESC LIMIT 1 FOR UPDATE`,
-        [namespace, subjectId, supersedesId ?? null, args.factKey ?? null],
+        [namespace, subjectId, supersedesId ?? null, factKey],
       );
       previous = found.rows[0];
-      if (previous && args.origin === 'automatic') {
+      if (
+        previous &&
+        args.origin === 'automatic' &&
+        previous.origin === 'automatic'
+      ) {
         const stale = await db.query<{ stale: boolean }>(
           'SELECT ($1::timestamptz>$2::timestamptz OR $1::timestamptz=$2::timestamptz AND $3::bigint>$4::bigint) AS stale',
           [
@@ -899,8 +1032,18 @@ export async function insertMemoryItem(
         previous &&
         args.origin === 'automatic' &&
         previous.origin !== 'automatic'
-      )
+      ) {
+        disputed = true;
         previous = undefined;
+      }
+    }
+    if (protectedTarget && args.origin === 'automatic') disputed = true;
+    if (disputed) {
+      const priorConflict = await db.query<MemoryItemRow>(
+        "SELECT * FROM memory_items WHERE scope_id=$1 AND subject_id=$2 AND content_hash=$3 AND epoch=$4 AND status='disputed' ORDER BY created_at LIMIT 1",
+        [namespace, subjectId, hash, root.epoch],
+      );
+      item = priorConflict.rows[0];
     }
     const observedAt = args.source
       ? typeof args.source.observed_at === 'string'
@@ -917,31 +1060,48 @@ export async function insertMemoryItem(
         [previous.id],
       );
     }
-    const { rows } = await db.query<MemoryItemRow>(
-      `INSERT INTO memory_items(family_id,owner_user_id,scope_id,subject_id,kind,assertion_type,content,content_hash,
-         fact_key,origin,revision,epoch,source_sequence,observed_at,valid_from,valid_to,supersedes_id)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
-      [
-        previous?.family_id ?? randomUUID(),
-        args.scope.ownerUserId,
-        namespace,
-        subjectId,
-        kind,
-        args.assertionType ?? (kind === 'plan' ? 'plan' : 'stated'),
-        content,
-        hash,
-        args.factKey ?? previous?.fact_key ?? null,
-        args.origin,
-        previous ? previous.revision + 1 : 1,
-        root.epoch,
-        args.source?.source_sequence ?? 0,
-        observedAt,
-        args.validFrom ?? null,
-        args.validTo ?? null,
-        previous?.id ?? null,
-      ],
+    if (!item) {
+      const { rows } = await db.query<MemoryItemRow>(
+        `INSERT INTO memory_items(family_id,owner_user_id,scope_id,subject_id,kind,assertion_type,content,content_hash,
+         fact_key,origin,revision,epoch,source_sequence,observed_at,valid_from,valid_to,supersedes_id,status,search_terms)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::text[]) RETURNING *`,
+        [
+          previous?.family_id ?? randomUUID(),
+          args.scope.ownerUserId,
+          namespace,
+          subjectId,
+          kind,
+          args.assertionType ?? (kind === 'plan' ? 'plan' : 'stated'),
+          content,
+          hash,
+          factKey ?? previous?.fact_key ?? null,
+          args.origin,
+          previous ? previous.revision + 1 : 1,
+          root.epoch,
+          args.source?.source_sequence ?? 0,
+          observedAt,
+          args.validFrom ?? null,
+          args.validTo ?? null,
+          previous?.id ?? null,
+          disputed ? 'disputed' : 'active',
+          deriveMemorySearchTerms(content, factKey, args.searchTerms),
+        ],
+      );
+      item = rows[0];
+    }
+  }
+  const searchTerms = deriveMemorySearchTerms(content, factKey, [
+    ...(item.search_terms ?? []),
+    ...(args.searchTerms ?? []),
+  ]);
+  if (JSON.stringify(item.search_terms ?? []) !== JSON.stringify(searchTerms)) {
+    const updated = await db.query<MemoryItemRow>(
+      'UPDATE memory_items SET search_terms=$2::text[] WHERE id=$1 RETURNING *',
+      [item.id, searchTerms],
     );
-    item = rows[0];
+    item = updated.rows[0];
+  }
+  if (item.status === 'active') {
     await indexMemoryText(db, {
       ownerUserId: item.owner_user_id,
       scopeId: item.scope_id,
@@ -951,6 +1111,7 @@ export async function insertMemoryItem(
       revision: item.revision,
       text: item.content,
       observedAt: item.observed_at,
+      searchTerms,
     });
   }
   if (args.source && args.quote) {

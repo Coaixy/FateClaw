@@ -743,7 +743,11 @@ async function processExtract(
       } catch (error) {
         if (
           error instanceof MemoryError &&
-          ['MEMORY.EXCLUDED', 'MEMORY.STALE_SOURCE'].includes(error.code)
+          [
+            'MEMORY.EXCLUDED',
+            'MEMORY.STALE_SOURCE',
+            'MEMORY.FACT_CONFLICT',
+          ].includes(error.code)
         )
           continue;
         throw error;

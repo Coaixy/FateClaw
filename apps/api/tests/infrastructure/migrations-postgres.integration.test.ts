@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MIGRATIONS } from '#infrastructure/migrations/manifest';
 import { runDatabaseMigrations } from '#infrastructure/migrations/runner';
 import { getAnnouncementPolls } from '#infrastructure/repositories/announcements-repository';
+import { memoryContentHash } from '#modules/memory/domain';
 
 // This opt-in connection must point to a disposable server with CREATE DATABASE permission.
 const connectionString = process.env.FATECLAW_TEST_MIGRATIONS_DATABASE_URL;
@@ -223,6 +224,114 @@ describe.skipIf(!connectionString)(
         ).toBe(1);
       });
     });
+
+    it('upgrades existing memory tags and resolves active single-value conflicts without rewriting statements', async () => {
+      await withDatabase(async (client) => {
+        await replayHistory(client, '0102_cross_conversation_memory');
+        await client.query(
+          "INSERT INTO users(id,created_at,soul_content) VALUES('memory-upgrade',clock_timestamp(),'keep-persona')",
+        );
+        const scopeId = (
+          await client.query(
+            "INSERT INTO memory_scopes(owner_user_id,actor_key,audience_key) VALUES('memory-upgrade','user:memory-upgrade','owner:memory-upgrade') RETURNING id",
+          )
+        ).rows[0].id;
+        await client.query(
+          "INSERT INTO memory_entities(id,owner_user_id,scope_id,kind,name) VALUES('self:memory-upgrade','memory-upgrade',$1,'self','Synthetic owner')",
+          [scopeId],
+        );
+        const entries = [
+          {
+            id: 'manual-date',
+            content: '我出生于1991年。',
+            key: null,
+            origin: 'manual',
+            at: '2026-01-01T00:00:00Z',
+          },
+          {
+            id: 'automatic-date',
+            content: '我出生于1990年。',
+            key: 'birth_date',
+            origin: 'automatic',
+            at: '2026-02-01T00:00:00Z',
+          },
+          {
+            id: 'manual-profession',
+            content: '我是一名外科医生。',
+            key: null,
+            origin: 'manual',
+            at: '2026-01-01T00:00:00Z',
+          },
+        ];
+        for (const entry of entries) {
+          await client.query(
+            `INSERT INTO memory_items(id,family_id,owner_user_id,scope_id,subject_id,kind,assertion_type,content,content_hash,fact_key,origin,epoch,observed_at)
+            VALUES($1,$1,'memory-upgrade',$2,'self:memory-upgrade','fact','stated',$3,$4,$5,$6,1,$7)`,
+            [
+              entry.id,
+              scopeId,
+              entry.content,
+              memoryContentHash('fact', entry.content, entry.key),
+              entry.key,
+              entry.origin,
+              entry.at,
+            ],
+          );
+          await client.query(
+            `INSERT INTO memory_index_entries(owner_user_id,scope_id,subject_id,object_kind,object_id,object_revision,chunk_start,chunk_end,search_text)
+            VALUES('memory-upgrade',$1,'self:memory-upgrade','item',$2,1,0,$3,$4)`,
+            [scopeId, entry.id, entry.content.length, entry.content],
+          );
+        }
+        await runDatabaseMigrations(client);
+        const rows = (
+          await client.query(
+            'SELECT id,content,status,fact_key,content_hash,search_terms FROM memory_items ORDER BY id',
+          )
+        ).rows;
+        expect(rows.find((row) => row.id === 'manual-date')).toMatchObject({
+          content: '我出生于1991年。',
+          status: 'active',
+          fact_key: 'birth_date',
+          content_hash: memoryContentHash(
+            'fact',
+            '我出生于1991年。',
+            'birth_date',
+          ),
+        });
+        expect(rows.find((row) => row.id === 'automatic-date')).toMatchObject({
+          content: '我出生于1990年。',
+          status: 'disputed',
+        });
+        expect(
+          rows.find((row) => row.id === 'manual-profession'),
+        ).toMatchObject({
+          fact_key: 'occupation',
+          search_terms: expect.arrayContaining(['职业', '工作']),
+        });
+        expect(
+          (
+            await client.query(
+              "SELECT search_text FROM memory_index_entries WHERE object_id='manual-profession'",
+            )
+          ).rows[0].search_text,
+        ).toContain('职业');
+        expect(
+          (
+            await client.query(
+              "SELECT 1 FROM memory_index_entries WHERE object_id='automatic-date'",
+            )
+          ).rows,
+        ).toEqual([]);
+        expect(
+          (
+            await client.query(
+              "SELECT soul_content FROM users WHERE id='memory-upgrade'",
+            )
+          ).rows[0].soul_content,
+        ).toBe('keep-persona');
+      });
+    }, 30_000);
 
     it('upgrades populated benefit records without losing attempt accounting and remains safe on repeated startup', async () => {
       await withDatabase(async (client) => {

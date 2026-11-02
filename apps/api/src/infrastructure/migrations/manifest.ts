@@ -34,6 +34,7 @@ import { issueReadMarkersMigration } from '#infrastructure/migrations/versions/0
 import { announcementPollsMigration } from '#infrastructure/migrations/versions/0100-announcement-polls';
 import { announcementMultipleChoiceMigration } from '#infrastructure/migrations/versions/0101-announcement-multiple-choice';
 import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
+import { memoryReliabilityMigration } from '#infrastructure/migrations/versions/0103-memory-reliability';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -71,6 +72,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   announcementPollsMigration,
   announcementMultipleChoiceMigration,
   crossConversationMemoryMigration,
+  memoryReliabilityMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

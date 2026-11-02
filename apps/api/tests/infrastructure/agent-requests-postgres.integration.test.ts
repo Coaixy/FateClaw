@@ -16,6 +16,7 @@ vi.mock('#infrastructure/config', () => ({
 import { listStalePendingReservations } from '#infrastructure/repositories/billing-repository';
 import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
 import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
+import { memoryReliabilityMigration } from '#infrastructure/migrations/versions/0103-memory-reliability';
 import {
   admitAgentRequest,
   markAgentRequestDispatched,
@@ -109,6 +110,7 @@ describe.skipIf(!connectionString)(
         await client.query('BEGIN');
         await durableAgentRequestsMigration.up(client);
         await crossConversationMemoryMigration.up(client);
+        await memoryReliabilityMigration.up(client);
         await client.query('COMMIT');
       } finally {
         client.release();

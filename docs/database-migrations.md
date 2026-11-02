@@ -52,6 +52,13 @@ Each account submits a complete selection in one transaction; participation
 counts distinct accounts rather than selected options. Deploy API, web, and
 admin together for the `option_ids` and `selected_option_ids` array contract.
 
+`0103_memory_reliability` upgrades the memory schema with bounded search labels,
+account scheduling timestamps, and one active value per space/subject/fact key.
+It preserves source text and evidence while marking conflicting older automatic
+values as disputed, with manual and explicit values taking precedence. It scans
+existing items in batches within the migration transaction without model calls.
+See [Cross-conversation memory](memory.md) for recall, revocation and deployment.
+
 The `0092_registration_invites` migration adds invitation policy, lifetime user
 allowances, hashed single-use codes and completed-refund records. Historical paid
 orders qualify for the initial CNY 100 / three-slot allowance. Subsequent recharge

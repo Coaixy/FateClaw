@@ -23,6 +23,7 @@ import {
   getCurrentMemorySource,
   hasOwnerMemoryAudience,
   memorySpaceId,
+  memoryRecallSourceContent,
   readMemoryRoot,
   readableMemorySpaces,
 } from './repository.js';
@@ -233,7 +234,7 @@ async function hydrateItem(
         source &&
         source.revision === row.source_revision &&
         source.content_hash === row.source_hash &&
-        source.content.includes(row.quote)
+        (await memoryRecallSourceContent(source, db)).includes(row.quote)
       ) {
         supported = true;
         break;
@@ -292,7 +293,7 @@ async function hydrateSource(
     (frozen.contextAudience ?? '') === (scope.contextAudience ?? '') &&
     (frozen.bindingRevision ?? 1) === (scope.bindingRevision ?? 1);
   const restrictedProof = !owner && !ownOriginal;
-  let visibleContent = source.content;
+  let visibleContent = await memoryRecallSourceContent(source, db);
   if (restrictedProof) {
     // Another actor's message discloses only the quote ranges that support a readable fact.
     const authorized = await db.query<{
@@ -323,11 +324,11 @@ async function hydrateSource(
         end === null ||
         start < 0 ||
         end <= start ||
-        source.content.slice(start, end) !== proof.quote
+        visibleContent.slice(start, end) !== proof.quote
       )
         continue;
       supported = true;
-      for (let i = start; i < end; i++) visible[i] = source.content[i];
+      for (let i = start; i < end; i++) visible[i] = visibleContent[i];
     }
     if (!supported) return null;
     visibleContent = visible.join('');
@@ -357,7 +358,7 @@ async function hydrateSource(
   return {
     reference,
     text,
-    label: `原话 ${offset}-${Math.min(offset + limit, source.content.length)}/${source.content.length}；发言者=${speakerName}；讨论对象=${source.subject_name}${source.subject_kind === 'unresolved' ? '；历史主体未确认，不得当作用户本人的事实' : ''}`,
+    label: `原话 ${offset}-${Math.min(offset + limit, source.content.length)}/${source.content.length}；发言者=${speakerName}；讨论对象=${source.subject_name}；原话为当时陈述，当前值以有效记忆为准${source.subject_kind === 'unresolved' ? '；历史主体未确认，不得当作用户本人的事实' : ''}`,
     ...(offset + limit < source.content.length
       ? { nextReference: { ...reference, offset: offset + limit, limit } }
       : {}),

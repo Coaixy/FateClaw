@@ -12,6 +12,7 @@ import {
 import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
 import { closeDbPool, getDbPool, initDbPool } from '#infrastructure/db-pool';
 import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
+import { memoryReliabilityMigration } from '#infrastructure/migrations/versions/0103-memory-reliability';
 import { getSessionMessagesWithToolContext } from '#infrastructure/repositories/chat-repository';
 import {
   captureMemorySource,
@@ -68,6 +69,7 @@ describe.skipIf(!connectionString)(
         // The migration runner applies each version inside a transaction.
         await client.query('BEGIN');
         await crossConversationMemoryMigration.up(client);
+        await memoryReliabilityMigration.up(client);
         await client.query('COMMIT');
       } finally {
         client.release();

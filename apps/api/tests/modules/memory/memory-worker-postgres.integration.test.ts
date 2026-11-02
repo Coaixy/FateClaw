@@ -12,6 +12,7 @@ import {
 import { initDbPool, getDbPool, closeDbPool } from '#infrastructure/db-pool';
 import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
 import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
+import { memoryReliabilityMigration } from '#infrastructure/migrations/versions/0103-memory-reliability';
 import { admitAgentRequest } from '#infrastructure/repositories/agent-requests-repository';
 import type { AiChatSubmission } from '#runtime/request-types';
 import type { LlmRuntimeSnapshot } from '@fateclaw/contracts/agent';
@@ -176,6 +177,7 @@ describe.skipIf(!connectionString)(
         // The migration runner applies each version inside a transaction.
         await client.query('BEGIN');
         await crossConversationMemoryMigration.up(client);
+        await memoryReliabilityMigration.up(client);
         await client.query('COMMIT');
       } finally {
         client.release();

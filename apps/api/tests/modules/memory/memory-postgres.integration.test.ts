@@ -12,6 +12,7 @@ import {
 import { initDbPool, getDbPool, closeDbPool } from '#infrastructure/db-pool';
 import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
 import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
+import { memoryReliabilityMigration } from '#infrastructure/migrations/versions/0103-memory-reliability';
 import { piSessionFramesMigration } from '#infrastructure/migrations/versions/0094-pi-session-frames';
 import {
   getPiSessionBase,
@@ -113,6 +114,7 @@ describe.skipIf(!connectionString)(
         // The migration runner applies each version inside a transaction.
         await client.query('BEGIN');
         await crossConversationMemoryMigration.up(client);
+        await memoryReliabilityMigration.up(client);
         await client.query('COMMIT');
       } finally {
         client.release();
@@ -1346,6 +1348,7 @@ describe.skipIf(!connectionString)(
       const first = await extracted();
       const duplicate = await extracted();
       expect(duplicate.id).toBe(first.id);
+      expect(first.status).toBe('disputed');
       expect(
         (
           await getDbPool().query(
@@ -1354,6 +1357,206 @@ describe.skipIf(!connectionString)(
           )
         ).rows[0],
       ).toEqual({ status: 'active', merged_into_id: null });
+      const recalled = await prepare(
+        a.scope,
+        'session-b',
+        [{ kind: 'source', id: source.id, revision: source.revision }],
+        '住在哪里',
+      );
+      expect(recalled.excerpts.some(({ text }) => text.includes('北京'))).toBe(
+        true,
+      );
+      expect(recalled.excerpts.some(({ text }) => text.includes('上海'))).toBe(
+        false,
+      );
+    });
+
+    it('keeps a corrected intake value authoritative and masks superseded and disputed source statements', async () => {
+      const automatic = async (content: string, timestamp: string) => {
+        const turnResult = await turn('session-a', content);
+        await getDbPool().query(
+          'UPDATE memory_sources SET observed_at=$2::timestamptz WHERE message_id=$1',
+          [turnResult.messageId, timestamp],
+        );
+        const sourceId = (
+          await getDbPool().query(
+            'SELECT id FROM memory_sources WHERE message_id=$1',
+            [turnResult.messageId],
+          )
+        ).rows[0].id;
+        const source = (await getCurrentMemorySource(sourceId))!;
+        const item = await withMemoryTransaction((db) =>
+          insertMemoryItem(db, {
+            scope: turnResult.scope,
+            content,
+            kind: 'fact',
+            factKey: 'birth_date',
+            origin: 'automatic',
+            source,
+            quote: content,
+          }),
+        );
+        return { ...turnResult, source, item };
+      };
+      const original = await automatic(
+        '我出生于1990年。',
+        new Date(Date.now() - 10_000).toISOString(),
+      );
+      const corrected = await updateManualMemory('owner', original.item.id, {
+        content: '我出生于1991年。',
+        revision: original.item.revision,
+      });
+      const pending = await turn('session-b', '我出生于1990年。我喜欢喝咖啡。');
+      const pendingSource = (
+        await getDbPool().query(
+          'SELECT id FROM memory_sources WHERE message_id=$1',
+          [pending.messageId],
+        )
+      ).rows[0].id;
+      const beforeExtraction = await prepare(
+        pending.scope,
+        'session-a',
+        [{ kind: 'source', id: pendingSource, revision: 1 }],
+        '出生日期',
+      );
+      expect(
+        beforeExtraction.excerpts.some(({ text }) => text.includes('1990')),
+      ).toBe(false);
+      expect(
+        beforeExtraction.excerpts.some(({ text }) => text.includes('咖啡')),
+      ).toBe(true);
+      const repeat = await automatic(
+        '我出生于1990年。',
+        new Date(Date.now() + 100).toISOString(),
+      );
+      expect(repeat.item.status).toBe('disputed');
+      const active = (await listMemory('owner')).items.filter(
+        (item) => item.fact_key === 'birth_date',
+      );
+      expect(active.map(({ id, content }) => ({ id, content }))).toEqual([
+        { id: corrected.id, content: '我出生于1991年。' },
+      ]);
+      const recalled = await prepare(
+        repeat.scope,
+        'session-b',
+        [
+          { kind: 'source', id: original.source.id, revision: 1 },
+          { kind: 'source', id: repeat.source.id, revision: 1 },
+        ],
+        '我的出生日期是什么',
+      );
+      expect(recalled.excerpts.some(({ text }) => text.includes('1991'))).toBe(
+        true,
+      );
+      expect(recalled.excerpts.some(({ text }) => text.includes('1990'))).toBe(
+        false,
+      );
+      expect((await getCurrentMemorySource(original.source.id))?.content).toBe(
+        '我出生于1990年。',
+      );
+    });
+
+    it('retains automatically replaced statements as historical sources instead of erasing their timeline', async () => {
+      const accepted = [];
+      for (const content of ['我住在北京。', '我住在上海。']) {
+        const turnResult = await turn('session-a', content);
+        const sourceId = (
+          await getDbPool().query(
+            'SELECT id FROM memory_sources WHERE message_id=$1',
+            [turnResult.messageId],
+          )
+        ).rows[0].id;
+        const source = (await getCurrentMemorySource(sourceId))!;
+        const item = await withMemoryTransaction((db) =>
+          insertMemoryItem(db, {
+            scope: turnResult.scope,
+            content,
+            kind: 'fact',
+            factKey: 'residence',
+            origin: 'automatic',
+            source,
+            quote: content,
+          }),
+        );
+        await getDbPool().query(
+          'UPDATE memory_sources SET extracted_revision=revision WHERE id=$1',
+          [source.id],
+        );
+        accepted.push({ ...turnResult, source, item });
+      }
+      const current = accepted[1];
+      expect(
+        (await listMemory('owner')).items.map(({ content }) => content),
+      ).toEqual(['我住在上海。']);
+      const original = await read(current.scope, [
+        { kind: 'source', id: accepted[0].source.id, revision: 1 },
+      ]);
+      expect(original.excerpts[0]).toMatchObject({
+        text: '我住在北京。',
+        label: expect.stringContaining('当时陈述'),
+      });
+    });
+
+    it('returns a recoverable conflict when an edit would replace a different active field owner', async () => {
+      const profession = await createManualMemory('owner', {
+        content: '我是一名外科医生。',
+      });
+      const workplace = await createManualMemory('owner', {
+        content: '我在医院工作。',
+      });
+      await expect(
+        updateManualMemory('owner', workplace.id, {
+          content: '我是一名教师。',
+          revision: workplace.revision,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'MEMORY.FACT_CONFLICT',
+      });
+      expect(
+        (await listMemory('owner')).items.map(({ id }) => id).sort(),
+      ).toEqual([profession.id, workplace.id].sort());
+    });
+
+    it('inherits an existing field key before hashing an automatic replacement with a terse value', async () => {
+      const first = await turn('session-a', '1990年');
+      const add = async (
+        accepted: Awaited<ReturnType<typeof turn>>,
+        key?: string,
+        previous?: string,
+      ) => {
+        const sourceId = (
+          await getDbPool().query(
+            'SELECT id FROM memory_sources WHERE message_id=$1',
+            [accepted.messageId],
+          )
+        ).rows[0].id;
+        const source = (await getCurrentMemorySource(sourceId))!;
+        return withMemoryTransaction((db) =>
+          insertMemoryItem(db, {
+            scope: accepted.scope,
+            content: source.content,
+            kind: 'fact',
+            factKey: key,
+            supersedesId: previous,
+            origin: 'automatic',
+            source,
+            quote: source.content,
+          }),
+        );
+      };
+      const original = await add(first, 'birth_date');
+      const next = await turn('session-a', '1991年');
+      const replacement = await add(next, undefined, original.id);
+      expect(replacement.content_hash).toBe(
+        (await import('#modules/memory/domain')).memoryContentHash(
+          'fact',
+          '1991年',
+          'birth_date',
+        ),
+      );
+      expect(replacement.search_terms).toContain('出生日期');
+      expect((await add(next, 'birth_date')).id).toBe(replacement.id);
     });
 
     it('does not let a shared client sender read another sender private space', async () => {

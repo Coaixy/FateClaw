@@ -67,6 +67,7 @@ export interface MemoryItemRow {
   content: string;
   content_hash: string;
   fact_key: string | null;
+  search_terms?: string[];
   status: 'active' | 'superseded' | 'disputed' | 'forgotten';
   origin: 'automatic' | 'explicit' | 'manual';
   revision: number;
