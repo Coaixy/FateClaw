@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { MemoryCaller } from '@fateclaw/contracts/agent/memory';
-import type { MemoryRequestScope } from '@fateclaw/contracts/memory';
+import type {
+  MemoryCaller,
+  MemoryResult,
+} from '@fateclaw/contracts/agent/memory';
+import type {
+  MemoryExcerpt,
+  MemoryRequestScope,
+} from '@fateclaw/contracts/memory';
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 
 import { createRequestScope } from '#agent/request-scope';
@@ -24,6 +30,23 @@ const scope: MemoryRequestScope = {
   contextGeneration: 1,
 };
 const item = { kind: 'item' as const, id: 'synthetic-item', revision: 1 };
+
+function hydrated(
+  mode: 'read' | 'search',
+  excerpts: MemoryExcerpt[],
+): MemoryResult {
+  return {
+    ok: true,
+    mode,
+    hydration: {
+      status: 'ready',
+      epoch: 1,
+      contextGeneration: 1,
+      tokenBudget: 2000,
+      excerpts,
+    },
+  };
+}
 
 function tools(
   memory: MemoryCaller | undefined,
@@ -120,7 +143,7 @@ describe('managed memory tools', () => {
     expect(excerpts.size).toBe(0);
   });
 
-  it('removes forgotten items from request memory', async () => {
+  it('invalidates all cached aliases and sources after a confirmed forget', async () => {
     const memory = vi.fn<MemoryCaller>(async () => ({
       ok: true,
       mode: 'forget',
@@ -132,8 +155,89 @@ describe('managed memory tools', () => {
       text: 'FORGOTTEN_BODY',
       label: 'Fact',
     });
+    for (const reference of [
+      { ...item, id: 'merged-alias' },
+      { kind: 'source' as const, id: 'supporting-source', revision: 1 },
+    ])
+      excerpts.set(memoryReferenceKey(reference), {
+        reference,
+        text: 'FORGOTTEN_BODY',
+        label: 'Cached evidence',
+      });
     const result = await run('forget_memory', { id: item.id, revision: 1 });
     expect(result.details).toMatchObject({ forgottenId: item.id });
+    expect(excerpts.size).toBe(0);
+  });
+
+  it('does not cache an earlier read that completes after a successful mutation', async () => {
+    let finishRead!: (result: MemoryResult) => void;
+    const pendingRead = new Promise<MemoryResult>((resolve) => {
+      finishRead = resolve;
+    });
+    const memory = vi.fn<MemoryCaller>(async (operation) =>
+      operation.mode === 'read'
+        ? pendingRead
+        : { ok: true, mode: 'forget', forgottenId: item.id },
+    );
+    const { run, excerpts } = tools(memory);
+    const reading = run('get_memory_source', { reference: item });
+    await run('forget_memory', { id: item.id });
+    finishRead(
+      hydrated('read', [
+        { reference: item, text: 'STALE_IN_FLIGHT_BODY', label: 'Fact' },
+      ]),
+    );
+    const result = await reading;
+    expect(result.details).toMatchObject({ status: 'unavailable' });
+    expect(excerpts.size).toBe(0);
+  });
+
+  it('keeps a committed update successful when reading its new value fails, without keeping old text', async () => {
+    const updated = { ...item, id: 'updated-item', revision: 2 };
+    const memory = vi.fn<MemoryCaller>(async (operation) =>
+      operation.mode === 'update'
+        ? { ok: true, mode: 'update', reference: updated }
+        : { ok: false, code: 'MEMORY.TIMEOUT', error: 'timeout' },
+    );
+    const { run, excerpts } = tools(memory);
+    excerpts.set(memoryReferenceKey(item), {
+      reference: item,
+      text: 'OLD_BODY',
+      label: 'Fact',
+    });
+    const result = await run('update_memory', {
+      id: item.id,
+      revision: 1,
+      content: 'NEW_BODY',
+    });
+    expect(result.details).toMatchObject({
+      status: 'ready',
+      references: [updated],
+      isError: false,
+    });
+    expect(memory).toHaveBeenLastCalledWith(
+      { mode: 'read', references: [updated] },
+      undefined,
+    );
+    expect(excerpts.size).toBe(0);
+    expect(JSON.stringify(result)).not.toMatch(/OLD_BODY|NEW_BODY/);
+  });
+
+  it('does not hydrate a successful update while recall is disabled', async () => {
+    const updated = { ...item, revision: 2 };
+    const memory = vi.fn<MemoryCaller>(async () => ({
+      ok: true,
+      mode: 'update',
+      reference: updated,
+    }));
+    const { run, excerpts } = tools(memory, { ...scope, recallEnabled: false });
+    const result = await run('update_memory', {
+      id: item.id,
+      revision: 1,
+      content: 'NEW_BODY',
+    });
+    expect(result.details).toMatchObject({ references: [updated] });
+    expect(memory).toHaveBeenCalledOnce();
     expect(excerpts.size).toBe(0);
   });
 

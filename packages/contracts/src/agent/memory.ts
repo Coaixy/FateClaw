@@ -15,7 +15,7 @@ export const MEMORY_RPC_TIMEOUT_MS = 10_000;
 /**
  * Host memory operations available to one admitted request.
  *
- * `prepare` runs once per user turn and returns every excerpt the provider may see for that turn.
+ * `prepare` runs at the start of a turn and refreshes authorization after an in-turn mutation.
  * `read` and `search` hydrate immediately so a tool has text within the same model step.
  */
 export type MemoryOperation =

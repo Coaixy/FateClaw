@@ -626,16 +626,23 @@ describe('Pi SDK session lifecycle', () => {
       id: 'synthetic-remaining-item',
       revision: 1,
     };
+    let isForgotten = false;
     const memory = vi.fn<MemoryCaller>(async (operation) => {
-      if (operation.mode === 'forget')
+      if (operation.mode === 'forget') {
+        isForgotten = true;
         return { ok: true, mode: 'forget', forgottenId: operation.id };
+      }
       if (operation.mode === 'prepare')
         return hydrated('prepare', [
-          {
-            reference: forgotten,
-            text: 'SYNTHETIC_FORGOTTEN_MEMORY_BODY',
-            label: 'Old fact',
-          },
+          ...(!isForgotten
+            ? [
+                {
+                  reference: forgotten,
+                  text: 'SYNTHETIC_FORGOTTEN_MEMORY_BODY',
+                  label: 'Old fact',
+                },
+              ]
+            : []),
           {
             reference: remaining,
             text: 'SYNTHETIC_REMAINING_MEMORY_BODY',
@@ -685,7 +692,7 @@ describe('Pi SDK session lifecycle', () => {
     expect(JSON.stringify(result.piSession)).not.toContain('SYNTHETIC_');
     expect(
       memory.mock.calls.filter(([operation]) => operation.mode === 'prepare'),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it('injects the Soul persona for every audience and offers Soul tools only to the owner', async () => {

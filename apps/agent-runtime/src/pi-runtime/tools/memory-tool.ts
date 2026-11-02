@@ -45,6 +45,20 @@ export const MANAGED_MEMORY_TOOL_NAMES = new Set([
   'forget_memory',
 ]);
 
+const requestMemoryGenerations = new WeakMap<RequestMemoryExcerpts, number>();
+
+export function requestMemoryGeneration(
+  excerpts: RequestMemoryExcerpts,
+): number {
+  return requestMemoryGenerations.get(excerpts) ?? 0;
+}
+
+function invalidateRequestMemory(excerpts: RequestMemoryExcerpts): void {
+  // Only the host knows which family aliases and source spans a mutation revokes.
+  requestMemoryGenerations.set(excerpts, requestMemoryGeneration(excerpts) + 1);
+  excerpts.clear();
+}
+
 export interface MemoryToolMetadata {
   format: typeof MEMORY_RESULT_FORMAT;
   status: 'ready' | 'partial' | 'disabled' | 'unavailable';
@@ -111,11 +125,14 @@ export function createPiManagedMemoryTools(
     signal: AbortSignal | undefined,
     requested: MemoryReference[] = [],
   ): Promise<MemoryToolMetadata> => {
+    const generation = requestMemoryGeneration(options.excerpts);
     const result = await call(operation, signal);
     if (!result.ok) return failed(result);
     if (
       (result.mode !== 'read' && result.mode !== 'search') ||
-      !hydrationMatchesScope(result.hydration, options.memoryScope)
+      !hydrationMatchesScope(result.hydration, options.memoryScope) ||
+      generation !== requestMemoryGeneration(options.excerpts) ||
+      signal?.aborted
     )
       return failed(memoryUnavailable());
     const { status, excerpts } = result.hydration;
@@ -132,10 +149,15 @@ export function createPiManagedMemoryTools(
       return { ...base(), status: 'partial', references: requested };
     return { ...base(), status, references };
   };
-  const forgetLocal = (id: string) => {
-    for (const [key, excerpt] of options.excerpts)
-      if (excerpt.reference.kind === 'item' && excerpt.reference.id === id)
-        options.excerpts.delete(key);
+  const refreshAfterWrite = async (
+    reference: MemoryReference,
+    signal?: AbortSignal,
+  ): Promise<MemoryToolMetadata> => {
+    invalidateRequestMemory(options.excerpts);
+    // Read the committed value even if the next prepare spends its budget on other facts.
+    if (options.memoryScope.recallEnabled)
+      await hydrate({ mode: 'read', references: [reference] }, signal);
+    return { ...base(), references: [reference] };
   };
   const tool = (
     name: string,
@@ -326,9 +348,8 @@ export function createPiManagedMemoryTools(
             signal,
           );
           if (!result.ok) return failed(result);
-          return result.mode === 'remember'
-            ? { ...base(), references: [result.reference] }
-            : failed(memoryUnavailable());
+          if (result.mode !== 'remember') return failed(memoryUnavailable());
+          return refreshAfterWrite(result.reference, signal);
         },
       ),
       tool(
@@ -359,8 +380,7 @@ export function createPiManagedMemoryTools(
           );
           if (!result.ok) return failed(result);
           if (result.mode !== 'update') return failed(memoryUnavailable());
-          forgetLocal(id);
-          return { ...base(), references: [result.reference] };
+          return refreshAfterWrite(result.reference, signal);
         },
       ),
       tool(
@@ -387,7 +407,7 @@ export function createPiManagedMemoryTools(
           );
           if (!result.ok) return failed(result);
           if (result.mode !== 'forget') return failed(memoryUnavailable());
-          forgetLocal(result.forgottenId);
+          invalidateRequestMemory(options.excerpts);
           return { ...base(), forgottenId: result.forgottenId };
         },
       ),

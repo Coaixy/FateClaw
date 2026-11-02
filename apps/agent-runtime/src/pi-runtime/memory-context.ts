@@ -28,6 +28,7 @@ import {
   MANAGED_MEMORY_TOOL_NAMES,
   MEMORY_READ_TOOL_NAMES,
   MEMORY_RESULT_FORMAT,
+  requestMemoryGeneration,
   type MemoryToolMetadata,
 } from './tools/memory-tool.js';
 
@@ -151,9 +152,9 @@ function latestUserIndex(messages: ContextMessages): number {
 /**
  * Projects host memory into provider-bound context only.
  *
- * `prepare` runs once on the first model step of the request; its excerpts and those returned by
- * memory read tools live in `excerpts` for every later step, retry and pool failover of the same
- * request. Persisted messages and tool results keep references only.
+ * `prepare` runs on the first model step and again after an in-request mutation invalidates the
+ * excerpts. Other steps, retries and pool failovers reuse the request cache. Persisted messages
+ * and tool results keep references only.
  */
 export function installManagedMemoryProjection(options: {
   agent: AgentSession['agent'];
@@ -163,14 +164,18 @@ export function installManagedMemoryProjection(options: {
   requestScope: RequestScope;
   excerpts: RequestMemoryExcerpts;
 }): void {
-  let prepared: Promise<void> | undefined;
-  const prepare = async (messages: ContextMessages, signal?: AbortSignal) => {
+  let prepared: { generation: number; completion: Promise<void> } | undefined;
+  const prepare = async (
+    messages: ContextMessages,
+    generation: number,
+    signal?: AbortSignal,
+  ) => {
     if (!options.scope.recallEnabled || !options.memory) return;
     const references = new Map<string, MemoryReference>();
     for (const message of messages) {
       if (
         message.role !== 'toolResult' ||
-        !MEMORY_READ_TOOL_NAMES.has(message.toolName)
+        !MANAGED_MEMORY_TOOL_NAMES.has(message.toolName)
       )
         continue;
       for (const reference of readMetadata(message)?.references ?? []) {
@@ -202,6 +207,7 @@ export function installManagedMemoryProjection(options: {
         result.ok &&
         result.mode === 'prepare' &&
         hydrationMatchesScope(result.hydration, options.scope) &&
+        generation === requestMemoryGeneration(options.excerpts) &&
         !signal?.aborted
       ) {
         status = result.hydration.status;
@@ -233,8 +239,13 @@ export function installManagedMemoryProjection(options: {
   options.agent.transformContext = async (messages, signal) => {
     const clone = structuredClone(messages);
     const projected = previous ? await previous(clone, signal) : clone;
-    prepared ??= prepare(projected, signal);
-    await prepared;
+    const generation = requestMemoryGeneration(options.excerpts);
+    if (!prepared || prepared.generation !== generation)
+      prepared = {
+        generation,
+        completion: prepare(projected, generation, signal),
+      };
+    await prepared.completion;
 
     const metadata = projected.map((message) =>
       message.role === 'toolResult' &&

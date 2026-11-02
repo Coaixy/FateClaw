@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AgentSession,
   Extension,
@@ -25,7 +25,10 @@ import {
   createManagedMemoryCompactionExtension,
   installManagedMemoryProjection,
 } from '#agent/pi-runtime/memory-context';
-import { MEMORY_RESULT_FORMAT } from '#agent/pi-runtime/tools/memory-tool';
+import {
+  createPiManagedMemoryTools,
+  MEMORY_RESULT_FORMAT,
+} from '#agent/pi-runtime/tools/memory-tool';
 
 type Messages = Parameters<
   NonNullable<AgentSession['agent']['transformContext']>
@@ -74,10 +77,14 @@ const history = (): Messages =>
     { role: 'user', content: 'Current question', timestamp: 4 },
   ] as Messages;
 
-function prepared(excerpts: MemoryExcerpt[], overrides = {}): MemoryResult {
+function prepared(
+  excerpts: MemoryExcerpt[],
+  overrides = {},
+  mode: 'prepare' | 'read' | 'search' = 'prepare',
+): MemoryResult {
   return {
     ok: true,
-    mode: 'prepare',
+    mode,
     hydration: {
       status: 'ready',
       epoch: 4,
@@ -87,6 +94,30 @@ function prepared(excerpts: MemoryExcerpt[], overrides = {}): MemoryResult {
       excerpts,
       ...overrides,
     },
+  };
+}
+
+function toolRunner(memory: MemoryCaller, excerpts: RequestMemoryExcerpts) {
+  const tools = createPiManagedMemoryTools({
+    requestScope: createRequestScope(),
+    recordExecution() {},
+    memory,
+    memoryScope: scope,
+    excerpts,
+  });
+  return async (name: string, params: Record<string, unknown>) => {
+    const toolCallId = `call-${name}`;
+    const result = await tools
+      .find((tool) => tool.name === name)!
+      .execute(toolCallId, params, undefined, undefined, {} as never);
+    return {
+      ...result,
+      role: 'toolResult',
+      toolName: name,
+      toolCallId,
+      isError: false,
+      timestamp: 5,
+    } as Messages[number];
   };
 }
 
@@ -115,7 +146,10 @@ function install(
 }
 
 describe('managed memory provider projection', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('prepares once per request with earlier references oldest first and reuses the projection on later steps', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     const memory = vi.fn<MemoryCaller>(async () =>
       prepared([
         { reference: earlier, text: 'EARLIER_BODY', label: 'Earlier' },
@@ -218,6 +252,203 @@ describe('managed memory provider projection', () => {
     expect(JSON.stringify(messages)).not.toContain('TOOL_READ_BODY');
     // A reference without text this turn is reported as missing, not as an empty success.
     expect(output[1]).toMatchObject({ details: { status: 'unavailable' } });
+  });
+
+  it('reauthorizes cached family aliases and source pages after forgetting, while preserving unrelated memory', async () => {
+    const alias = { ...earlier, id: 'merged-alias' };
+    const source = {
+      kind: 'source' as const,
+      id: 'shared-source',
+      revision: 1,
+    };
+    const sourcePage = { ...source, offset: 10, limit: 20 };
+    const unrelated = { ...automatic, id: 'unrelated-item' };
+    const oldExcerpts = [earlier, alias, source, sourcePage].map(
+      (reference) => ({
+        reference,
+        text: 'FORGOTTEN_VALUE',
+        label: 'Old evidence',
+      }),
+    );
+    const retained = {
+      reference: unrelated,
+      text: 'UNRELATED_VALUE',
+      label: 'Unrelated fact',
+    };
+    let forgotten = false;
+    const memory = vi.fn<MemoryCaller>(async (operation) => {
+      if (operation.mode === 'prepare')
+        return prepared(
+          forgotten
+            ? [
+                retained,
+                {
+                  reference: source,
+                  text: 'RETAINED_SOURCE_STATEMENT',
+                  label: 'Source',
+                },
+              ]
+            : [],
+        );
+      if (operation.mode === 'search')
+        return prepared([...oldExcerpts, retained], {}, 'search');
+      if (operation.mode === 'forget') {
+        forgotten = true;
+        return { ok: true, mode: 'forget', forgottenId: earlier.id };
+      }
+      throw new Error('Unexpected synthetic memory operation');
+    });
+    const { project, excerpts } = install(memory);
+    const run = toolRunner(memory, excerpts);
+    const messages = [
+      { role: 'user', content: 'Current', timestamp: 1 },
+    ] as Messages;
+    await project(messages);
+    messages.push(await run('search_memory', { query: 'Synthetic fact' }));
+    expect(JSON.stringify(await project(messages))).toContain(
+      'FORGOTTEN_VALUE',
+    );
+    messages.push(await run('forget_memory', { id: earlier.id }));
+    const canonical = JSON.stringify(messages);
+    const output = JSON.stringify(await project(messages));
+    expect(output).not.toContain('FORGOTTEN_VALUE');
+    expect(output).toContain('UNRELATED_VALUE');
+    expect(output).toContain('RETAINED_SOURCE_STATEMENT');
+    expect(excerpts.has(memoryReferenceKey(earlier))).toBe(false);
+    expect(excerpts.has(memoryReferenceKey(alias))).toBe(false);
+    expect(excerpts.has(memoryReferenceKey(sourcePage))).toBe(false);
+    expect(memory).toHaveBeenLastCalledWith(
+      {
+        mode: 'prepare',
+        query: 'Current question',
+        references: [earlier, alias, source, sourcePage, unrelated],
+      },
+      undefined,
+    );
+    expect(JSON.stringify(messages)).toBe(canonical);
+    expect(canonical).not.toMatch(/FORGOTTEN_VALUE|UNRELATED_VALUE/);
+    await project(messages);
+    expect(memory).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(['remember', 'update'] as const)(
+    'projects the committed %s even when prepare omits it, without restoring cached old evidence',
+    async (mode) => {
+      const alias = { ...earlier, id: 'older-family-item' };
+      const source = { kind: 'source' as const, id: 'old-source', revision: 1 };
+      const updated = { ...earlier, id: 'updated-item', revision: 3 };
+      const unrelated = {
+        reference: automatic,
+        text: 'UNRELATED_VALUE',
+        label: 'Unrelated fact',
+      };
+      let changed = false;
+      const memory = vi.fn<MemoryCaller>(async (operation) => {
+        if (operation.mode === 'prepare')
+          return prepared(changed ? [unrelated] : []);
+        if (operation.mode === 'search')
+          return prepared(
+            [
+              ...[earlier, alias, source].map((reference) => ({
+                reference,
+                text: 'OLD_VALUE',
+                label: 'Old evidence',
+              })),
+              unrelated,
+            ],
+            {},
+            'search',
+          );
+        if (operation.mode === mode) {
+          changed = true;
+          return { ok: true, mode, reference: updated };
+        }
+        if (operation.mode === 'read') {
+          expect(operation.references).toEqual([updated]);
+          return prepared(
+            [
+              {
+                reference: updated,
+                text: 'NEW_VALUE',
+                label: 'Corrected fact',
+              },
+            ],
+            {},
+            'read',
+          );
+        }
+        throw new Error('Unexpected synthetic memory operation');
+      });
+      const { project, excerpts } = install(memory);
+      const run = toolRunner(memory, excerpts);
+      const messages = [
+        { role: 'user', content: 'Current', timestamp: 1 },
+      ] as Messages;
+      await project(messages);
+      messages.push(await run('search_memory', { query: 'Synthetic fact' }));
+      expect(JSON.stringify(await project(messages))).toContain('OLD_VALUE');
+      messages.push(
+        await run(`${mode}_memory`, {
+          content: 'NEW_VALUE',
+          ...(mode === 'update'
+            ? { id: earlier.id, revision: earlier.revision }
+            : {}),
+        }),
+      );
+      const canonical = JSON.stringify(messages);
+      const output = JSON.stringify(await project(messages));
+      expect(output).toContain('NEW_VALUE');
+      expect(output).toContain('UNRELATED_VALUE');
+      expect(output).not.toContain('OLD_VALUE');
+      expect(excerpts.get(memoryReferenceKey(updated))?.text).toBe('NEW_VALUE');
+      expect(memory).toHaveBeenLastCalledWith(
+        {
+          mode: 'prepare',
+          query: 'Current question',
+          references: [earlier, alias, source, automatic, updated],
+        },
+        undefined,
+      );
+      expect(JSON.stringify(messages)).toBe(canonical);
+      expect(canonical).not.toMatch(/OLD_VALUE|NEW_VALUE|UNRELATED_VALUE/);
+    },
+  );
+
+  it('discards a prepare started before forgetting and continues without old text when refresh fails', async () => {
+    let finishPrepare!: (result: MemoryResult) => void;
+    const pendingPrepare = new Promise<MemoryResult>((resolve) => {
+      finishPrepare = resolve;
+    });
+    let prepares = 0;
+    const memory = vi.fn<MemoryCaller>(async (operation) => {
+      if (operation.mode === 'forget')
+        return { ok: true, mode: 'forget', forgottenId: earlier.id };
+      if (operation.mode === 'prepare' && prepares++ === 0)
+        return pendingPrepare;
+      throw new Error('Synthetic refresh failure');
+    });
+    const { project, excerpts } = install(memory);
+    const run = toolRunner(memory, excerpts);
+    const messages = history();
+    const projecting = project(messages);
+    const forgotten = await run('forget_memory', { id: earlier.id });
+    finishPrepare(
+      prepared([
+        { reference: earlier, text: 'STALE_PREPARE_BODY', label: 'Old fact' },
+      ]),
+    );
+    expect(JSON.stringify(await projecting)).not.toContain(
+      'STALE_PREPARE_BODY',
+    );
+    messages.push(forgotten);
+    const canonical = JSON.stringify(messages);
+    expect(JSON.stringify(await project(messages))).not.toContain(
+      'STALE_PREPARE_BODY',
+    );
+    expect(excerpts.size).toBe(0);
+    expect(JSON.stringify(messages)).toBe(canonical);
+    await project(messages);
+    expect(memory).toHaveBeenCalledTimes(3);
   });
 
   it('keeps long queries and accumulated references within the contract limits', async () => {
