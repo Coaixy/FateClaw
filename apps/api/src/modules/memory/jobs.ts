@@ -86,24 +86,39 @@ export async function claimMemoryJobs(
        UPDATE memory_jobs SET state='failed',lease_token=NULL,lease_until=NULL,
          error_code=COALESCE(error_code,'MEMORY.ATTEMPTS_EXHAUSTED'),updated_at=clock_timestamp()
        WHERE attempts>=$1 AND (state='pending' OR state='running' AND lease_until<=clock_timestamp())
+     ), owners AS MATERIALIZED (
+       SELECT root.id,root.owner_user_id,root.last_job_claimed_at
+       FROM memory_scopes root WHERE root.parent_scope_id IS NULL AND EXISTS(
+         SELECT 1 FROM memory_jobs j WHERE j.owner_user_id=root.owner_user_id AND j.attempts<$1
+           AND j.next_attempt_at<=clock_timestamp()
+           AND (j.state='pending' OR j.state='running' AND j.lease_until<=clock_timestamp()))
+       ORDER BY root.last_job_claimed_at NULLS FIRST,root.id
+       FOR NO KEY UPDATE OF root SKIP LOCKED LIMIT $2
      ), ranked AS (
-       -- Round-robin across owners so one account's backlog cannot starve the shared budget.
-       SELECT id,row_number() OVER(PARTITION BY owner_user_id ORDER BY priority,created_at,id) AS turn,priority,created_at
+       SELECT eligible.id,row_number() OVER(PARTITION BY eligible.owner_user_id
+         ORDER BY priority,created_at,eligible.id) AS turn,priority,created_at,owners.last_job_claimed_at
        FROM (SELECT id,owner_user_id,created_at,
            CASE WHEN kind='extract' AND NOT(payload ? 'backfillJobId') THEN 0 WHEN kind='extract' THEN 1 ELSE 2 END AS priority
          FROM memory_jobs
          WHERE attempts<$1 AND next_attempt_at<=clock_timestamp()
            AND (state='pending' OR state='running' AND lease_until<=clock_timestamp())) eligible
+       JOIN owners ON owners.owner_user_id=eligible.owner_user_id
      ), candidates AS (
        SELECT j.id FROM memory_jobs j JOIN ranked r ON r.id=j.id
        -- Repeated on the locked row: a concurrent worker may have claimed it since the snapshot.
        WHERE j.attempts<$1 AND (j.state='pending' OR j.state='running' AND j.lease_until<=clock_timestamp())
-       ORDER BY r.turn,r.priority,r.created_at,j.id
+       ORDER BY r.turn,r.last_job_claimed_at NULLS FIRST,r.priority,r.created_at,j.id
        FOR UPDATE OF j SKIP LOCKED LIMIT $2
-     ) UPDATE memory_jobs j SET state='running',attempts=j.attempts+1,
+     ), claimed AS (
+       UPDATE memory_jobs j SET state='running',attempts=j.attempts+1,
        lease_token=gen_random_uuid()::text,lease_until=clock_timestamp()+$3::int*interval '1 millisecond',
        error_code=NULL,updated_at=clock_timestamp()
-       FROM candidates c WHERE j.id=c.id RETURNING j.*`,
+       FROM candidates c WHERE j.id=c.id RETURNING j.*
+     ), served AS (
+       UPDATE memory_scopes root SET last_job_claimed_at=clock_timestamp()
+       WHERE root.id IN(SELECT owners.id FROM owners JOIN claimed ON claimed.owner_user_id=owners.owner_user_id)
+       RETURNING root.id
+     ) SELECT claimed.* FROM claimed`,
     [
       policy.max_attempts,
       Math.min(limit, policy.worker_concurrency),

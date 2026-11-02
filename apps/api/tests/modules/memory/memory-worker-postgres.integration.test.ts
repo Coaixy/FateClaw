@@ -477,6 +477,40 @@ describe.skipIf(!connectionString)(
       ]);
     });
 
+    it('rotates across more ready owners than worker slots over consecutive batches', async () => {
+      await getDbPool().query("INSERT INTO users(id) VALUES('third')");
+      for (const owner of ['owner', 'other', 'third']) {
+        const scope = await ownerMemorySnapshot(owner);
+        for (let index = 0; index < (owner === 'third' ? 1 : 5); index++)
+          await queueMemoryJob(getDbPool(), {
+            scope,
+            kind: 'extract',
+            eventType: 'user_message_committed',
+            key: `rotation:${owner}:${index}`,
+          });
+        await getDbPool().query(
+          'UPDATE memory_jobs SET created_at=$2::timestamptz WHERE owner_user_id=$1',
+          [
+            owner,
+            owner === 'third' ? '2026-02-01T00:00:00Z' : '2026-01-01T00:00:00Z',
+          ],
+        );
+      }
+      const owners: string[] = [];
+      for (let batch = 0; batch < 2; batch++) {
+        const jobs = await claimMemoryJobs(
+          { ...(await getMemoryRuntimePolicy()), worker_concurrency: 2 },
+          2,
+        );
+        owners.push(...jobs.map((job) => job.owner_user_id));
+        await getDbPool().query(
+          "UPDATE memory_jobs SET state='succeeded',lease_token=NULL,lease_until=NULL WHERE id=ANY($1::text[])",
+          [jobs.map((job) => job.id)],
+        );
+      }
+      expect(new Set(owners)).toEqual(new Set(['owner', 'other', 'third']));
+    });
+
     it('extracts admitted user evidence, indexes its text and recalls it by keyword in another session', async () => {
       const admitted = await turn('我经常喝无糖拿铁。');
       await drain();
