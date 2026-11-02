@@ -146,9 +146,12 @@ export function createPiSoulReadTool(
     async execute(
       toolCallId,
       params,
+      signal,
     ): Promise<AgentToolResult<PiSoulReadDetails>> {
       const startedAt = Date.now();
+      signal?.throwIfAborted();
       const content = await options.soulStore.read(options.accountId);
+      signal?.throwIfAborted();
       const details: PiSoulReadDetails = {
         output: '',
         isError: false,
@@ -212,9 +215,12 @@ export function createPiSoulEditTool(
     async execute(
       toolCallId,
       params,
+      signal,
     ): Promise<AgentToolResult<PiSoulEditDetails>> {
       const startedAt = Date.now();
+      signal?.throwIfAborted();
       const currentContent = await options.soulStore.read(options.accountId);
+      signal?.throwIfAborted();
       const currentHash = hashSoul(currentContent);
       const normalizedNewContent = params.newContent.trimEnd();
 
@@ -246,6 +252,7 @@ export function createPiSoulEditTool(
           error: `拒绝编辑 Soul：内容长度 ${normalizedNewContent.length} 超过上限 ${MAX_SOUL_CONTENT_CHARS}。`,
         };
       } else {
+        signal?.throwIfAborted();
         const updated = await options.soulStore.update(
           options.accountId,
           normalizedNewContent,

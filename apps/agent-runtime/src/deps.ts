@@ -6,6 +6,7 @@ import {
   querySoulContent,
   updateSoulContentDb,
   type EffectiveUserSkill,
+  type SoulRequestContext,
 } from './agent-db.js';
 import type { SkillContentRevision } from '@fateclaw/contracts/skills/content';
 
@@ -19,12 +20,13 @@ import type { SkillContentRevision } from '@fateclaw/contracts/skills/content';
  * 注意：实现层负责处理 web:{userId} 和微信账号的归属映射。
  */
 export interface SoulStore {
-  read(accountId: string): Promise<string>;
+  read(accountId: string, request?: SoulRequestContext): Promise<string>;
   canEdit(accountId: string): Promise<boolean>;
   update(
     accountId: string,
     content: string,
     expectedHash: string,
+    request?: SoulRequestContext,
   ): Promise<boolean>;
 }
 
@@ -66,14 +68,14 @@ export interface AgentRuntimeDeps {
 
 const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   soulStore: {
-    read(accountId) {
-      return querySoulContent(accountId);
+    read(accountId, request) {
+      return querySoulContent(accountId, request);
     },
     canEdit(accountId) {
       return querySoulEditEnabled(accountId);
     },
-    update(accountId, content, expectedHash) {
-      return updateSoulContentDb(accountId, content, expectedHash);
+    update(accountId, content, expectedHash, request) {
+      return updateSoulContentDb(accountId, content, expectedHash, request);
     },
   },
 
@@ -87,6 +89,18 @@ const defaultAgentRuntimeDeps: AgentRuntimeDeps = {
   },
   skillRevisions: { readRevision: querySkillContentRevision },
 };
+
+export function bindSoulStoreToRequest(
+  store: SoulStore,
+  request: SoulRequestContext,
+): SoulStore {
+  return {
+    read: (accountId) => store.read(accountId, request),
+    canEdit: (accountId) => store.canEdit(accountId),
+    update: (accountId, content, expectedHash) =>
+      store.update(accountId, content, expectedHash, request),
+  };
+}
 
 /**
  * 获取生产默认 Agent Runtime 依赖。

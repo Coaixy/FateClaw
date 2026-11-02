@@ -13,6 +13,12 @@ import { initDbPool, getDbPool, closeDbPool } from '#infrastructure/db-pool';
 import { durableAgentRequestsMigration } from '#infrastructure/migrations/versions/0076-durable-agent-requests';
 import { crossConversationMemoryMigration } from '#infrastructure/migrations/versions/0102-cross-conversation-memory';
 import { memoryReliabilityMigration } from '#infrastructure/migrations/versions/0103-memory-reliability';
+import {
+  closeAgentDb,
+  querySoulContent,
+  updateSoulContentDb,
+} from '../../../../agent-runtime/src/agent-db';
+import { memoryHash } from '#modules/memory/domain';
 import { piSessionFramesMigration } from '#infrastructure/migrations/versions/0094-pi-session-frames';
 import {
   getPiSessionBase,
@@ -95,6 +101,7 @@ describe.skipIf(!connectionString)(
       administrator = new pg.Pool({ connectionString });
       await administrator.query(`CREATE SCHEMA ${schema}`);
       target.searchParams.set('options', `-c search_path=${schema},public`);
+      process.env.DATABASE_URL = target.toString();
       const db = initDbPool(target.toString());
       await db.query(`
       CREATE TABLE users(id text PRIMARY KEY,soul_content text NOT NULL DEFAULT '',soul_edit_enabled boolean NOT NULL DEFAULT true,created_at timestamptz DEFAULT clock_timestamp());
@@ -137,6 +144,7 @@ describe.skipIf(!connectionString)(
     afterAll(async () => {
       if (!administrator) return;
       await closeDbPool();
+      await closeAgentDb();
       await administrator.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await administrator.end();
     });
@@ -1557,6 +1565,75 @@ describe.skipIf(!connectionString)(
       );
       expect(replacement.search_terms).toContain('出生日期');
       expect((await add(next, 'birth_date')).id).toBe(replacement.id);
+    });
+
+    it('fences Soul tools on the current sender binding and editing switch before a heartbeat can observe revocation', async () => {
+      const metadata = {
+        source_channel: 'wechat',
+        wechat_account_id: 'synthetic',
+        sender_hash: 'soul-owner',
+      };
+      const first = await turn('session-a', '初始化说话人。', metadata);
+      await updateMemoryScopeBinding('owner', first.scope.scopeId, {
+        speaker_subject_id: 'self:owner',
+        share_subject_memory: true,
+        revision: 1,
+      });
+      const bound = await turn('session-a', '帮我修改 Soul。', metadata);
+      await getDbPool().query(
+        "UPDATE agent_requests SET state='running' WHERE request_id=$1",
+        [bound.requestId],
+      );
+      const request = {
+        requestId: bound.requestId,
+        executionId: bound.executionId,
+      };
+      expect(await querySoulContent('web:owner', request)).toBe('');
+      expect(
+        await updateSoulContentDb(
+          'web:owner',
+          'authorized',
+          memoryHash(''),
+          request,
+        ),
+      ).toBe(true);
+      await getDbPool().query(
+        "UPDATE users SET soul_edit_enabled=false WHERE id='owner'",
+      );
+      expect(
+        await updateSoulContentDb(
+          'web:owner',
+          'disabled-write',
+          memoryHash('authorized'),
+          request,
+        ),
+      ).toBe(false);
+      await getDbPool().query(
+        "UPDATE users SET soul_edit_enabled=true WHERE id='owner'",
+      );
+      await updateMemoryScopeBinding('owner', bound.scope.scopeId, {
+        speaker_subject_id: null,
+        share_subject_memory: false,
+        revision: bound.scope.bindingRevision!,
+      });
+      await expect(querySoulContent('web:owner', request)).rejects.toThrow(
+        'no longer authorized',
+      );
+      await expect(
+        updateSoulContentDb(
+          'web:owner',
+          'revoked-write',
+          memoryHash('authorized'),
+          request,
+        ),
+      ).rejects.toThrow('no longer authorized');
+      expect(
+        (
+          await getDbPool().query(
+            "SELECT soul_content FROM users WHERE id='owner'",
+          )
+        ).rows[0].soul_content,
+      ).toBe('authorized');
     });
 
     it('does not let a shared client sender read another sender private space', async () => {

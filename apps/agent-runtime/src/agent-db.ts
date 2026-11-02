@@ -181,6 +181,50 @@ export async function queryEffectiveUserSkillsByIds(
 
 // ── Soul ──
 
+export interface SoulRequestContext {
+  requestId: string;
+  executionId: string;
+}
+
+/** The root/request locks make a committed binding revocation precede any later Soul access. */
+async function authorizeSoulRequest(
+  client: pg.PoolClient,
+  accountId: string,
+  request: SoulRequestContext,
+): Promise<string> {
+  if (!request.requestId || !request.executionId)
+    throw new Error('Soul request identity is missing');
+  const locked = await client.query(
+    `SELECT root.id FROM agent_requests r
+       JOIN memory_scopes actor ON actor.id=r.memory_scope->>'scopeId' AND actor.owner_user_id=r.owner_user_id
+       JOIN memory_scopes root ON root.id=COALESCE(actor.parent_scope_id,actor.id)
+     WHERE r.request_id=$1 AND r.execution_id=$2 AND r.account_id=$3
+     FOR NO KEY UPDATE OF root`,
+    [request.requestId, request.executionId, accountId],
+  );
+  if (!locked.rowCount) throw new Error('Soul request is no longer authorized');
+  const current = await client.query<{ owner_user_id: string }>(
+    `SELECT r.owner_user_id FROM agent_requests r
+       JOIN chat_sessions session ON session.id=r.session_id AND session.account_id=r.account_id AND session.user_id=r.owner_user_id
+       JOIN memory_scopes actor ON actor.id=r.memory_scope->>'scopeId' AND actor.owner_user_id=r.owner_user_id
+       JOIN pi_session_contexts context ON context.session_id=session.id
+         AND context.context_audience=COALESCE(r.memory_scope->>'contextAudience','')
+         AND context.context_generation=(r.memory_scope->>'contextGeneration')::int
+         AND context.reset_revision=session.memory_context_generation
+     WHERE r.request_id=$1 AND r.execution_id=$2 AND r.account_id=$3 AND r.state='running'
+       AND r.cancel_requested_at IS NULL AND r.deadline_at>clock_timestamp() AND session.deleted_at IS NULL
+       AND r.memory_scope->>'ownerAudience'='true'
+       AND actor.actor_key=r.memory_scope->>'actorKey' AND actor.audience_key=r.memory_scope->>'audienceKey'
+       AND actor.binding_revision=COALESCE((r.memory_scope->>'bindingRevision')::int,1)
+       AND (actor.actor_key='user:'||r.owner_user_id OR actor.bound_subject_id='self:'||r.owner_user_id AND actor.share_subject_memory)
+       AND ($3='web:'||r.owner_user_id OR EXISTS(SELECT 1 FROM accounts a WHERE a.id=$3 AND a.owner_id=r.owner_user_id))
+     FOR UPDATE OF r`,
+    [request.requestId, request.executionId, accountId],
+  );
+  if (!current.rows[0]) throw new Error('Soul request is no longer authorized');
+  return current.rows[0].owner_user_id;
+}
+
 /**
  * 读取账号可见的用户级 Soul。
  *
@@ -188,8 +232,30 @@ export async function queryEffectiveUserSkillsByIds(
  * @returns 可注入 Pi Runtime 的 Soul 内容；未配置时返回空字符串。
  * @remarks 用户级 Soul 优先于账号级历史 Soul，确保 Dashboard 维护的是唯一长期记忆来源。
  */
-export async function querySoulContent(accountId: string): Promise<string> {
-  return readSoulContent(getAgentDbPool(), accountId);
+export async function querySoulContent(
+  accountId: string,
+  request?: SoulRequestContext,
+): Promise<string> {
+  if (!request) return readSoulContent(getAgentDbPool(), accountId);
+  const client = await getAgentDbPool().connect();
+  let discard = false;
+  try {
+    await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    await client.query("SET LOCAL lock_timeout='5s'");
+    await authorizeSoulRequest(client, accountId, request);
+    const content = await readSoulContent(client, accountId);
+    await client.query('COMMIT');
+    return content;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      discard = true;
+    }
+    throw error;
+  } finally {
+    client.release(discard);
+  }
 }
 
 async function readSoulContent(
@@ -292,12 +358,28 @@ export async function updateSoulContentDb(
   accountId: string,
   content: string,
   expectedHash: string,
+  request?: SoulRequestContext,
 ): Promise<boolean> {
   const client = await getAgentDbPool().connect();
   let discardClient = false;
   try {
     await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+    let ownerUserId: string | undefined;
+    if (request) {
+      await client.query("SET LOCAL lock_timeout='5s'");
+      ownerUserId = await authorizeSoulRequest(client, accountId, request);
+    }
     const current = await readSoulContent(client, accountId, true);
+    if (ownerUserId) {
+      const permission = await client.query<{ soul_edit_enabled: boolean }>(
+        'SELECT soul_edit_enabled FROM users WHERE id=$1',
+        [ownerUserId],
+      );
+      if (permission.rows[0]?.soul_edit_enabled !== true) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+    }
     if (
       createHash('sha256').update(current, 'utf8').digest('hex') !==
       expectedHash

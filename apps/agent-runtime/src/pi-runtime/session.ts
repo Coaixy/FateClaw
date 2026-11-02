@@ -50,6 +50,7 @@ import {
 } from './memory-context.js';
 import type { RequestMemoryExcerpts } from '#agent/memory-client';
 import { soulToolsAvailable } from './tools/soul-tool.js';
+import { bindSoulStoreToRequest } from '#agent/deps';
 import {
   CancelledAgentRequestError,
   ModelCallError,
@@ -240,7 +241,12 @@ export async function runPiSession(args: {
       paipan,
       visualization,
       accountId: args.containerInput.accountId,
-      soulStore: args.runtime.deps.soulStore,
+      soulStore: memoryScope
+        ? bindSoulStoreToRequest(args.runtime.deps.soulStore, {
+            requestId: requestId ?? '',
+            executionId: args.containerInput.executionId ?? '',
+          })
+        : args.runtime.deps.soulStore,
       soulEditEnabled,
       memoryScope,
       memory,

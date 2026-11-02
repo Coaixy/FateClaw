@@ -729,6 +729,58 @@ describe('Pi SDK session lifecycle', () => {
     expect(memory).not.toHaveBeenCalled();
   });
 
+  it('carries the admitted execution into Soul tool reads and writes through the real SDK loop', async () => {
+    const memory = vi.fn<MemoryCaller>();
+    vi.spyOn(hostToolClient, 'createHostToolCaller').mockReturnValue(memory);
+    const original = 'Synthetic preferences';
+    const baseHash = createHash('sha256').update(original).digest('hex');
+    const { input, deps, requests } = await setup((_body, response, index) => {
+      if (index > 1) return send(response, { content: 'Synthetic Soul saved' });
+      send(
+        response,
+        {
+          tool_calls: [
+            {
+              index: 0,
+              id: `soul-${index}`,
+              type: 'function',
+              function: {
+                name: index === 0 ? 'read_soul' : 'edit_soul',
+                arguments:
+                  index === 0
+                    ? '{}'
+                    : JSON.stringify({
+                        baseHash,
+                        newContent: 'Synthetic updated preferences',
+                        reason: 'Explicit request',
+                      }),
+              },
+            },
+          ],
+        },
+        true,
+      );
+    });
+    await runManaged(input, deps, {
+      ...memoryScope({ recall: false }),
+      ownerAudience: true,
+    });
+    expect(requests).toHaveLength(3);
+    expect(deps.soulStore.update).toHaveBeenCalledWith(
+      'web:synthetic-user',
+      'Synthetic updated preferences',
+      baseHash,
+      {
+        requestId: expect.stringMatching(/^synthetic-/),
+        executionId: 'synthetic-execution',
+      },
+    );
+    expect(deps.soulStore.read).toHaveBeenCalledWith('web:synthetic-user', {
+      requestId: expect.stringMatching(/^synthetic-/),
+      executionId: 'synthetic-execution',
+    });
+  });
+
   it('delivers active tool guidance to the provider and embeds a persisted figure through the tool loop', async () => {
     const id = `visualization-${'a'.repeat(64)}`;
     const figure = {

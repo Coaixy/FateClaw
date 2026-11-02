@@ -63,7 +63,7 @@ Four identities have separate meanings: account owner, actual speaker, discussed
 - A shared sender reads only the owner's root space and its own scope, never another sender's private scope. Cross-actor source access reveals only current supporting quote ranges. A read grant does not permit editing the owner's records.
 - Open API requests have memory learning, recall and mutation disabled. Their `openapi:` sessions keep their own ordinary model history, and the caller's `system` text remains a request persona.
 
-`read_soul` is offered only to the owner audience, and `edit_soul` additionally requires the Soul chat-editing switch. Other audiences still receive the Soul persona in the system prompt.
+`read_soul` is offered only to the owner audience, and `edit_soul` additionally requires the Soul chat-editing switch. Tool reads and writes carry the admitted request and execution IDs. The database locks the memory root and active request and rechecks the current binding, owner audience, cancellation and context generation; writes also recheck the current Soul editing switch under the user-row lock. A committed revocation therefore blocks a subsequent write without waiting for the daemon heartbeat. Other audiences still receive the Soul persona in the system prompt.
 
 The same boundary applies to ordinary Pi history, tools, compaction, recovery and session boards. File keys and durable frame chains include the audience and generation, and a nonempty audience never falls back to the owner file. Guests receive only resources with matching frozen actor attribution; legacy resources without sufficient attribution are owner-only.
 
