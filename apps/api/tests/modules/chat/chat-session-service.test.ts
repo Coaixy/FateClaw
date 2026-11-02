@@ -194,6 +194,7 @@ import {
   getSharedChatSessionByShareToken,
   listOwnedChatSessionBoards,
   restoreOwnedArchivedChatSession,
+  runOwnedChatSessionTurn,
   sendOwnedChatSessionMessage,
   shareOwnedChatSessionForUser,
 } from '#modules/chat/chat-session-service';
@@ -993,30 +994,51 @@ describe('chat-session-service selected board context', () => {
     );
   });
 
-  it('keeps placeholder titles unified without auto-generating a summary title', async () => {
-    mockGetChatSession.mockResolvedValueOnce({
-      id: 'session-2',
-      account_id: 'web:user-1',
-      user_id: 'user-1',
-      title: '新对话',
-      created_at: '2026-04-26T09:00:00.000Z',
-      updated_at: '2026-04-26T09:00:00.000Z',
-      deleted_at: null,
-    });
+  it.each(['async', 'sync'])(
+    'returns the persisted first-question title for %s sends',
+    async (mode) => {
+      const session = {
+        id: 'session-2',
+        account_id: 'web:user-1',
+        user_id: 'user-1',
+        title: '新对话',
+        created_at: '2026-04-26T09:00:00.000Z',
+        updated_at: '2026-04-26T09:00:00.000Z',
+        deleted_at: null,
+      };
+      mockGetChatSession.mockResolvedValue(session);
+      mockDispatchAiChatPrompt.mockImplementationOnce(async () => {
+        mockGetChatSession.mockResolvedValue({
+          ...session,
+          title: '帮我看看最近事业运',
+        });
+        return {
+          status: 'success',
+          text: '解读结果',
+          requestId: 'request-first',
+        };
+      });
 
-    const result = await sendOwnedChatSessionMessage('user-1', 'session-2', {
-      content: '帮我看看最近事业运',
-      selectedBoardMessageId: undefined,
-      inputKind: 'normal',
-      pastedBoard: undefined,
-    });
+      const send =
+        mode === 'async'
+          ? sendOwnedChatSessionMessage
+          : runOwnedChatSessionTurn;
+      const result = await send('user-1', 'session-2', {
+        content: '帮我看看最近事业运',
+        selectedBoardMessageId: undefined,
+        inputKind: 'normal',
+        pastedBoard: undefined,
+      });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.session_title).toBe('未设置标题');
-    }
-    expect(mockUpdateChatSessionTitle).not.toHaveBeenCalled();
-  });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const response =
+          'response' in result.data ? result.data.response : result.data;
+        expect(response.session_title).toBe('帮我看看最近事业运');
+      }
+      expect(mockUpdateChatSessionTitle).not.toHaveBeenCalled();
+    },
+  );
 
   it('acknowledges async sends without storing final assistant messages in service', async () => {
     mockDispatchAiChatPrompt.mockResolvedValueOnce({
@@ -1051,6 +1073,48 @@ describe('chat-session-service selected board context', () => {
       }),
     );
   });
+
+  it.each(['async', 'sync'])(
+    'keeps a successful %s send when refreshing the title fails',
+    async (mode) => {
+      mockDispatchAiChatPrompt.mockImplementationOnce(async () => {
+        mockGetChatSession.mockRejectedValue(
+          new Error('Synthetic title refresh failure'),
+        );
+        return {
+          status: 'success',
+          text: '解读结果',
+          requestId: 'request-first',
+        };
+      });
+      const send =
+        mode === 'async'
+          ? sendOwnedChatSessionMessage
+          : runOwnedChatSessionTurn;
+      const result = await send('user-1', 'session-1', {
+        content: '事业运如何',
+        inputKind: 'normal',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const response =
+          'response' in result.data ? result.data.response : result.data;
+        expect(response.session_title).toBeUndefined();
+        if ('finalAssistantMessages' in result.data) {
+          expect(result.data.finalAssistantMessages[0].content).toBe(
+            '解读结果',
+          );
+        } else {
+          expect(response).toMatchObject({
+            accepted: true,
+            request_id: 'request-first',
+          });
+        }
+      }
+      expect(mockRedisEval).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('uses the user id as the Soul source for web AI chat', async () => {
     mockGetSessionMessagesWithToolContext.mockResolvedValueOnce([]);

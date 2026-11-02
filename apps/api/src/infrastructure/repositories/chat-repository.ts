@@ -4,6 +4,10 @@ import { logger } from '#infrastructure/logger';
 import { getRedis } from '#infrastructure/redis';
 import { getAccountsByUserId } from './accounts-repository.js';
 import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
+import {
+  buildChatSessionTitleFromQuestion,
+  DEFAULT_OWNED_CHAT_SESSION_TITLE,
+} from '#shared/chat-session-title-policy';
 
 /** Redis 中每个账号保留的最大历史消息条数。 */
 const HISTORY_REDIS_MAX = 500;
@@ -363,6 +367,57 @@ export async function updateChatSessionTitle(
   await getDbPool().query(
     `UPDATE chat_sessions SET title = $2, updated_at = NOW() WHERE id = $1`,
     [id, title],
+  );
+}
+
+export async function initializeChatSessionTitleFromQuestion(
+  message: NewMessage,
+  db: DbQueryable,
+): Promise<void> {
+  const metadata = message.metadata as { kind?: unknown } | null | undefined;
+  if (
+    !message.session_id ||
+    message.session_id.startsWith('openapi:') ||
+    !message.user_id ||
+    message.account_id !== `web:${message.user_id}` ||
+    message.is_from_me ||
+    message.is_bot_message ||
+    metadata?.kind === 'board_request' ||
+    !message.content
+  )
+    return;
+  const title = buildChatSessionTitleFromQuestion(message.content);
+  if (!title) return;
+
+  // Check defaults and prior questions in the write so a concurrent custom rename wins.
+  await db.query(
+    `UPDATE chat_sessions AS session SET title=$4, updated_at=NOW()
+     WHERE session.id=$1 AND session.account_id=$2 AND session.user_id=$3
+       AND session.deleted_at IS NULL
+       AND (
+         COALESCE(BTRIM(session.title), '') IN ('', '新对话', $5, '微信对话')
+         OR EXISTS (
+           SELECT 1 FROM messages AS board
+           WHERE board.account_id=session.account_id AND board.session_id=session.id
+             AND board.metadata->>'kind'='board_request'
+             AND board.metadata->>'workflow'='direct_paipan'
+             AND board.content=session.title
+         )
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM messages AS question
+         WHERE question.account_id=session.account_id AND question.session_id=session.id
+           AND COALESCE(question.is_from_me, false)=false
+           AND COALESCE(question.is_bot_message, false)=false
+           AND COALESCE(question.metadata->>'kind', '')<>'board_request'
+       )`,
+    [
+      message.session_id,
+      message.account_id,
+      message.user_id,
+      title,
+      DEFAULT_OWNED_CHAT_SESSION_TITLE,
+    ],
   );
 }
 

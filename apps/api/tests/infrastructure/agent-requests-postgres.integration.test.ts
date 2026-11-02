@@ -82,16 +82,38 @@ describe.skipIf(!connectionString)(
       PRIMARY KEY (id, account_id));
       CREATE TABLE synthetic_deliveries (id text PRIMARY KEY);
       CREATE TABLE billing_request_reservations (request_id text PRIMARY KEY, charge_state text, created_at timestamptz);
-      CREATE TABLE conversation_logs (request_id text)`);
+      CREATE TABLE conversation_logs (request_id text);
+      CREATE TABLE chat_sessions (
+        id text PRIMARY KEY, account_id text, user_id text, title text,
+        model_pool_key text DEFAULT 'official', deleted_at timestamptz,
+        updated_at timestamptz DEFAULT now()
+      )`);
     });
     beforeEach(async () => {
       await getDbPool().query(
-        'TRUNCATE agent_requests, agent_result_deliveries, messages, synthetic_deliveries, billing_request_reservations, conversation_logs',
+        'TRUNCATE agent_requests, agent_result_deliveries, messages, synthetic_deliveries, billing_request_reservations, conversation_logs, chat_sessions',
+      );
+      await getDbPool().query(
+        `INSERT INTO chat_sessions (id, account_id, user_id, title)
+         SELECT id, 'web:user-1', 'user-1', '未设置标题'
+         FROM unnest($1::text[]) AS id`,
+        [
+          [
+            'session-1',
+            'session-2',
+            'shared-session',
+            'other-session',
+            'session-unknown',
+            'session-synthetic',
+            'session-missing',
+            'session-actual',
+          ],
+        ],
       );
     });
     afterAll(async () => {
       await getDbPool().query(
-        'DROP TABLE synthetic_deliveries, messages, agent_result_deliveries, agent_requests, billing_request_reservations, conversation_logs',
+        'DROP TABLE synthetic_deliveries, messages, agent_result_deliveries, agent_requests, billing_request_reservations, conversation_logs, chat_sessions',
       );
       await closeDbPool();
     });
@@ -125,6 +147,14 @@ describe.skipIf(!connectionString)(
       expect(
         (await getDbPool().query('SELECT id FROM messages')).rowCount,
       ).toBe(1);
+      expect(
+        (
+          await getDbPool().query(
+            'SELECT title FROM chat_sessions WHERE id=$1',
+            ['session-1'],
+          )
+        ).rows[0].title,
+      ).toBe('Synthetic request');
     });
 
     it('rolls back admission when message persistence fails', async () => {
@@ -137,6 +167,128 @@ describe.skipIf(!connectionString)(
         (await getDbPool().query('SELECT request_id FROM agent_requests'))
           .rowCount,
       ).toBe(0);
+    });
+
+    it.each(['未设置标题', '新对话', '', '微信对话', '六爻排盘'])(
+      'replaces the default title %j with the first question prefix',
+      async (title) => {
+        await getDbPool().query(
+          'UPDATE chat_sessions SET title=$1 WHERE id=$2',
+          [title, 'session-1'],
+        );
+        await getDbPool().query(
+          `INSERT INTO messages (id, account_id, session_id, content, metadata)
+           VALUES ('board-request', 'web:user-1', 'session-1', '六爻排盘',
+             '{"kind":"board_request","workflow":"direct_paipan"}')`,
+        );
+        const args = admission();
+        args.input.userMessage =
+          'Runtime chart context must not become the title';
+        args.input.inputKind = 'user_pasted_board';
+        args.input.messageToPersist!.content =
+          '  最近工作\n\t会有新的机会吗？😀😀😀😀😀😀😀😀😀😀';
+        await admitAgentRequest(args);
+
+        expect(
+          (
+            await getDbPool().query(
+              'SELECT title FROM chat_sessions WHERE id=$1',
+              ['session-1'],
+            )
+          ).rows[0].title,
+        ).toBe('最近工作 会有新的机会吗？😀😀😀😀😀😀😀');
+      },
+    );
+
+    it.each([
+      { title: '我的事业规划', previousQuestion: false },
+      { title: '六爻排盘', previousQuestion: true },
+      { title: '未设置标题', previousQuestion: true },
+    ])(
+      'preserves a custom title or an existing first question: $title / $previousQuestion',
+      async ({ title, previousQuestion }) => {
+        await getDbPool().query('UPDATE chat_sessions SET title=$1', [title]);
+        await getDbPool().query(
+          `INSERT INTO messages (id, account_id, session_id, content, metadata)
+           VALUES ('board-request', 'web:user-1', 'session-1', '六爻排盘',
+             '{"kind":"board_request","workflow":"direct_paipan"}')`,
+        );
+        if (previousQuestion) {
+          await getDbPool().query(
+            `INSERT INTO messages (id, account_id, session_id, content)
+           VALUES ('first-question', 'web:user-1', 'session-1', '首个问题')`,
+          );
+        }
+        await admitAgentRequest(admission());
+        expect(
+          (
+            await getDbPool().query(
+              'SELECT title FROM chat_sessions WHERE id=$1',
+              ['session-1'],
+            )
+          ).rows[0].title,
+        ).toBe(title);
+      },
+    );
+
+    it('waits for a real question before initializing the title', async () => {
+      const board = admission('board-only');
+      board.input.messageToPersist!.content = '六爻排盘';
+      board.input.messageToPersist!.metadata = {
+        kind: 'board_request',
+        workflow: 'direct_paipan',
+      };
+      await admitAgentRequest(board);
+      expect(
+        (
+          await getDbPool().query(
+            'SELECT title FROM chat_sessions WHERE id=$1',
+            ['session-1'],
+          )
+        ).rows[0].title,
+      ).toBe('未设置标题');
+
+      await admitAgentRequest(admission());
+      expect(
+        (
+          await getDbPool().query(
+            'SELECT title FROM chat_sessions WHERE id=$1',
+            ['session-1'],
+          )
+        ).rows[0].title,
+      ).toBe('Synthetic request');
+    });
+
+    it('rolls back the generated title along with a rejected user message', async () => {
+      await getDbPool().query(
+        `ALTER TABLE messages ADD CONSTRAINT synthetic_rejection CHECK (content <> '拒绝保存的问题')`,
+      );
+      try {
+        const args = admission();
+        args.input.messageToPersist!.content = '拒绝保存的问题';
+        await expect(admitAgentRequest(args)).rejects.toMatchObject({
+          code: '23514',
+        });
+        expect(
+          (
+            await getDbPool().query(
+              'SELECT title FROM chat_sessions WHERE id=$1',
+              ['session-1'],
+            )
+          ).rows[0].title,
+        ).toBe('未设置标题');
+        expect(
+          (await getDbPool().query('SELECT id FROM messages')).rowCount,
+        ).toBe(0);
+        expect(
+          (await getDbPool().query('SELECT request_id FROM agent_requests'))
+            .rowCount,
+        ).toBe(0);
+      } finally {
+        await getDbPool().query(
+          'ALTER TABLE messages DROP CONSTRAINT synthetic_rejection',
+        );
+      }
     });
 
     it('does not overwrite a previous admission with duplicate request id', async () => {

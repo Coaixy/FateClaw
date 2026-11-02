@@ -53,10 +53,7 @@ import {
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
 } from '#runtime/ipc-payloads';
-import {
-  DEFAULT_OWNED_CHAT_SESSION_TITLE,
-  normalizeOwnedChatSessionTitle,
-} from '#shared/chat-session-title-policy';
+import { normalizeOwnedChatSessionTitle } from '#shared/chat-session-title-policy';
 import {
   getRuntimeEntitlementSnapshot,
   type RuntimeEntitlementSnapshot,
@@ -147,7 +144,6 @@ interface PreparedOwnedChatSessionTurn {
   llmRuntime: Awaited<ReturnType<typeof resolveUserLlmRuntime>>;
   structured: StructuredInput;
   sessionBoardContexts: SessionBoardContextDto[];
-  sessionTitle: string;
   entitlementSnapshot: RuntimeEntitlementSnapshot;
 }
 
@@ -923,9 +919,6 @@ async function prepareOwnedChatSessionTurn(
       llmRuntime,
       structured,
       sessionBoardContexts,
-      sessionTitle:
-        normalizeOwnedChatSessionTitle(session.title) ||
-        DEFAULT_OWNED_CHAT_SESSION_TITLE,
       entitlementSnapshot: entitlement,
     });
   } catch (err) {
@@ -944,6 +937,19 @@ async function prepareOwnedChatSessionTurn(
     }
 
     return fail(502, errorMessage || '抱歉，AI 服务暂时不可用');
+  }
+}
+
+async function readPersistedChatSessionTitle(
+  sessionId: string,
+): Promise<string | undefined> {
+  try {
+    const session = await getChatSession(sessionId);
+    return session ? normalizeOwnedChatSessionTitle(session.title) : undefined;
+  } catch (err) {
+    // A title refresh must not fail an admitted turn or release its processing lock.
+    logger.warn({ sessionId, err }, 'Failed to refresh chat session title');
+    return undefined;
   }
 }
 
@@ -988,7 +994,7 @@ async function enqueuePreparedOwnedChatSessionTurn(
       text: '',
       accepted: true,
       request_id: output.requestId || requestId,
-      session_title: prepared.sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+      session_title: await readPersistedChatSessionTitle(session.id),
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1091,8 +1097,7 @@ async function completeOwnedChatSessionTurn(
     return ok({
       response: {
         text: replyText,
-        session_title:
-          prepared.sessionTitle || DEFAULT_OWNED_CHAT_SESSION_TITLE,
+        session_title: await readPersistedChatSessionTitle(session.id),
         request_id: output.requestId || requestId,
       },
       finalAssistantMessages,

@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { getDbPool } from '#infrastructure/db-pool';
-import { storeMessage } from './chat-repository.js';
+import {
+  initializeChatSessionTitleFromQuestion,
+  storeMessage,
+} from './chat-repository.js';
 import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
 import type { AiChatSubmission } from '#runtime/request-types';
 import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
@@ -126,8 +129,13 @@ export async function admitAgentRequest(args: {
         runtime.poolRevision,
       );
     }
-    if (args.input.messageToPersist)
+    if (args.input.messageToPersist) {
+      await initializeChatSessionTitleFromQuestion(
+        args.input.messageToPersist,
+        client,
+      );
       await storeMessage(args.input.messageToPersist, client);
+    }
     await client.query('COMMIT');
     return executionId;
   } catch (error) {

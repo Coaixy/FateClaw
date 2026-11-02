@@ -420,6 +420,10 @@ Pass a summary's `source_message_id` as `selected_board_message_id` when sending
 
 Send one AI Chat turn. The server first saves the user message, resolves the model runtime, builds history and active chart context, then asynchronously dispatches to the agent-runtime for `web:{userId}`.
 
+On the first admitted question, an unnamed conversation or one still using its direct-chart title takes the first 20 Unicode characters of the question, with whitespace collapsed. The title and user message commit together. Chart request summaries do not count as questions; pasted charts use the question rather than the chart text. Follow-up questions and custom titles keep the existing title. A manual title equal to a default placeholder or the stored chart request summary is treated as a default because sessions do not track title provenance. Existing conversations are not backfilled.
+
+Successful send responses include the persisted `session_title` for the web sidebar and history list when it can be read. A failed title refresh omits this optional field without failing the admitted turn or releasing its processing lock; reloading the conversation list reads the stored title.
+
 **Request Body**
 
 Regular message:
@@ -454,7 +458,7 @@ Asynchronous mode usually returns:
   "text": "",
   "accepted": true,
   "request_id": "aichat-1770000000000-abcdef",
-  "session_title": "Bazi chart"
+  "session_title": "What does this chart"
 }
 ```
 
