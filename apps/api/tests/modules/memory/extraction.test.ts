@@ -60,13 +60,79 @@ describe('evidence-bound memory extraction', () => {
     expect(result).not.toHaveProperty('apiKey');
   });
 
+  it('normalizes optional retrieval labels without changing the source statement', async () => {
+    const content = '我是一名外科医生。';
+    const result = await extractMemoryCandidates({
+      ...args,
+      sources: [{ ...source, content }],
+      runner: output({
+        candidates: [
+          {
+            ...candidate,
+            quote: content,
+            content,
+            kind: 'fact',
+            searchTerms: [
+              ' 职业 ',
+              '工作',
+              'ＷＯＲＫ',
+              'work',
+              '',
+              12,
+              '长'.repeat(33),
+            ],
+          },
+        ],
+      }),
+    });
+    expect(result.candidates).toMatchObject([
+      {
+        quote: content,
+        content,
+        kind: 'fact',
+        subjectId: 'self',
+        searchTerms: ['职业', '工作', 'WORK'],
+      },
+    ]);
+  });
+
+  it('bounds model labels and refuses a malformed label field only for its candidate', async () => {
+    const result = await extractMemoryCandidates({
+      ...args,
+      sources: [{ ...source, content: '我是一名外科医生。我喜欢喝咖啡。' }],
+      runner: output({
+        candidates: [
+          {
+            ...candidate,
+            quote: '我是一名外科医生。',
+            content: '我是一名外科医生。',
+            searchTerms: '职业',
+          },
+          {
+            ...candidate,
+            searchTerms: Array.from(
+              { length: 30 },
+              (_, index) => `主题${index}`,
+            ),
+          },
+        ],
+      }),
+    });
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0].content).toBe(candidate.content);
+    expect(result.candidates[0].searchTerms).toHaveLength(12);
+    expect(result.rejected).toEqual({ SCHEMA: 1 });
+  });
+
   it.each(['assistant', 'unknown'])(
     'refuses %s messages as a user fact source',
     async (role) => {
       const result = await extractMemoryCandidates({
         ...args,
         sources: [{ ...source, role: role as MemorySourceInput['role'] }],
-        runner: output({ candidates: [candidate] }),
+        runner: output({
+          candidates: [{ ...candidate, searchTerms: ['咖啡偏好'] }],
+        }),
       });
       expect(result.candidates).toEqual([]);
       expect(result.rejected).toEqual({ SOURCE: 1 });
@@ -142,7 +208,14 @@ describe('evidence-bound memory extraction', () => {
       sources: [{ ...source, content: '对。', previousAssistant }],
       runner: output({
         candidates: [
-          { ...candidate, quote: '对。', content: '对。', kind: 'fact' },
+          {
+            ...candidate,
+            quote: '对。',
+            content: '对。',
+            kind: 'fact',
+            factKey: 'birth_date',
+            searchTerms: ['生日', '出生日期'],
+          },
         ],
       }),
     });
@@ -232,6 +305,7 @@ describe('evidence-bound memory extraction', () => {
       quote: ownerSource.content,
       content: ownerSource.content,
       kind: 'event',
+      searchTerms: ['职业', '工作'],
     };
     for (const subjectId of [undefined, 'client']) {
       const refused = await extractMemoryCandidates({

@@ -16,6 +16,7 @@ import {
   type MemoryItemRow,
 } from './domain.js';
 import { MEMORY_PINNED_FACT_KEYS } from './extraction.js';
+import { expandMemoryQueryTerms } from './search-terms.js';
 import {
   actorSubjectId,
   assertMemoryBindingCurrent,
@@ -103,7 +104,9 @@ async function keywordRecall(
   if (subjectId !== scope.subjectId)
     await assertMemorySubject(scope, subjectId, db);
   const query = args.query.trim().slice(0, 2000);
-  const terms = memoryQueryTerms(query);
+  const terms = [
+    ...new Set([...memoryQueryTerms(query), ...expandMemoryQueryTerms(query)]),
+  ];
   if (!terms.length) return [];
   const limit = Math.min(
     args.limit ?? policy.recall_max_results,

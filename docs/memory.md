@@ -75,8 +75,10 @@ On the first model step of a request the runtime sends one `prepare` call with t
 
 - core facts: the subject's active facts, intake keys first, then by kind and most recent observation;
 - recently accepted user statements whose extraction has not finished, from other conversations;
-- keyword recall for the query: words of two or more characters plus every bigram of a Han run, matched with `ILIKE` over the reader's own entries and ranked by the number of matched terms;
+- keyword recall for the query: words of two or more characters plus every bigram of a Han run and bounded topic labels, matched with `ILIKE` over the reader's own entries and ranked by the number of matched terms;
 - the supplied references, keeping the newest when there are more than `recall_max_results × 3`.
+
+Each item keeps up to 12 short search labels, at most 32 characters each. Extraction may propose labels for the statement's topic; fixed rules also label common profession, birth, residence and communication-preference statements, including manual and existing entries. Queries expand the corresponding topics, so a question about a profession can find an older surgeon statement without repeating its words. These labels are rebuildable index input, never evidence or provider text. The rules cover these topics rather than arbitrary semantic similarity; other model labels still require a lexical match.
 
 Every reference is re-authorized against current item, evidence and exclusion state before its text is returned, and the result is cut to the `recall_token_budget`, estimated as one token per non-ASCII character and per three ASCII characters. The budget is spent in this order: the first `recall_max_results` core facts, keyword recall, recent statements, supplied references, then the remaining core facts. The runtime reuses that result for later steps, retries and pool failover until a successful in-request write invalidates it. `search_memory` and `get_memory_source` return text in the same tool call and add it to the request's excerpts. If any memory call fails or times out, the turn continues without memory.
 

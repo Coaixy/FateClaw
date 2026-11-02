@@ -1567,6 +1567,25 @@ describe.skipIf(!connectionString)(
       expect((await add(next, 'birth_date')).id).toBe(replacement.id);
     });
 
+    it('recalls an older profession through topic labels when the question uses different words', async () => {
+      await createManualMemory('owner', {
+        content: '我是一名外科医生。',
+        kind: 'fact',
+      });
+      for (let index = 0; index < 60; index++)
+        await createManualMemory('owner', {
+          content: `我收藏的编号是样本第${index}号。`,
+          kind: 'fact',
+        });
+      const scope = await ownerMemorySnapshot('owner');
+      for (const query of ['外科医生', '我从事什么职业', '我是做什么工作的']) {
+        const result = await prepare(scope, 'session-b', [], query);
+        expect(
+          result.excerpts.some(({ text }) => text === '我是一名外科医生。'),
+        ).toBe(true);
+      }
+    });
+
     it('fences Soul tools on the current sender binding and editing switch before a heartbeat can observe revocation', async () => {
       const metadata = {
         source_channel: 'wechat',

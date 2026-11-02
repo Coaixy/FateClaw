@@ -747,6 +747,7 @@ async function processExtract(
           content: candidate.content,
           kind: candidate.kind,
           factKey: candidate.factKey,
+          searchTerms: candidate.searchTerms,
           assertionType: candidate.assertionType,
           origin: 'automatic',
           source: actualSource,
