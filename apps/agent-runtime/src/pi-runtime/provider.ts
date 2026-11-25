@@ -1,5 +1,10 @@
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
+import {
+  isOpenCodeGoBaseUrl,
+  openCodeGoHeaders,
+} from '@fateclaw/contracts/model-settings';
+import { createHash, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type {
@@ -217,9 +222,19 @@ function resolveOpenAiCompat(
 
 export async function createPiProviderRuntime(
   runtime: LlmRuntimeSnapshot,
+  routingSessionId?: string,
 ): Promise<PiProviderRuntime> {
   const provider = resolvePiProvider(runtime);
   const api = resolvePiApi(runtime);
+  const baseUrl = resolveBaseUrl(runtime);
+  // Keep the routing ID stable without forwarding FateClaw's internal session ID.
+  const headers = isOpenCodeGoBaseUrl(baseUrl)
+    ? openCodeGoHeaders(
+        routingSessionId
+          ? createHash('sha256').update(routingSessionId).digest('base64url')
+          : randomUUID(),
+      )
+    : undefined;
 
   // 内存凭据存储 + 关闭目录刷新/网络模型目录：本 provider 完全由请求参数静态构造。
   const modelRuntime = await ModelRuntime.create({
@@ -233,7 +248,8 @@ export async function createPiProviderRuntime(
   modelRuntime.registerProvider(provider, {
     name: runtime.providerKey || provider,
     api,
-    baseUrl: resolveBaseUrl(runtime),
+    baseUrl,
+    headers,
     apiKey: runtime.apiKey,
     models: [
       {

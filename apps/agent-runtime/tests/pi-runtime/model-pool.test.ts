@@ -120,6 +120,56 @@ async function pool(
 }
 
 describe('model pool transport', () => {
+  it('keeps the Go routing ID across failover and scopes it to the selected endpoint', async () => {
+    const oldGo = node('old-go', 'https://opencode.ai/zen/go/v1');
+    const currentGo = node(
+      'current-go',
+      'https://opencode.ai/inference/go/openai/v1',
+    );
+    const { provider } = await pool(
+      [oldGo, currentGo, { ...node('openai', ''), baseUrl: undefined }],
+      health(),
+      { routingSessionId: 'conversation-a' },
+    );
+    const requests: Request[] = [];
+    await provider.modelRuntime.completeSimple(
+      provider.model,
+      { messages: [{ role: 'user', content: 'Hello', timestamp: 1 }] },
+      {
+        sessionId: 'pi-session',
+        transformHeaders: (headers) => ({
+          'x-opencode-session': 'pi-session',
+          'x-opencode-client': 'pi',
+          ...headers,
+          'x-synthetic-header': 'keep',
+        }),
+        fetch: async (input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
+          return new Response('{}', {
+            status: new URL(request.url).hostname === 'opencode.ai' ? 503 : 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      },
+    );
+
+    expect(requests.map((request) => request.url)).toEqual([
+      'https://opencode.ai/zen/go/v1/chat/completions',
+      'https://opencode.ai/inference/go/openai/v1/chat/completions',
+      'https://api.openai.com/v1/chat/completions',
+    ]);
+    const sessionIds = requests.map((request) =>
+      request.headers.get('x-opencode-session'),
+    );
+    expect(sessionIds[0]).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(sessionIds[0]).not.toBe('pi-session');
+    expect(sessionIds[1]).toBe(sessionIds[0]);
+    expect(sessionIds[2]).toBeNull();
+    expect(requests[2].headers.get('x-opencode-client')).toBeNull();
+    expect(requests[2].headers.get('x-synthetic-header')).toBe('keep');
+  });
+
   it('fails over a 503 to a different model using only the selected node credential and one attempt per node', async () => {
     const calls: string[] = [];
     const failed = await serve((request, response) => {

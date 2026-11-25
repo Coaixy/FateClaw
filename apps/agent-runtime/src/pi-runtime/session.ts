@@ -3,6 +3,7 @@ import {
   createAgentSession,
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
+import { randomUUID } from 'node:crypto';
 
 import { getContext } from '#agent/context';
 import { traceEvent } from '#agent/trace';
@@ -132,6 +133,8 @@ export async function runPiSession(args: {
   const preparationStartedAt = Date.now();
   const userId = resolveUserId(args.containerInput);
   const requestId = getRequestId(args.requestScope);
+  const routingSessionId =
+    args.containerInput.sessionId?.trim() || requestId || randomUUID();
   const paipan =
     requestId &&
     args.containerInput.executionId &&
@@ -166,7 +169,7 @@ export async function runPiSession(args: {
       soulEditEnabled,
     }));
   const prepared = await Promise.allSettled([
-    createPiProviderRuntime(args.containerInput.llmRuntime),
+    createPiProviderRuntime(args.containerInput.llmRuntime, routingSessionId),
     contextPromise,
     createPiResourceLoader({
       deps: args.runtime.deps,
@@ -265,6 +268,7 @@ export async function runPiSession(args: {
     installModelPool(providerRuntime, args.containerInput.llmRuntime, {
       trace: (event) => traceEvent(event, args.requestScope),
       answerSessionId: piSession.manager.getSessionId(),
+      routingSessionId,
     });
     const { session } = await createAgentSession({
       cwd,

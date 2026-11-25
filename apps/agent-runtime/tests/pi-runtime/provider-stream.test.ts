@@ -139,6 +139,46 @@ describe('Pi provider transport', () => {
     }
   });
 
+  it('sends a stable OpenCode Go routing ID only to the official Go endpoint', async () => {
+    const requests: Request[] = [];
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      requests.push(new Request(input, init));
+      return new Response('data: [DONE]\n\n', {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+    for (const [baseUrl, sessionId] of [
+      ['https://opencode.ai/zen/go/v1', 'conversation-a'],
+      ['https://opencode.ai/inference/go/openai/v1', 'conversation-a'],
+      ['https://opencode.ai/inference/go/openai/v1', 'conversation-b'],
+      ['https://opencode.ai.example.com/inference/go/openai/v1', 'conversation-a'],
+    ]) {
+      const provider = await createPiProviderRuntime(
+        { ...runtime(baseUrl, 'synthetic-key'), source: 'custom' },
+        sessionId,
+      );
+      await provider.modelRuntime.completeSimple(
+        provider.model,
+        { messages: [{ role: 'user', content: 'Hello', timestamp: 1 }] },
+        { fetch },
+      );
+    }
+
+    expect(requests).toHaveLength(4);
+    const sessionIds = requests.map((request) =>
+      request.headers.get('x-opencode-session'),
+    );
+    expect(sessionIds[0]).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(sessionIds[0]).not.toBe('conversation-a');
+    expect(sessionIds[1]).toBe(sessionIds[0]);
+    expect(sessionIds[2]).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(sessionIds[2]).not.toBe(sessionIds[0]);
+    expect(sessionIds[3]).toBeNull();
+    expect(
+      requests.slice(0, 3).map((request) => request.headers.get('user-agent')),
+    ).toEqual(['FateClaw', 'FateClaw', 'FateClaw']);
+  });
+
   it('aborts a provider stream without waiting for the server to finish', async () => {
     const controller = new AbortController();
     const baseUrl = await serve((_request, response) => {

@@ -8,6 +8,7 @@ export {
 } from './runtime.js';
 
 export { modelPoolCooldown, type ModelPoolCooldown } from './cooldown.js';
+export { isOpenCodeGoBaseUrl, openCodeGoHeaders } from './opencode-go.js';
 export {
   classifyModelFailure,
   formatModelFailure,

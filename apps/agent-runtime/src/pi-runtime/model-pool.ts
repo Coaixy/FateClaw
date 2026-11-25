@@ -8,9 +8,10 @@ import {
   type Usage,
 } from '@earendil-works/pi-ai';
 import {
-  modelPoolCooldown,
   classifyModelFailure,
   formatModelFailure,
+  isOpenCodeGoBaseUrl,
+  modelPoolCooldown,
   type ModelFailure,
   type ModelFailureKind,
   type RuntimeModelPoolNode,
@@ -193,6 +194,7 @@ export function installModelPool(
     firstContentTimeoutMs?: number;
     idleTimeoutMs?: number;
     answerSessionId?: string;
+    routingSessionId?: string;
   } = {},
 ): void {
   if (
@@ -205,6 +207,8 @@ export function installModelPool(
     throw new Error('Benefit execution requires an admitted benefit pool');
   if (runtime.source !== 'official' || !runtime.poolNodes?.length) return;
   const nodes = runtime.poolNodes;
+  const routingSessionId = options.routingSessionId ?? randomUUID();
+  const representativeIsOpenCodeGo = isOpenCodeGoBaseUrl(primary.model.baseUrl);
   const health = options.health ?? databaseModelPoolHealth;
   const nodeContext = (node: RuntimeModelPoolNode) => ({
     poolKey: runtime.poolKey ?? 'official',
@@ -323,11 +327,15 @@ export function installModelPool(
         try {
           let provider = providers.get(node.modelConfigId);
           if (!provider) {
-            provider = createPiProviderRuntime({
-              ...runtime,
-              ...node,
-              poolNodes: undefined,
-            });
+            provider = createPiProviderRuntime(
+              {
+                ...runtime,
+                ...node,
+                baseUrl: node.baseUrl,
+                poolNodes: undefined,
+              },
+              routingSessionId,
+            );
             providers.set(node.modelConfigId, provider);
           }
           const selected = await provider;
@@ -340,6 +348,21 @@ export function installModelPool(
               apiKey: node.apiKey,
               headers: undefined,
               env: undefined,
+              async transformHeaders(headers) {
+                const transformed =
+                  (await requestOptions?.transformHeaders?.(headers)) ?? headers;
+                if (
+                  !representativeIsOpenCodeGo ||
+                  isOpenCodeGoBaseUrl(selected.model.baseUrl)
+                )
+                  return transformed;
+
+                // Pi adds these for the representative model, even after switching providers.
+                const selectedHeaders = { ...transformed };
+                delete selectedHeaders['x-opencode-session'];
+                delete selectedHeaders['x-opencode-client'];
+                return selectedHeaders;
+              },
               signal,
               maxRetries: 0,
               ...(node.piApi !== 'google-generative-ai'
