@@ -8,7 +8,7 @@ import { getChatSession } from '#infrastructure/repositories/chat-repository';
 import {
   claimOrRefreshSessionProcessingLock,
   releaseSessionProcessingLock,
-} from '#runtime/ipc-payloads';
+} from '#runtime/session-processing-lock';
 
 export async function modelSettingsRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('onRequest', async (request) => {

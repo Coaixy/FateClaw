@@ -1,3 +1,8 @@
+import type {
+  ChatSessionStreamEvent as AiChatStreamEvent,
+  ChatSessionStreamTicket,
+} from '@fateclaw/contracts/chat';
+export type { ChatSessionStreamEvent as AiChatStreamEvent } from '@fateclaw/contracts/chat';
 import websocket from '@fastify/websocket';
 import {
   decodeRuntimeIpc,
@@ -17,125 +22,6 @@ import type {
   ResponseIpcPayload,
   SendMessageIpcPayload,
 } from './ipc-payloads.js';
-
-export type AiChatStreamEvent =
-  | {
-      type: 'connected';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-    }
-  | {
-      type: 'agent_start' | 'agent_end' | 'turn_start';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      turnIndex?: number;
-      willRetry?: boolean;
-      messageCount?: number;
-    }
-  | {
-      type: 'assistant_delta';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      delta: string;
-      snapshot: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'thinking_delta';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      delta: string;
-      snapshot: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'assistant_message';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'tool_start' | 'tool_update' | 'tool_end';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      toolCallId: string;
-      toolName: string;
-      args?: unknown;
-      partialResult?: unknown;
-      result?: unknown;
-      isError?: boolean;
-    }
-  | {
-      type: 'progress';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      stage?: string;
-      workflow?: string;
-      metadata?: unknown;
-    }
-  | {
-      type: 'message';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      metadata?: unknown;
-      skillContext?: unknown;
-    }
-  | {
-      type: 'final';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      status: 'success' | 'error';
-      usage?: {
-        promptTokens?: number;
-        completionTokens?: number;
-        totalTokens?: number;
-      };
-      metadata?: unknown;
-    }
-  | {
-      type: 'error';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      error: string;
-      publicErrorText?: string;
-      publicReasonCode?: string;
-    }
-  | {
-      type: 'usage';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      usage: {
-        promptTokens?: number;
-        completionTokens?: number;
-        totalTokens?: number;
-      };
-    };
 
 const MAX_CLIENT_FRAME_BUFFER_BYTES = 1024 * 1024;
 const STREAM_TICKET_BYTES = 32;
@@ -169,7 +55,7 @@ function aiChatStreamTicketKey(ticket: string): string {
 export async function issueAiChatStreamTicket(args: {
   userId: string;
   sessionId: string;
-}): Promise<{ ticket: string; expiresAt: string }> {
+}): Promise<ChatSessionStreamTicket> {
   const session = await verifySessionOwner(args.userId, args.sessionId);
 
   const ticket = randomBytes(STREAM_TICKET_BYTES).toString('base64url');

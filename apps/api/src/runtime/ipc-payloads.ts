@@ -6,7 +6,6 @@
 import type { PublicReasonCode } from '@fateclaw/contracts';
 
 import { getSingleAccountIdIfOnlyOne } from '#infrastructure/db';
-import { getRedis } from '#infrastructure/redis';
 import type { BillingReservation } from '#modules/billing/plans';
 import type { NormalizedRuntimeTokenUsage } from './token-usage.js';
 import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
@@ -38,76 +37,6 @@ export type { LlmRuntimeSnapshot } from '@fateclaw/contracts/agent';
 import type { LlmRuntimeSnapshot } from '@fateclaw/contracts/agent';
 
 export type InboxPriority = 'normal' | 'member';
-
-/**
- * 构造 AI Chat 会话忙碌锁的 Redis key。
- *
- * @param sessionId AI Chat 会话 ID。
- * @returns 对应的 Redis key。
- */
-export function sessionProcessingLockKey(sessionId: string): string {
-  return `session:processing:${sessionId}`;
-}
-
-/**
- * 抢占或续期当前请求拥有的会话忙碌锁。
- *
- * @param sessionId AI Chat 会话 ID；为空时直接返回 false。
- * @param requestId 锁 owner，请求 ID 必须与锁内值一致才允许续期。
- * @param ttlSeconds 锁 TTL 秒数。
- * @returns 抢占空锁或续期自有锁成功时返回 true；锁被其他请求持有时返回 false。
- */
-export async function claimOrRefreshSessionProcessingLock(
-  sessionId: string | undefined,
-  requestId: string | undefined,
-  ttlSeconds: number,
-): Promise<boolean> {
-  if (!sessionId || !requestId) return false;
-  const claimed = await getRedis().eval(
-    `
-    local current = redis.call('GET', KEYS[1])
-    if current == ARGV[1] then
-      return redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
-    end
-    if not current then
-      redis.call('SET', KEYS[1], ARGV[1], 'EX', tonumber(ARGV[2]))
-      return 1
-    end
-    return 0
-    `,
-    1,
-    sessionProcessingLockKey(sessionId),
-    requestId,
-    ttlSeconds,
-  );
-  return claimed === 1;
-}
-
-/**
- * 仅释放当前请求拥有的会话忙碌锁。
- *
- * @param sessionId AI Chat 会话 ID；为空时不操作。
- * @param requestId 期望的锁 owner，请求 ID 必须与锁内值一致才会删除。
- * @returns 实际删除 Redis key 时返回 true，否则返回 false。
- */
-export async function releaseSessionProcessingLock(
-  sessionId: string | undefined,
-  requestId: string | undefined,
-): Promise<boolean> {
-  if (!sessionId || !requestId) return false;
-  const released = await getRedis().eval(
-    `
-    if redis.call('GET', KEYS[1]) == ARGV[1] then
-      return redis.call('DEL', KEYS[1])
-    end
-    return 0
-    `,
-    1,
-    sessionProcessingLockKey(sessionId),
-    requestId,
-  );
-  return released === 1;
-}
 
 export interface PendingInboxRequest {
   accountId: string;
@@ -142,119 +71,17 @@ export interface PendingInboxRequest {
   timeout: NodeJS.Timeout;
 }
 
-/** AI Chat 取消请求 payload，用于通知 agent-runtime 中断指定 request。 */
-export interface CancelInboxRequestPayload {
-  type: 'cancel';
-  requestId?: string;
-  accountId?: string;
-  sessionId?: string;
-  reason?: string;
-  timestamp?: string;
-}
-
-// ─── Payload 接口 ─────────────────────────────────────
-
-export interface SendMessageIpcPayload {
-  type: 'message';
-  eventId?: string;
-  accountId?: string;
-  requestId?: string;
-  /** AI Chat 会话 ID；最终响应可在没有本机 pending 时独立落库。 */
-  sessionId?: string;
-  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
-  userMessageId?: string;
-  /** 请求归属用户 ID；用于最终消息 user_id 和用量归属兜底。 */
-  ownerUserId?: string;
-  text?: string;
-  timestamp?: string;
-  metadata?: unknown;
-  /** 中间消息携带的 skill 上下文，用于 AI Chat 渲染盘面卡片。 */
-  skillContext?: Array<{
-    skill: string;
-    output: string;
-    artifactType?: string;
-    artifactTitle?: string;
-    artifactData?: unknown;
-  }>;
-}
-
-export interface ProgressIpcPayload {
-  type: 'progress';
-  eventId?: string;
-  accountId?: string;
-  requestId?: string;
-  text?: string;
-  timestamp?: string;
-  metadata?: {
-    kind?: string;
-    stage?: string;
-    workflow?: string;
-    tool_call_id?: string;
-    tool_name?: string;
-    tool_label?: string;
-    tool_status?: 'running' | 'completed' | 'failed';
-    tool_path?: string;
-    /** 工具输入摘要 / 搜索词，用作富卡片标题。 */
-    query_text?: string;
-    /** 所属 agent 回合序号；思考块稳定 id 与穿插排序用。 */
-    turn_index?: number;
-    /** 工具调用结果预览（已归一化限长），供历史富卡片回看。 */
-    tool_result?: {
-      query?: string;
-      count?: number;
-      items?: Array<{ title: string; url?: string; domain?: string }>;
-      text?: string;
-      truncated?: boolean;
-    };
-  };
-}
-
-export interface ResponseIpcPayload {
-  type: 'response';
-  eventId?: string;
-  accountId?: string;
-  requestId?: string;
-  /** AI Chat 会话 ID；最终响应可在没有本机 pending 时独立落库。 */
-  sessionId?: string;
-  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
-  userMessageId?: string;
-  /** 请求归属用户 ID；用于最终消息 user_id 和用量归属兜底。 */
-  ownerUserId?: string;
-  text?: string;
-  assistantMessages?: string[];
-  status?: 'success' | 'error';
-  error?: string;
-  publicErrorText?: string;
-  publicReasonCode?: string;
-  timestamp?: string;
-  usage?: {
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-  };
-  /** 容器返回的 skill 执行结果，存入 DB 供后续请求使用。 */
-  skillContext?: Array<{
-    skill: string;
-    output: string;
-    artifactType?: string;
-    artifactTitle?: string;
-    artifactData?: unknown;
-  }>;
-  /** 完整 transcript 日志（工具调用 + 结果），用于 debug。 */
-  transcript?: unknown[];
-  /** 模型名。 */
-  model?: string;
-  /** AI provider。 */
-  provider?: string;
-  /** 结构化 trace 事件序列（主 loop、工具调用、错误等），用于 admin 排障。 */
-  traceEvents?: unknown[];
-  /** 持久化 task/evidence graph。 */
-  agentGraph?: unknown;
-  /** Pi session 持久化状态与本轮完成后的消息快照。 */
-  piSession?: unknown;
-  /** 结构化响应标识，例如最终回复完成标记。 */
-  metadata?: unknown;
-}
+import type {
+  ProgressIpcPayload,
+  ResponseIpcPayload,
+  SendMessageIpcPayload,
+} from '@fateclaw/contracts/agent';
+export type {
+  AgentCancelRequest as CancelInboxRequestPayload,
+  ProgressIpcPayload,
+  ResponseIpcPayload,
+  SendMessageIpcPayload,
+} from '@fateclaw/contracts/agent';
 
 // ─── 验证函数 ─────────────────────────────────────────
 

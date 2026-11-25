@@ -10,7 +10,6 @@ import {
 } from 'react';
 
 import {
-  buildChatSessionStreamUrl,
   chatSessionsApi,
   type ChatSession,
   type ChatSessionRequestOptions,
@@ -18,37 +17,25 @@ import {
   type ChatSessionStreamEvent,
   type Message,
 } from '../api';
-import {
-  areMessagesEqual,
-  hasFinalAssistantAfterLatestUser,
-  isNearBottom,
-} from '../utils/display';
+import { openChatStream } from '../utils/chat-stream';
+import { useChatRun } from './use-chat-run';
+import { useChatStreamMessages } from './use-chat-stream-messages';
+import { useChatViewport } from './use-chat-viewport';
+import { areMessagesEqual, isNearBottom } from '../utils/display';
 import { shouldPollChatMessages } from '../utils/polling';
 import {
   CHAT_MESSAGE_PAGE_SIZE,
   fetchRecentMessageWindow,
+  mergeStreamingTurnMessages,
   reconcileMessagePage,
 } from '../utils/message-history';
-import {
-  acceptsChatStreamRequest,
-  getChatTurnOutcome,
-  type ChatRunPhase,
-  type ChatRunState,
-} from '../utils/run-state';
+import { getChatTurnOutcome } from '../utils/run-state';
 import { sanitizeToolPath } from '../utils/tool-path';
 
 const DEFAULT_AI_CHAT_SESSION_TITLE = '未设置标题';
 const CHAT_POLL_INTERVAL_MS = 1200;
 // 单页消息加载条数;上滑到顶时按此步长向更早翻页。
 const MESSAGE_PAGE_SIZE = CHAT_MESSAGE_PAGE_SIZE;
-// 滚动到距顶部多少像素内触发「加载更早消息」。
-const OLDER_LOAD_THRESHOLD_PX = 120;
-const SCROLL_IDLE_DELAY_MS = 1500;
-const CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS = 500;
-const CHAT_STREAM_RECONNECT_MAX_DELAY_MS = 8000;
-const CHAT_STREAM_RECONNECT_MAX_ATTEMPTS = 6;
-// 流式文本按 50ms 合并提交，既保持连续观感，也避免 token 频率直接驱动 React 重渲染。
-const STREAMING_UPDATE_INTERVAL_MS = 50;
 const DEFAULT_AI_CHAT_ERROR_MESSAGE = '抱歉，AI 服务暂时不可用，请稍后重试';
 const GENERIC_REQUEST_FAILED_MESSAGE = '请求失败，请检查后重试';
 const AI_CHAT_RECONNECTING_MESSAGE = '请求断开，正在重连';
@@ -58,6 +45,8 @@ const REPLY_SILENCE_THRESHOLD_MS = 60_000;
 const REPLY_SILENCE_CHECK_INTERVAL_MS = 5_000;
 
 export type ChatMessageSendOptions = ChatSessionSendOptions;
+export { getAiChatStreamReconnectDelay } from '../utils/chat-stream';
+export { mergeStreamingMessageUpdates } from './use-chat-stream-messages';
 
 type ChatSessionSender = typeof chatSessionsApi.send;
 type ChatSessionSendRequestOptions = Pick<ChatSessionRequestOptions, 'signal'>;
@@ -89,20 +78,6 @@ export function isRecoverableChatSendInterruption(error: unknown): boolean {
 
   const status = (error as { status?: unknown }).status;
   return status === 0;
-}
-
-/**
- * 计算 AI Chat 实时流断线后的退避重连间隔。
- *
- * @param attempt 从 0 开始的重连次数。
- * @returns 经过上限裁剪后的毫秒延迟。
- */
-export function getAiChatStreamReconnectDelay(attempt: number): number {
-  const normalizedAttempt = Math.max(0, Math.floor(attempt));
-  return Math.min(
-    CHAT_STREAM_RECONNECT_INITIAL_DELAY_MS * 2 ** normalizedAttempt,
-    CHAT_STREAM_RECONNECT_MAX_DELAY_MS,
-  );
 }
 
 /**
@@ -161,81 +136,10 @@ function withoutReconnectNoticeMessages(messages: Message[]) {
   return messages.filter((message) => !isReconnectNoticeMessage(message));
 }
 
-/** 找到列表里最后一条用户（非 bot）消息的下标；没有则返回 -1。 */
-function findLastUserMessageIndex(messages: Message[]): number {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (!messages[index].is_bot_message) {
-      return index;
-    }
-  }
-  return -1;
-}
-
-/**
- * 流式进行中的后台刷新合并：历史以 DB 为准，但「最后一条用户消息之后」的当前回合
- * 完全用实时 previous。
- *
- * 这样当前回合的思考/工具/回答轨迹顺序由 WS 事件决定，避免 DB 工具（途中即落库）与
- * 实时思考（末尾追加）交错错位、以及 DB/实时同一工具因 id 不同而重复闪烁。
- * 实时错误气泡也天然包含在实时尾部里，无需单独保留。
- */
-function mergeStreamingTurnMessages(
-  dbMessages: Message[],
-  previousMessages: Message[],
-  activeStreamingMessageIds: string[],
-): Message[] {
-  if (activeStreamingMessageIds.length === 0) {
-    return dbMessages;
-  }
-  const prevUserIndex = findLastUserMessageIndex(previousMessages);
-  if (prevUserIndex === -1) {
-    return dbMessages;
-  }
-  const liveTail = previousMessages.slice(prevUserIndex + 1);
-  if (liveTail.length === 0) {
-    return dbMessages;
-  }
-  const dbUserIndex = findLastUserMessageIndex(dbMessages);
-  if (dbUserIndex === -1) {
-    // 极少：全新会话首轮，用户消息还没落库——直接用实时（含本回合用户消息）。
-    return previousMessages.slice(prevUserIndex);
-  }
-  return [...dbMessages.slice(0, dbUserIndex + 1), ...liveTail];
-}
-
-function readToolPath(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-  const path = (value as { path?: unknown }).path;
-  return typeof path === 'string' && path.trim()
-    ? sanitizeToolPath(path)
-    : undefined;
-}
-
 function normalizeMessageMetadata(value: unknown): Message['metadata'] {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Message['metadata'])
     : null;
-}
-
-function getToolLabel(toolName: string): string {
-  return toolName;
-}
-
-function buildToolTraceContent(args: {
-  toolName: string;
-  status: 'running' | 'completed' | 'failed';
-  path?: string;
-}) {
-  const label = getToolLabel(args.toolName);
-  const suffix =
-    args.status === 'running'
-      ? '中'
-      : args.status === 'failed'
-        ? '失败'
-        : '完成';
-  return args.path ? `${label}: ${args.path} ${suffix}` : `${label}${suffix}`;
 }
 
 export async function sendChatSessionMessageWithOptions(
@@ -249,37 +153,6 @@ export async function sendChatSessionMessageWithOptions(
     return sender(sessionId, content, sendOptions, requestOptions);
   }
   return sender(sessionId, content, sendOptions);
-}
-
-/**
- * 将一次批量提交内累积的流式消息更新合并进当前消息列表。
- *
- * @param previous 当前消息列表。
- * @param updates 本次需要提交的最新消息快照，同一消息在入参中至多出现一次。
- * @returns 保持未变化消息引用稳定的新列表，便于消息行通过 memo 跳过历史重渲染。
- */
-export function mergeStreamingMessageUpdates(
-  previous: Message[],
-  updates: Message[],
-): Message[] {
-  if (updates.length === 0) return previous;
-
-  const next = [...previous];
-  const indexById = new Map(
-    previous.map((message, index) => [message.id, index] as const),
-  );
-
-  for (const update of updates) {
-    const existingIndex = indexById.get(update.id);
-    if (existingIndex === undefined) {
-      indexById.set(update.id, next.length);
-      next.push(update);
-      continue;
-    }
-    next[existingIndex] = update;
-  }
-
-  return next;
 }
 
 /**
@@ -380,7 +253,14 @@ function requestStatusReducer(
   }
 }
 
-export function useChatMessages(options: {
+export function useChatMessages({
+  chatAvailable,
+  selectedSession,
+  selectedSessionRevision,
+  sessions,
+  createSession,
+  touchSession,
+}: {
   chatAvailable: boolean;
   selectedSession: string;
   selectedSessionRevision: number;
@@ -391,13 +271,6 @@ export function useChatMessages(options: {
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [run, setRun] = useState<ChatRunState>({
-    sessionId: '',
-    requestId: null,
-    phase: 'idle',
-    error: null,
-  });
-  const runRef = useRef(run);
   const [stopping, setStopping] = useState(false);
   const stoppingRef = useRef(false);
   const admissionRef = useRef<Promise<void> | null>(null);
@@ -413,9 +286,6 @@ export function useChatMessages(options: {
   const latestMessagesRequestRef = useRef(0);
   const foregroundLoadRequestRef = useRef<number | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const ignoredRequestIdsRef = useRef(new Set<string>());
-  const [followingLatest, setFollowingLatest] = useState(true);
-  const [scrolling, setScrolling] = useState(false);
   // 请求在途状态(loading/sending)合并到 reducer,切换会话时一次 dispatch 重置。
   const [{ loading, sending }, dispatchRequestStatus] = useReducer(
     requestStatusReducer,
@@ -438,7 +308,7 @@ export function useChatMessages(options: {
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const pollInFlightRef = useRef(false);
+  const pollingVisitRef = useRef<number | null>(null);
   const lastPollAtRef = useRef<number | null>(null);
   const lastStreamProgressAtRef = useRef<number | null>(null);
   const streamConnectedRef = useRef(false);
@@ -447,11 +317,12 @@ export function useChatMessages(options: {
   const awaitingRefreshRef = useRef(false);
   const databaseProcessingRef = useRef(false);
   const activeSessionRef = useRef('');
+  const { run, runRef, transitionRun, acceptRunEvent } =
+    useChatRun(activeSessionRef);
   // 流式回调通过 ref 读取最新会话元数据，避免标题/更新时间变化时重建 WebSocket 连接。
-  const sessionsRef = useRef(options.sessions);
+  const sessionsRef = useRef(sessions);
   const previousSelectedSessionRef = useRef('');
   const sessionVisitRef = useRef(0);
-  const shouldAutoScrollRef = useRef(true);
   // 持有最新 messages 引用,供 loadOlderMessages 在闭包外读取最早一条做游标。
   const messagesRef = useRef<Message[]>([]);
   // 加载更早消息的重入/可用状态镜像,供 scroll 事件同步读取。
@@ -460,22 +331,9 @@ export function useChatMessages(options: {
   // 上滑插入前记录的滚动几何,用于插入后把视口锚回原位,避免跳动。
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const creatingRef = useRef(false);
-  const streamSocketRef = useRef<WebSocket | null>(null);
-  const streamingUpdateTimerRef = useRef<number | null>(null);
-  const pendingStreamingUpdatesRef = useRef<Map<string, Message>>(new Map());
-  const autoScrollFrameRef = useRef<number | null>(null);
+  const disconnectStreamRef = useRef<(() => void) | null>(null);
   const sendAbortControllerRef = useRef<AbortController | null>(null);
   const interruptedStreamSessionRef = useRef<string | null>(null);
-  const streamingMessageEntriesRef = useRef<Array<{ key: string; id: string }>>(
-    [],
-  );
-  const toolTraceMessageEntriesRef = useRef<
-    Array<{ key: string; id: string; args?: unknown }>
-  >([]);
-  const latestStreamingMessageKeyRef = useRef<string | null>(null);
-  const latestThinkingMessageKeyRef = useRef<string | null>(null);
-  const streamingSequenceRef = useRef(0);
-  const toolTraceSequenceRef = useRef(0);
   const localMessageSequenceRef = useRef(0);
   // 最近一次收到任意可识别 WS 流事件的时间戳；发送时先设一次初始值，
   // 覆盖"WS 还没收到任何事件"这种起始静默状态。配合下方静默检测判断要不要提示"回复较慢"。
@@ -488,47 +346,9 @@ export function useChatMessages(options: {
   );
   const isPending = sending || processing || awaitingRefresh || stopping;
 
-  const transitionRun = useCallback(
-    (
-      sessionId: string,
-      phase: ChatRunPhase,
-      requestId?: string | null,
-      error: string | null = null,
-    ) => {
-      if (activeSessionRef.current !== sessionId) return;
-      const previous = runRef.current;
-      const next = {
-        sessionId,
-        phase,
-        requestId: requestId === undefined ? previous.requestId : requestId,
-        error,
-      };
-      if (
-        previous.sessionId === next.sessionId &&
-        previous.phase === next.phase &&
-        previous.requestId === next.requestId &&
-        previous.error === next.error
-      )
-        return;
-      runRef.current = next;
-      if (
-        next.requestId &&
-        ['completed', 'failed', 'stopped'].includes(phase)
-      ) {
-        ignoredRequestIdsRef.current.add(next.requestId);
-        if (ignoredRequestIdsRef.current.size > 128) {
-          ignoredRequestIdsRef.current.delete(
-            ignoredRequestIdsRef.current.values().next().value!,
-          );
-        }
-      }
-      setRun(next);
-    },
-    [],
-  );
   const activeContinuationBlocked = Boolean(
-    options.selectedSession &&
-    loadedSessionId === options.selectedSession &&
+    selectedSession &&
+    loadedSessionId === selectedSession &&
     continuationBlocked,
   );
 
@@ -537,62 +357,25 @@ export function useChatMessages(options: {
     [],
   );
 
-  const getActiveStreamingMessageIds = useCallback(
-    () => streamingMessageEntriesRef.current.map((entry) => entry.id),
-    [],
-  );
-
-  const commitPendingStreamingMessageUpdates = useCallback(() => {
-    const updates = Array.from(pendingStreamingUpdatesRef.current.values());
-    pendingStreamingUpdatesRef.current.clear();
-    if (updates.length === 0) return;
-
-    setMessages((previous) => mergeStreamingMessageUpdates(previous, updates));
+  const closeStream = useCallback(() => {
+    const disconnect = disconnectStreamRef.current;
+    disconnectStreamRef.current = null;
+    streamConnectedRef.current = false;
+    lastStreamProgressAtRef.current = null;
+    disconnect?.();
   }, []);
 
-  const flushStreamingMessageUpdates = useCallback(() => {
-    if (streamingUpdateTimerRef.current !== null) {
-      window.clearTimeout(streamingUpdateTimerRef.current);
-      streamingUpdateTimerRef.current = null;
-    }
-    commitPendingStreamingMessageUpdates();
-  }, [commitPendingStreamingMessageUpdates]);
-
-  const queueStreamingMessageUpdate = useCallback(
-    (message: Message) => {
-      // 一个提交窗口内只保留每条流式消息的最后快照，避免模型 token 频率直接变成 React 提交频率。
-      pendingStreamingUpdatesRef.current.set(message.id, message);
-      if (streamingUpdateTimerRef.current !== null) return;
-
-      streamingUpdateTimerRef.current = window.setTimeout(() => {
-        streamingUpdateTimerRef.current = null;
-        commitPendingStreamingMessageUpdates();
-      }, STREAMING_UPDATE_INTERVAL_MS);
-    },
-    [commitPendingStreamingMessageUpdates],
-  );
-
-  const resetStreamingMessageRefs = useCallback(() => {
-    if (streamingUpdateTimerRef.current !== null) {
-      window.clearTimeout(streamingUpdateTimerRef.current);
-      streamingUpdateTimerRef.current = null;
-    }
-    pendingStreamingUpdatesRef.current.clear();
-    streamingMessageEntriesRef.current = [];
-    latestStreamingMessageKeyRef.current = null;
-    latestThinkingMessageKeyRef.current = null;
-    toolTraceMessageEntriesRef.current = [];
-  }, []);
-
-  const beginStreamingAssistantTurn = useCallback((turnIndex?: number) => {
-    const key =
-      typeof turnIndex === 'number'
-        ? `turn-${turnIndex}`
-        : `turn-${streamingSequenceRef.current}`;
-    latestStreamingMessageKeyRef.current = key;
-    latestThinkingMessageKeyRef.current = `thinking-${key}`;
-    return key;
-  }, []);
+  const {
+    getActiveStreamingMessageIds,
+    flushStreamingMessageUpdates,
+    resetStreamingMessageRefs,
+    beginStreamingAssistantTurn,
+    upsertStreamingAssistantMessage,
+    upsertThinkingMessage,
+    upsertToolTraceMessage,
+    projectToolCall,
+    finalizeRunningToolTraceMessages,
+  } = useChatStreamMessages(setMessages, sessionsRef);
 
   const updateAwaitingRefresh = useCallback((next: boolean) => {
     awaitingRefreshRef.current = next;
@@ -616,13 +399,15 @@ export function useChatMessages(options: {
     awaitingRefreshRef.current = awaitingRefresh;
   }, [awaitingRefresh]);
 
-  useEffect(() => {
-    activeSessionRef.current = options.selectedSession || '';
-  }, [options.selectedSession]);
+  useLayoutEffect(() => {
+    activeSessionRef.current = selectedSession || '';
+    sessionVisitRef.current += 1;
+    resetStreamingMessageRefs();
+  }, [selectedSession, selectedSessionRevision, resetStreamingMessageRefs]);
 
   useEffect(() => {
-    sessionsRef.current = options.sessions;
-  }, [options.sessions]);
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   // 把最新的 messages / hasMoreOlder 同步到 ref,供 scroll 事件与翻页回调无闭包读取。
   useEffect(() => {
@@ -633,193 +418,6 @@ export function useChatMessages(options: {
     hasMoreOlderRef.current = hasMoreOlder;
   }, [hasMoreOlder]);
 
-  const loadMessages = useCallback(
-    async (
-      sessionId: string,
-      loadOptions?: { background?: boolean },
-    ): Promise<LoadMessagesResult> => {
-      if (!sessionId) return { ok: false };
-
-      const isBackground = loadOptions?.background ?? false;
-      if (!isBackground) {
-        dispatchRequestStatus({ type: 'set-loading', value: true });
-      }
-
-      const requestVersion = ++latestMessagesRequestRef.current;
-      if (!isBackground) foregroundLoadRequestRef.current = requestVersion;
-      try {
-        const previousWindow =
-          historySessionRef.current === sessionId ? messagesRef.current : [];
-        const data = await fetchRecentMessageWindow(
-          (before, beforeId) =>
-            chatSessionsApi.messages(
-              sessionId,
-              MESSAGE_PAGE_SIZE,
-              before,
-              beforeId,
-            ),
-          previousWindow,
-        );
-        if (
-          activeSessionRef.current !== sessionId ||
-          requestVersion !== latestMessagesRequestRef.current
-        ) {
-          return { ok: true, active: false };
-        }
-
-        setHistoryError(null);
-        dispatchLoadedSessionMeta({
-          type: 'loaded',
-          sessionId,
-          blocked: Boolean(data.continuation_blocked),
-          message: data.continuation_block_message || '',
-        });
-        const stillProcessing =
-          data.processing && !isStreamInterrupted(sessionId);
-        databaseProcessingRef.current = stillProcessing;
-        // 仅在前台(切换/刷新)时据返回条数判断是否还有更早消息;
-        // 后台轮询不改动该标记,避免大窗口刷新时误判。
-        if (!isBackground) {
-          dispatchPagination({
-            type: 'set-has-more',
-            value: data.messages.length >= MESSAGE_PAGE_SIZE,
-          });
-        }
-
-        const nextMessages = [...data.messages].reverse();
-        const boundary =
-          submissionBoundaryRef.current?.sessionId === sessionId
-            ? submissionBoundaryRef.current
-            : null;
-        const outcome = getChatTurnOutcome(
-          nextMessages,
-          data.processing_request_id ?? runRef.current.requestId,
-          boundary?.knownIds,
-        );
-        const preserveUnconfirmedSubmission = Boolean(
-          boundary &&
-          !outcome &&
-          ['queued', 'running', 'syncing', 'stopping'].includes(
-            runRef.current.phase,
-          ) &&
-          !nextMessages.some(
-            (message) =>
-              !message.is_bot_message && !boundary.knownIds.has(message.id),
-          ),
-        );
-        const activeStreamingMessageIds = getActiveStreamingMessageIds();
-        const streamingResolved =
-          isBackground &&
-          activeStreamingMessageIds.length > 0 &&
-          outcome !== null;
-        if (streamingResolved) {
-          resetStreamingMessageRefs();
-        }
-        const canFollow =
-          !isBackground ||
-          !scrollRef.current ||
-          shouldAutoScrollRef.current ||
-          isNearBottom(scrollRef.current);
-
-        setMessages((previous) => {
-          const refreshed =
-            previousWindow.length > 0
-              ? reconcileMessagePage(previous, nextMessages)
-              : nextMessages;
-          const visibleMessages = preserveUnconfirmedSubmission
-            ? previous
-            : isBackground && !streamingResolved && stillProcessing
-              ? mergeStreamingTurnMessages(
-                  refreshed,
-                  previous,
-                  activeStreamingMessageIds,
-                )
-              : refreshed;
-          historySessionRef.current = sessionId;
-          messagesRef.current = visibleMessages;
-
-          return isBackground &&
-            visibleMessages.length === 0 &&
-            previous.length > 0
-            ? previous
-            : areMessagesEqual(previous, visibleMessages)
-              ? previous
-              : ((shouldAutoScrollRef.current = canFollow), visibleMessages);
-        });
-        updateProcessing(stillProcessing);
-        const pendingOutcome = outcome;
-        const needsReconciliation =
-          !isStreamInterrupted(sessionId) &&
-          !pendingOutcome &&
-          ['queued', 'running', 'syncing'].includes(runRef.current.phase);
-        updateAwaitingRefresh(
-          (isBackground && stillProcessing) || needsReconciliation,
-        );
-        if (!isStreamInterrupted(sessionId) && !stoppingRef.current) {
-          const requestId =
-            data.processing_request_id ??
-            runRef.current.requestId ??
-            (!boundary
-              ? [...nextMessages]
-                  .reverse()
-                  .find(
-                    (message) =>
-                      message.metadata?.kind === 'final' ||
-                      message.metadata?.kind === 'error',
-                  )?.metadata?.request_id
-              : null);
-          if (stillProcessing)
-            transitionRun(
-              sessionId,
-              runRef.current.phase === 'running' ? 'running' : 'queued',
-              requestId,
-              runRef.current.error,
-            );
-          else if (outcome) transitionRun(sessionId, outcome, requestId);
-          else if (
-            runRef.current.phase === 'queued' ||
-            runRef.current.phase === 'running' ||
-            runRef.current.phase === 'syncing'
-          ) {
-            transitionRun(sessionId, 'syncing', requestId);
-          }
-        }
-        return {
-          ok: true,
-          active: true,
-          messages: nextMessages,
-          processing: stillProcessing,
-        };
-      } catch (error) {
-        if (
-          activeSessionRef.current === sessionId &&
-          requestVersion === latestMessagesRequestRef.current
-        ) {
-          setHistoryError(
-            error instanceof Error ? error.message : '加载历史消息失败，请重试',
-          );
-        }
-        return { ok: false };
-      } finally {
-        if (
-          activeSessionRef.current === sessionId &&
-          foregroundLoadRequestRef.current === requestVersion
-        ) {
-          foregroundLoadRequestRef.current = null;
-          dispatchRequestStatus({ type: 'set-loading', value: false });
-        }
-      }
-    },
-    [
-      getActiveStreamingMessageIds,
-      isStreamInterrupted,
-      resetStreamingMessageRefs,
-      updateAwaitingRefresh,
-      updateProcessing,
-      transitionRun,
-    ],
-  );
-
   /**
    * 向更早翻页:以当前最早一条消息的 timestamp 作游标拉取上一页,前置插入。
    *
@@ -828,7 +426,12 @@ export function useChatMessages(options: {
   const loadOlderMessages = useCallback(async () => {
     const sessionId = activeSessionRef.current;
     const visit = sessionVisitRef.current;
-    if (!sessionId || loadingOlderRef.current || !hasMoreOlderRef.current) {
+    if (
+      !sessionId ||
+      historySessionRef.current !== sessionId ||
+      loadingOlderRef.current ||
+      !hasMoreOlderRef.current
+    ) {
       return;
     }
     // 列表按时间升序,[0] 即最早一条;以其 timestamp 作 before 游标(后端 timestamp < before)。
@@ -902,10 +505,217 @@ export function useChatMessages(options: {
     }
   }, []);
 
+  const {
+    resetFollowing,
+    shouldAutoScrollRef,
+    followingLatest,
+    showScrollToLatest,
+    scrollToLatest,
+  } = useChatViewport({
+    messages,
+    isPending,
+    scrollRef,
+    prependAnchorRef,
+    loadOlderMessages,
+  });
+
+  const loadMessages = useCallback(
+    async (
+      sessionId: string,
+      loadOptions?: { background?: boolean },
+    ): Promise<LoadMessagesResult> => {
+      if (!sessionId) return { ok: false };
+
+      const isBackground = loadOptions?.background ?? false;
+      if (!isBackground) {
+        dispatchRequestStatus({ type: 'set-loading', value: true });
+      }
+
+      const requestVersion = ++latestMessagesRequestRef.current;
+      const visit = sessionVisitRef.current;
+      const isCurrentVisit = () =>
+        activeSessionRef.current === sessionId &&
+        sessionVisitRef.current === visit;
+      if (!isBackground) foregroundLoadRequestRef.current = requestVersion;
+      try {
+        const previousWindow =
+          historySessionRef.current === sessionId ? messagesRef.current : [];
+        const data = await fetchRecentMessageWindow(
+          (before, beforeId) =>
+            chatSessionsApi.messages(
+              sessionId,
+              MESSAGE_PAGE_SIZE,
+              before,
+              beforeId,
+            ),
+          previousWindow,
+        );
+        if (
+          !isCurrentVisit() ||
+          requestVersion !== latestMessagesRequestRef.current
+        ) {
+          return { ok: true, active: false };
+        }
+
+        setHistoryError(null);
+        dispatchLoadedSessionMeta({
+          type: 'loaded',
+          sessionId,
+          blocked: Boolean(data.continuation_blocked),
+          message: data.continuation_block_message || '',
+        });
+        const stillProcessing =
+          data.processing && !isStreamInterrupted(sessionId);
+        databaseProcessingRef.current = stillProcessing;
+        // 仅在前台(切换/刷新)时据返回条数判断是否还有更早消息;
+        // 后台轮询不改动该标记,避免大窗口刷新时误判。
+        if (!isBackground) {
+          dispatchPagination({
+            type: 'set-has-more',
+            value: data.messages.length >= MESSAGE_PAGE_SIZE,
+          });
+        }
+
+        const nextMessages = [...data.messages].reverse();
+        const boundary =
+          submissionBoundaryRef.current?.sessionId === sessionId
+            ? submissionBoundaryRef.current
+            : null;
+        const outcome = getChatTurnOutcome(
+          nextMessages,
+          data.processing_request_id ?? runRef.current.requestId,
+          boundary?.knownIds,
+        );
+        const preserveUnconfirmedSubmission = Boolean(
+          boundary &&
+          !outcome &&
+          ['queued', 'running', 'syncing', 'stopping'].includes(
+            runRef.current.phase,
+          ) &&
+          !nextMessages.some(
+            (message) =>
+              !message.is_bot_message && !boundary.knownIds.has(message.id),
+          ),
+        );
+        const activeStreamingMessageIds = getActiveStreamingMessageIds();
+        const streamingResolved =
+          isBackground &&
+          activeStreamingMessageIds.length > 0 &&
+          outcome !== null;
+        if (streamingResolved) {
+          resetStreamingMessageRefs();
+        }
+        const canFollow =
+          !isBackground ||
+          !scrollRef.current ||
+          shouldAutoScrollRef.current ||
+          isNearBottom(scrollRef.current);
+
+        setMessages((previous) => {
+          if (!isCurrentVisit()) return previous;
+          const refreshed =
+            previousWindow.length > 0
+              ? reconcileMessagePage(previous, nextMessages)
+              : nextMessages;
+          const visibleMessages = preserveUnconfirmedSubmission
+            ? previous
+            : isBackground && !streamingResolved && stillProcessing
+              ? mergeStreamingTurnMessages(
+                  refreshed,
+                  previous,
+                  activeStreamingMessageIds,
+                )
+              : refreshed;
+          historySessionRef.current = sessionId;
+          messagesRef.current = visibleMessages;
+
+          return isBackground &&
+            visibleMessages.length === 0 &&
+            previous.length > 0
+            ? previous
+            : areMessagesEqual(previous, visibleMessages)
+              ? previous
+              : ((shouldAutoScrollRef.current = canFollow), visibleMessages);
+        });
+        updateProcessing(stillProcessing);
+        const pendingOutcome = outcome;
+        const needsReconciliation =
+          !isStreamInterrupted(sessionId) &&
+          !pendingOutcome &&
+          ['queued', 'running', 'syncing'].includes(runRef.current.phase);
+        updateAwaitingRefresh(
+          (isBackground && stillProcessing) || needsReconciliation,
+        );
+        if (!isStreamInterrupted(sessionId) && !stoppingRef.current) {
+          const requestId =
+            data.processing_request_id ??
+            runRef.current.requestId ??
+            (!boundary
+              ? [...nextMessages]
+                  .reverse()
+                  .find(
+                    (message) =>
+                      message.metadata?.kind === 'final' ||
+                      message.metadata?.kind === 'error',
+                  )?.metadata?.request_id
+              : null);
+          if (stillProcessing)
+            transitionRun(
+              sessionId,
+              runRef.current.phase === 'running' ? 'running' : 'queued',
+              requestId,
+              runRef.current.error,
+            );
+          else if (outcome) transitionRun(sessionId, outcome, requestId);
+          else if (
+            runRef.current.phase === 'queued' ||
+            runRef.current.phase === 'running' ||
+            runRef.current.phase === 'syncing'
+          ) {
+            transitionRun(sessionId, 'syncing', requestId);
+          }
+        }
+        return {
+          ok: true,
+          active: true,
+          messages: nextMessages,
+          processing: stillProcessing,
+        };
+      } catch (error) {
+        if (
+          isCurrentVisit() &&
+          requestVersion === latestMessagesRequestRef.current
+        ) {
+          setHistoryError(
+            error instanceof Error ? error.message : '加载历史消息失败，请重试',
+          );
+        }
+        return { ok: false };
+      } finally {
+        if (
+          isCurrentVisit() &&
+          foregroundLoadRequestRef.current === requestVersion
+        ) {
+          foregroundLoadRequestRef.current = null;
+          dispatchRequestStatus({ type: 'set-loading', value: false });
+        }
+      }
+    },
+    [
+      getActiveStreamingMessageIds,
+      isStreamInterrupted,
+      resetStreamingMessageRefs,
+      runRef,
+      shouldAutoScrollRef,
+      updateAwaitingRefresh,
+      updateProcessing,
+      transitionRun,
+    ],
+  );
+
   useEffect(() => {
     const previousSelectedSession = previousSelectedSessionRef.current;
-    previousSelectedSessionRef.current = options.selectedSession;
-    sessionVisitRef.current += 1;
+    previousSelectedSessionRef.current = selectedSession;
 
     // 切换会话:重置分页窗口与状态,避免沿用上一会话的窗口大小/游标标记。
     historySessionRef.current = '';
@@ -913,11 +723,8 @@ export function useChatMessages(options: {
     setHistoryError(null);
     const isCreatedSession =
       previousSelectedSession === '' &&
-      activeSendOperationRef.current?.sessionId === options.selectedSession;
-    if (
-      !isCreatedSession &&
-      previousSelectedSession !== options.selectedSession
-    ) {
+      activeSendOperationRef.current?.sessionId === selectedSession;
+    if (!isCreatedSession && previousSelectedSession !== selectedSession) {
       activeSendOperationRef.current = null;
       dispatchRequestStatus({ type: 'reset' });
       sendingRef.current = false;
@@ -927,26 +734,23 @@ export function useChatMessages(options: {
       lastSentMessageOptionsRef.current = undefined;
       interruptedStreamSessionRef.current = null;
       submissionBoundaryRef.current = null;
-      transitionRun(options.selectedSession, 'idle', null);
-      shouldAutoScrollRef.current = true;
-      setFollowingLatest(true);
-      setScrolling(false);
+      transitionRun(selectedSession, 'idle', null);
+      resetFollowing();
     }
     lastPollAtRef.current = null;
     loadingOlderRef.current = false;
     prependAnchorRef.current = null;
     dispatchPagination({ type: 'reset' });
 
-    if (options.selectedSession) {
+    if (selectedSession) {
       updateProcessing(false);
       updateAwaitingRefresh(false);
       databaseProcessingRef.current = false;
       dispatchLoadedSessionMeta({ type: 'reset' });
-      void loadMessages(options.selectedSession, {
+      void loadMessages(selectedSession, {
         background:
           sendingRef.current &&
-          (previousSelectedSession === options.selectedSession ||
-            isCreatedSession),
+          (previousSelectedSession === selectedSession || isCreatedSession),
       });
       return;
     }
@@ -959,18 +763,21 @@ export function useChatMessages(options: {
     dispatchLoadedSessionMeta({ type: 'reset' });
   }, [
     loadMessages,
-    options.selectedSession,
-    options.selectedSessionRevision,
+    selectedSession,
+    selectedSessionRevision,
+    resetFollowing,
     transitionRun,
     updateAwaitingRefresh,
     updateProcessing,
   ]);
 
   const pollMessages = useCallback(async () => {
-    const sessionId = options.selectedSession;
+    const sessionId = selectedSession;
+    const visit = sessionVisitRef.current;
     if (
       !sessionId ||
-      pollInFlightRef.current ||
+      sessionId !== activeSessionRef.current ||
+      pollingVisitRef.current === visit ||
       document.visibilityState === 'hidden' ||
       (!processingRef.current && !awaitingRefreshRef.current)
     ) {
@@ -989,16 +796,16 @@ export function useChatMessages(options: {
       return;
 
     lastPollAtRef.current = now;
-    pollInFlightRef.current = true;
+    pollingVisitRef.current = visit;
     try {
       await loadMessages(sessionId, { background: true });
     } finally {
-      pollInFlightRef.current = false;
+      if (pollingVisitRef.current === visit) pollingVisitRef.current = null;
     }
-  }, [loadMessages, options.selectedSession]);
+  }, [loadMessages, selectedSession]);
 
   useEffect(() => {
-    if (!options.selectedSession || (!processing && !awaitingRefresh)) return;
+    if (!selectedSession || (!processing && !awaitingRefresh)) return;
 
     void pollMessages();
 
@@ -1010,7 +817,7 @@ export function useChatMessages(options: {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [awaitingRefresh, options.selectedSession, pollMessages, processing]);
+  }, [awaitingRefresh, selectedSession, pollMessages, processing]);
 
   // WS 静默检测：仅在有请求在途时跑，每隔 REPLY_SILENCE_CHECK_INTERVAL_MS 检查一次
   // 距最近一次收到流事件过去了多久，超过阈值就提示"回复较慢"；请求结束后自动清掉。
@@ -1036,7 +843,7 @@ export function useChatMessages(options: {
   }, [isPending]);
 
   useEffect(() => {
-    if (!options.selectedSession) return;
+    if (!selectedSession) return;
 
     const handleWindowFocus = () => {
       void pollMessages();
@@ -1055,223 +862,7 @@ export function useChatMessages(options: {
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [options.selectedSession, pollMessages]);
-
-  const upsertStreamingAssistantMessage = useCallback(
-    (
-      sessionId: string,
-      content: string,
-      streamKey?: string | null,
-      metadata?: Message['metadata'],
-      streamOptions?: { updateLatestKey?: boolean },
-    ) => {
-      const key =
-        streamKey ??
-        latestStreamingMessageKeyRef.current ??
-        `message-${streamingSequenceRef.current}`;
-      let entry = streamingMessageEntriesRef.current.find(
-        (item) => item.key === key,
-      );
-      if (!entry) {
-        entry = {
-          key,
-          id: `stream-bot-${Date.now()}-${streamingSequenceRef.current}`,
-        };
-        streamingSequenceRef.current += 1;
-        streamingMessageEntriesRef.current = [
-          ...streamingMessageEntriesRef.current,
-          entry,
-        ];
-      }
-      if (streamOptions?.updateLatestKey !== false) {
-        latestStreamingMessageKeyRef.current = key;
-      }
-      const accountId =
-        sessionsRef.current.find((session) => session.id === sessionId)
-          ?.account_id ?? 'web';
-
-      queueStreamingMessageUpdate({
-        id: entry.id,
-        account_id: accountId,
-        sender: '',
-        sender_name: '',
-        content,
-        timestamp: new Date().toISOString(),
-        is_from_me: true,
-        is_bot_message: true,
-        metadata: metadata ?? {
-          kind: 'streaming',
-        },
-      });
-    },
-    [queueStreamingMessageUpdate],
-  );
-
-  const upsertLatestStreamingAssistantMessage = useCallback(
-    (sessionId: string, content: string, metadata?: Message['metadata']) => {
-      upsertStreamingAssistantMessage(
-        sessionId,
-        content,
-        latestStreamingMessageKeyRef.current,
-        metadata,
-      );
-    },
-    [upsertStreamingAssistantMessage],
-  );
-
-  const upsertThinkingMessage = useCallback(
-    (sessionId: string, content: string, turnIndex?: number) => {
-      const text = content.trim();
-      if (!text) return;
-      const baseKey =
-        typeof turnIndex === 'number'
-          ? `turn-${turnIndex}`
-          : (latestStreamingMessageKeyRef.current ??
-            `turn-${streamingSequenceRef.current}`);
-      const key =
-        typeof turnIndex === 'number'
-          ? `thinking-${baseKey}`
-          : (latestThinkingMessageKeyRef.current ?? `thinking-${baseKey}`);
-      latestThinkingMessageKeyRef.current = key;
-
-      upsertStreamingAssistantMessage(
-        sessionId,
-        text,
-        key,
-        {
-          kind: 'thinking',
-          stage: 'thinking',
-          workflow: 'pi_runtime',
-        },
-        { updateLatestKey: false },
-      );
-    },
-    [upsertStreamingAssistantMessage],
-  );
-
-  const upsertToolTraceMessage = useCallback(
-    (
-      sessionId: string,
-      content: string,
-      traceOptions: {
-        key: string;
-        toolName: string;
-        status: 'running' | 'completed' | 'failed';
-        path?: string;
-        args?: unknown;
-      },
-    ) => {
-      let entry = toolTraceMessageEntriesRef.current.find(
-        (item) => item.key === traceOptions.key,
-      );
-      if (!entry) {
-        entry = {
-          key: traceOptions.key,
-          id: `tool-trace-${Date.now()}-${toolTraceSequenceRef.current}`,
-          args: traceOptions.args,
-        };
-        toolTraceSequenceRef.current += 1;
-        toolTraceMessageEntriesRef.current = [
-          ...toolTraceMessageEntriesRef.current,
-          entry,
-        ];
-      } else if (traceOptions.args !== undefined) {
-        entry.args = traceOptions.args;
-      }
-
-      const accountId =
-        sessionsRef.current.find((session) => session.id === sessionId)
-          ?.account_id ?? 'web';
-
-      setMessages((previous) => {
-        const existingIndex = previous.findIndex(
-          (message) => message.id === entry.id,
-        );
-        const nextMessage: Message = {
-          id: entry.id,
-          account_id: accountId,
-          sender: '',
-          sender_name: '',
-          content,
-          timestamp: new Date().toISOString(),
-          is_from_me: true,
-          is_bot_message: true,
-          metadata: {
-            kind: 'tool_trace',
-            stage: `tool_${traceOptions.status}`,
-            workflow: 'pi_runtime',
-            tool_call_id: traceOptions.key,
-            tool_name: traceOptions.toolName,
-            tool_label: getToolLabel(traceOptions.toolName),
-            tool_status: traceOptions.status,
-            tool_path: traceOptions.path,
-          },
-        };
-
-        if (existingIndex >= 0) {
-          const next = [...previous];
-          next[existingIndex] = nextMessage;
-          return next;
-        }
-
-        return [...previous, nextMessage];
-      });
-    },
-    [],
-  );
-
-  const finalizeRunningToolTraceMessages = useCallback(
-    (status: 'completed' | 'failed') => {
-      setMessages((previous) => {
-        let changed = false;
-        const next = previous.map((message) => {
-          const metadata =
-            message.metadata &&
-            typeof message.metadata === 'object' &&
-            !Array.isArray(message.metadata)
-              ? (message.metadata as Record<string, unknown>)
-              : null;
-          if (
-            !metadata ||
-            metadata.kind !== 'tool_trace' ||
-            metadata.tool_status !== 'running'
-          ) {
-            return message;
-          }
-
-          const toolName =
-            typeof metadata.tool_name === 'string'
-              ? metadata.tool_name
-              : typeof metadata.tool_label === 'string'
-                ? metadata.tool_label
-                : 'tool';
-          const path =
-            typeof metadata.tool_path === 'string'
-              ? sanitizeToolPath(metadata.tool_path)
-              : undefined;
-          changed = true;
-
-          return {
-            ...message,
-            content: buildToolTraceContent({
-              toolName,
-              status,
-              path,
-            }),
-            metadata: {
-              ...metadata,
-              stage: `tool_${status}`,
-              tool_status: status,
-              tool_path: path,
-            },
-          };
-        });
-
-        return changed ? next : previous;
-      });
-    },
-    [],
-  );
+  }, [selectedSession, pollMessages]);
 
   const appendAssistantErrorMessage = useCallback(
     (
@@ -1355,98 +946,16 @@ export function useChatMessages(options: {
     });
   }, []);
 
-  useEffect(() => {
-    streamConnectedRef.current = false;
-    lastStreamProgressAtRef.current = null;
-    streamSocketRef.current?.close();
-    streamSocketRef.current = null;
-    resetStreamingMessageRefs();
-
-    const sessionId = options.selectedSession;
-    if (!sessionId || typeof window === 'undefined') return;
-
-    let closedByEffect = false;
-    let socket: WebSocket | null = null;
-    let reconnectTimeoutId: number | null = null;
-    let reconnectAttempt = 0;
-
-    const clearReconnectTimeout = () => {
-      if (reconnectTimeoutId === null) return;
-      window.clearTimeout(reconnectTimeoutId);
-      reconnectTimeoutId = null;
-    };
-
-    const hasRecoverableStreamActivity = () =>
-      !isStreamInterrupted(sessionId) &&
-      (sendingRef.current ||
-        databaseProcessingRef.current ||
-        awaitingRefreshRef.current);
-
-    const scheduleReconnect = () => {
-      if (
-        closedByEffect ||
-        activeSessionRef.current !== sessionId ||
-        isStreamInterrupted(sessionId)
-      ) {
-        return;
-      }
-      if (reconnectAttempt >= CHAT_STREAM_RECONNECT_MAX_ATTEMPTS) {
-        return;
-      }
-
-      const delay = getAiChatStreamReconnectDelay(reconnectAttempt);
-      reconnectAttempt += 1;
-      clearReconnectTimeout();
-      reconnectTimeoutId = window.setTimeout(() => {
-        reconnectTimeoutId = null;
-        connectStream();
-      }, delay);
-    };
-
-    const handleStreamMessage = (event: MessageEvent) => {
-      if (
-        activeSessionRef.current !== sessionId ||
-        isStreamInterrupted(sessionId)
-      )
-        return;
-      let payload: ChatSessionStreamEvent;
-      try {
-        payload = JSON.parse(event.data) as ChatSessionStreamEvent;
-      } catch {
-        return;
-      }
-
-      if (payload.type !== 'connected') {
-        if (
-          payload.requestId &&
-          ignoredRequestIdsRef.current.has(payload.requestId)
-        )
-          return;
-        if (
-          !acceptsChatStreamRequest(runRef.current.requestId, payload.requestId)
-        ) {
-          if (
-            ['idle', 'completed', 'failed', 'stopped'].includes(
-              runRef.current.phase,
-            ) &&
-            (payload.type === 'agent_start' || payload.type === 'turn_start')
-          ) {
-            submissionBoundaryRef.current = null;
-            transitionRun(sessionId, 'running', payload.requestId);
-            void loadMessages(sessionId, { background: true });
-          } else {
-            return;
-          }
-        }
-        if (payload.requestId && !runRef.current.requestId)
-          transitionRun(sessionId, 'running', payload.requestId);
-      }
-
-      if (payload.type === 'connected') {
-        streamConnectedRef.current = true;
-        reconnectAttempt = 0;
-        setMessages((previous) => withoutReconnectNoticeMessages(previous));
-        return;
+  const applyStreamEvent = useCallback(
+    (
+      sessionId: string,
+      payload: Exclude<ChatSessionStreamEvent, { type: 'connected' }>,
+    ) => {
+      const request = acceptRunEvent(sessionId, payload);
+      if (!request) return;
+      if (request === 'new-request') {
+        submissionBoundaryRef.current = null;
+        void loadMessages(sessionId, { background: true });
       }
 
       // connected 只是连接层面的握手确认，不代表业务有进展，不计入静默判断——
@@ -1482,7 +991,7 @@ export function useChatMessages(options: {
           payload.snapshot,
           typeof payload.turnIndex === 'number'
             ? `turn-${payload.turnIndex}`
-            : latestStreamingMessageKeyRef.current,
+            : undefined,
         );
         updateProcessing(true);
         return;
@@ -1504,7 +1013,7 @@ export function useChatMessages(options: {
           payload.text,
           typeof payload.turnIndex === 'number'
             ? `turn-${payload.turnIndex}`
-            : latestStreamingMessageKeyRef.current,
+            : undefined,
         );
         return;
       }
@@ -1547,68 +1056,12 @@ export function useChatMessages(options: {
         return;
       }
 
-      if (payload.type === 'tool_start') {
-        const path = readToolPath(payload.args);
-        upsertToolTraceMessage(
-          sessionId,
-          buildToolTraceContent({
-            toolName: payload.toolName,
-            status: 'running',
-            path,
-          }),
-          {
-            key: payload.toolCallId,
-            toolName: payload.toolName,
-            status: 'running',
-            path,
-            args: payload.args,
-          },
-        );
-        updateProcessing(true);
-        return;
-      }
-
-      if (payload.type === 'tool_update') {
-        const path = readToolPath(payload.args);
-        upsertToolTraceMessage(
-          sessionId,
-          buildToolTraceContent({
-            toolName: payload.toolName,
-            status: 'running',
-            path,
-          }),
-          {
-            key: payload.toolCallId,
-            toolName: payload.toolName,
-            status: 'running',
-            path,
-            args: payload.args,
-          },
-        );
-        updateProcessing(true);
-        return;
-      }
-
-      if (payload.type === 'tool_end') {
-        const existing = toolTraceMessageEntriesRef.current.find(
-          (entry) => entry.key === payload.toolCallId,
-        );
-        const path = readToolPath(existing?.args);
-        const status = payload.isError ? 'failed' : 'completed';
-        upsertToolTraceMessage(
-          sessionId,
-          buildToolTraceContent({
-            toolName: payload.toolName,
-            status,
-            path,
-          }),
-          {
-            key: payload.toolCallId,
-            toolName: payload.toolName,
-            status,
-            path,
-          },
-        );
+      if (
+        payload.type === 'tool_start' ||
+        payload.type === 'tool_update' ||
+        payload.type === 'tool_end'
+      ) {
+        projectToolCall(sessionId, payload);
         updateProcessing(true);
         return;
       }
@@ -1629,9 +1082,10 @@ export function useChatMessages(options: {
           payload.status === 'error' ? 'failed' : 'completed',
         );
         if (payload.text.trim()) {
-          upsertLatestStreamingAssistantMessage(
+          upsertStreamingAssistantMessage(
             sessionId,
             payload.text,
+            undefined,
             normalizeMessageMetadata(payload.metadata) ?? {
               kind: 'final',
               turn_complete: true,
@@ -1664,203 +1118,76 @@ export function useChatMessages(options: {
         updateAwaitingRefresh(false);
         return;
       }
-    };
+    },
+    [
+      acceptRunEvent,
+      appendAssistantErrorMessage,
+      beginStreamingAssistantTurn,
+      finalizeRunningToolTraceMessages,
+      flushStreamingMessageUpdates,
+      getActiveStreamingMessageIds,
+      loadMessages,
+      projectToolCall,
+      resetStreamingMessageRefs,
+      runRef,
+      transitionRun,
+      updateAwaitingRefresh,
+      updateProcessing,
+      upsertStreamingAssistantMessage,
+      upsertThinkingMessage,
+      upsertToolTraceMessage,
+    ],
+  );
 
-    const connectStream = async () => {
-      if (
-        closedByEffect ||
-        activeSessionRef.current !== sessionId ||
-        isStreamInterrupted(sessionId)
-      ) {
-        return;
-      }
+  useEffect(() => {
+    const sessionId = selectedSession;
+    if (!sessionId) return;
+    const visit = sessionVisitRef.current;
 
-      let streamTicket: string;
-      try {
-        const result = await chatSessionsApi.createStreamTicket(sessionId);
-        streamTicket = result.ticket;
-      } catch {
-        scheduleReconnect();
-        return;
-      }
-
-      if (
-        closedByEffect ||
-        activeSessionRef.current !== sessionId ||
-        isStreamInterrupted(sessionId)
-      ) {
-        return;
-      }
-
-      let currentSocket: WebSocket;
-      try {
-        currentSocket = new WebSocket(
-          buildChatSessionStreamUrl(sessionId, streamTicket),
-        );
-      } catch {
-        scheduleReconnect();
-        return;
-      }
-
-      socket = currentSocket;
-      streamSocketRef.current = currentSocket;
-
-      currentSocket.onmessage = handleStreamMessage;
-
-      currentSocket.onerror = () => {
-        if (streamSocketRef.current === currentSocket) {
-          streamConnectedRef.current = false;
-          lastStreamProgressAtRef.current = null;
-        }
+    disconnectStreamRef.current = openChatStream(sessionId, {
+      isCurrent: () =>
+        sessionVisitRef.current === visit &&
+        activeSessionRef.current === sessionId &&
+        !isStreamInterrupted(sessionId),
+      onConnected: () => {
+        streamConnectedRef.current = true;
+        setMessages(withoutReconnectNoticeMessages);
+      },
+      onDisconnected: () => {
+        streamConnectedRef.current = false;
+        lastStreamProgressAtRef.current = null;
         if (
-          activeSessionRef.current === sessionId &&
-          hasRecoverableStreamActivity()
+          sendingRef.current ||
+          databaseProcessingRef.current ||
+          awaitingRefreshRef.current
         ) {
           appendReconnectNoticeMessage(sessionId);
           updateAwaitingRefresh(true);
         }
-      };
-
-      currentSocket.onclose = () => {
-        if (streamSocketRef.current === currentSocket) {
-          streamConnectedRef.current = false;
-          lastStreamProgressAtRef.current = null;
-          streamSocketRef.current = null;
-        }
-        if (!closedByEffect && activeSessionRef.current === sessionId) {
-          if (hasRecoverableStreamActivity()) {
-            appendReconnectNoticeMessage(sessionId);
-            updateAwaitingRefresh(true);
-          }
-          scheduleReconnect();
-        }
-      };
-    };
-
-    void connectStream();
+      },
+      onEvent: (event) => applyStreamEvent(sessionId, event),
+    });
 
     return () => {
-      closedByEffect = true;
-      clearReconnectTimeout();
-      socket?.close();
-      if (streamSocketRef.current === socket) {
-        streamConnectedRef.current = false;
-        streamSocketRef.current = null;
-      }
+      closeStream();
       resetStreamingMessageRefs();
     };
   }, [
-    beginStreamingAssistantTurn,
-    appendAssistantErrorMessage,
     appendReconnectNoticeMessage,
-    finalizeRunningToolTraceMessages,
-    flushStreamingMessageUpdates,
-    getActiveStreamingMessageIds,
+    applyStreamEvent,
+    closeStream,
     isStreamInterrupted,
-    loadMessages,
-    options.selectedSession,
+    selectedSession,
+    selectedSessionRevision,
     resetStreamingMessageRefs,
     streamReconnectNonce,
-    transitionRun,
     updateAwaitingRefresh,
-    updateProcessing,
-    upsertLatestStreamingAssistantMessage,
-    upsertStreamingAssistantMessage,
-    upsertThinkingMessage,
-    upsertToolTraceMessage,
   ]);
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) return;
-
-    let scrollIdleTimeout: number | undefined;
-    const handleScroll = (event?: Event) => {
-      const nearBottom = isNearBottom(element);
-      shouldAutoScrollRef.current = nearBottom;
-      setFollowingLatest((previous) =>
-        previous === nearBottom ? previous : nearBottom,
-      );
-      if (event) {
-        window.clearTimeout(scrollIdleTimeout);
-        setScrolling(!nearBottom);
-        if (!nearBottom) {
-          scrollIdleTimeout = window.setTimeout(() => {
-            setScrolling(false);
-          }, SCROLL_IDLE_DELAY_MS);
-        }
-      }
-      // 接近顶部且仍有更早消息时,自动加载上一页历史。
-      if (
-        element.scrollTop <= OLDER_LOAD_THRESHOLD_PX &&
-        hasMoreOlderRef.current &&
-        !loadingOlderRef.current
-      ) {
-        void loadOlderMessages();
-      }
-    };
-
-    handleScroll();
-    element.addEventListener('scroll', handleScroll);
-
-    return () => {
-      element.removeEventListener('scroll', handleScroll);
-      window.clearTimeout(scrollIdleTimeout);
-    };
-  }, [loadOlderMessages]);
-
-  // 上滑加载更早消息后顶部增高,这里把滚动位置补偿回原视口,避免「加载即跳动」。
-  // 与下方自动贴底互斥:上滑时用户不在底部,shouldAutoScrollRef 为 false。
-  useLayoutEffect(() => {
-    const anchor = prependAnchorRef.current;
-    if (!anchor || !scrollRef.current) return;
-    prependAnchorRef.current = null;
-    const element = scrollRef.current;
-    // 维持「距底部距离」不变:新 scrollTop = 旧 scrollTop + 本次高度增量。
-    element.scrollTop = anchor.top + (element.scrollHeight - anchor.height);
-  }, [messages]);
-
-  const scheduleAutoScroll = useCallback(() => {
-    if (autoScrollFrameRef.current !== null) return;
-
-    autoScrollFrameRef.current = window.requestAnimationFrame(() => {
-      autoScrollFrameRef.current = null;
-      const element = scrollRef.current;
-      if (!element || !shouldAutoScrollRef.current) return;
-      element.scrollTop = element.scrollHeight;
-    });
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!scrollRef.current || !shouldAutoScrollRef.current) return;
-    scheduleAutoScroll();
-  }, [messages, scheduleAutoScroll]);
-
-  useEffect(() => {
-    if (!isPending || !scrollRef.current || !shouldAutoScrollRef.current)
-      return;
-    scheduleAutoScroll();
-  }, [isPending, scheduleAutoScroll]);
-
-  useEffect(
-    () => () => {
-      if (autoScrollFrameRef.current !== null) {
-        window.cancelAnimationFrame(autoScrollFrameRef.current);
-      }
-    },
-    [],
-  );
 
   /** Local interruption follows a successful cancellation acknowledgement. */
   const resetStreamingStateForInterrupt = useCallback(() => {
     sendAbortControllerRef.current?.abort();
-    const socket = streamSocketRef.current;
-    streamConnectedRef.current = false;
-    lastStreamProgressAtRef.current = null;
-    if (socket) {
-      streamSocketRef.current = null;
-      socket.close();
-    }
+    if (interruptedStreamSessionRef.current) closeStream();
 
     databaseProcessingRef.current = false;
     resetStreamingMessageRefs();
@@ -1868,11 +1195,16 @@ export function useChatMessages(options: {
     dispatchRequestStatus({ type: 'set-sending', value: false });
     updateProcessing(false);
     updateAwaitingRefresh(false);
-  }, [resetStreamingMessageRefs, updateAwaitingRefresh, updateProcessing]);
+  }, [
+    closeStream,
+    resetStreamingMessageRefs,
+    updateAwaitingRefresh,
+    updateProcessing,
+  ]);
 
   const stopGenerating = useCallback(async () => {
     if (stoppingRef.current) return false;
-    const sessionId = activeSessionRef.current || options.selectedSession;
+    const sessionId = activeSessionRef.current || selectedSession;
     if (!sessionId && !admissionRef.current) return false;
     const operation = activeSendOperationRef.current;
     let targetSessionId = sessionId;
@@ -1907,7 +1239,6 @@ export function useChatMessages(options: {
         requestId,
         submissionBoundaryRef.current?.knownIds,
       );
-      if (requestId && !outcome) ignoredRequestIdsRef.current.add(requestId);
       interruptedStreamSessionRef.current = outcome ? null : admittedSessionId;
       flushStreamingMessageUpdates();
       resetStreamingStateForInterrupt();
@@ -1950,10 +1281,11 @@ export function useChatMessages(options: {
       }
     }
   }, [
-    options.selectedSession,
+    selectedSession,
     transitionRun,
     flushStreamingMessageUpdates,
     resetStreamingStateForInterrupt,
+    runRef,
     updateAwaitingRefresh,
   ]);
 
@@ -1974,7 +1306,7 @@ export function useChatMessages(options: {
       )
         return false;
       if (activeContinuationBlocked) return false;
-      if (!options.selectedSession && !options.chatAvailable) return false;
+      if (!selectedSession && !chatAvailable) return false;
 
       const previousInterruptedSession = interruptedStreamSessionRef.current;
       interruptedStreamSessionRef.current = null;
@@ -1988,17 +1320,17 @@ export function useChatMessages(options: {
         finishAdmission = resolve;
       });
       admissionRef.current = admission;
-      const operation = { sessionId: options.selectedSession, admission };
+      const operation = { sessionId: selectedSession, admission };
       activeSendOperationRef.current = operation;
       submissionBoundaryRef.current = {
-        sessionId: options.selectedSession,
+        sessionId: selectedSession,
         knownIds: new Set(messagesRef.current.map((message) => message.id)),
       };
       const isCurrentOperation = () =>
         activeSendOperationRef.current === operation &&
         activeSessionRef.current === operation.sessionId;
       sendingRef.current = true;
-      let sendingSessionId = options.selectedSession;
+      let sendingSessionId = selectedSession;
       transitionRun(sendingSessionId, 'queued', null);
       dispatchRequestStatus({ type: 'set-sending', value: true });
       shouldAutoScrollRef.current = true;
@@ -2010,7 +1342,7 @@ export function useChatMessages(options: {
       setReplySlow(false);
 
       try {
-        let sessionId = options.selectedSession;
+        let sessionId = selectedSession;
 
         if (!sessionId) {
           if (creatingRef.current) return false;
@@ -2018,7 +1350,7 @@ export function useChatMessages(options: {
           creatingRef.current = true;
 
           try {
-            const newSession = await options.createSession((created) => {
+            const newSession = await createSession((created) => {
               if (activeSendOperationRef.current !== operation) return;
               operation.sessionId = created.id;
               activeSessionRef.current = created.id;
@@ -2105,7 +1437,7 @@ export function useChatMessages(options: {
           const currentSession = sessionsRef.current.find(
             (session) => session.id === sessionId,
           );
-          options.touchSession(sessionId, {
+          touchSession(sessionId, {
             updated_at: new Date().toISOString(),
             title:
               sessionTitle ||
@@ -2208,12 +1540,15 @@ export function useChatMessages(options: {
       activeContinuationBlocked,
       appendAssistantErrorMessage,
       appendReconnectNoticeMessage,
+      chatAvailable,
+      createSession,
       isPending,
+      isStreamInterrupted,
       loadMessages,
-      options.chatAvailable,
-      options.selectedSession,
-      options.createSession,
-      options.touchSession,
+      runRef,
+      selectedSession,
+      shouldAutoScrollRef,
+      touchSession,
       transitionRun,
       updateAwaitingRefresh,
       updateProcessing,
@@ -2230,7 +1565,7 @@ export function useChatMessages(options: {
    * 用上一次实际发送的原文重新发一遍，用户不用重新打字。
    */
   const retrySending = useCallback(async () => {
-    const sessionId = activeSessionRef.current || options.selectedSession;
+    const sessionId = activeSessionRef.current || selectedSession;
     const content = lastSentMessageContentRef.current;
     if (!sessionId || !content) return false;
 
@@ -2244,22 +1579,14 @@ export function useChatMessages(options: {
     return sendMessageWithOptions(content, lastSentMessageOptionsRef.current, {
       bypassPendingGuard: true,
     });
-  }, [options.selectedSession, stopGenerating, sendMessageWithOptions]);
+  }, [selectedSession, stopGenerating, sendMessageWithOptions]);
 
   const refreshMessages = useCallback(async () => {
-    if (!options.selectedSession) {
+    if (!selectedSession) {
       return;
     }
-    await loadMessages(options.selectedSession, { background: false });
-  }, [loadMessages, options.selectedSession]);
-
-  const scrollToLatest = useCallback(() => {
-    shouldAutoScrollRef.current = true;
-    setFollowingLatest(true);
-    setScrolling(false);
-    const element = scrollRef.current;
-    element?.scrollTo({ top: element.scrollHeight, behavior: 'instant' });
-  }, []);
+    await loadMessages(selectedSession, { background: false });
+  }, [loadMessages, selectedSession]);
 
   return {
     messages,
@@ -2268,7 +1595,7 @@ export function useChatMessages(options: {
     historyError,
     stopping,
     followingLatest,
-    showScrollToLatest: scrolling && !followingLatest,
+    showScrollToLatest,
     scrollToLatest,
     sending: isPending,
     loadedSessionId,

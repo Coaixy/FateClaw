@@ -1,10 +1,6 @@
-import type { MembershipPlanKey } from '@fateclaw/contracts/membership';
-
 import type {
   AdminModelSettingsOverviewDto,
   AdminModelSettingsUpdateDto,
-  RuntimeConfigDto,
-  RuntimeConfigUpdateDto,
 } from '@fateclaw/contracts/model-settings';
 import type {
   ChatSessionDto,
@@ -25,104 +21,27 @@ import type {
   MembershipStatusDto,
 } from '@fateclaw/contracts/billing';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
-const ADMIN_KEY_STORAGE_KEY = 'admin_key';
-const DEFAULT_SERVER_ERROR_MESSAGE = '服务暂时不可用，请稍后重试';
-const DEFAULT_NETWORK_ERROR_MESSAGE = '网络连接失败，请检查服务是否正常后重试';
-const DEFAULT_INVALID_RESPONSE_MESSAGE = '服务返回异常，请稍后重试';
-
-class AdminApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-function readAdminKeyFrom(storage?: Storage | null): string | null {
-  if (!storage) return null;
-  try {
-    return storage.getItem(ADMIN_KEY_STORAGE_KEY);
-  } catch (error) {
-    if (error instanceof DOMException) return null;
-    throw error;
-  }
-}
-
-function writeAdminKeyTo(storage: Storage | null | undefined, key: string) {
-  if (!storage) return;
-  try {
-    storage.setItem(ADMIN_KEY_STORAGE_KEY, key);
-  } catch (error) {
-    if (error instanceof DOMException) return;
-    throw error;
-  }
-}
-
-function removeAdminKeyFrom(storage?: Storage | null) {
-  if (!storage) return;
-  try {
-    storage.removeItem(ADMIN_KEY_STORAGE_KEY);
-  } catch (error) {
-    if (error instanceof DOMException) return;
-    throw error;
-  }
-}
-
-export function getAdminKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return (
-    readAdminKeyFrom(window.sessionStorage) ??
-    readAdminKeyFrom(window.localStorage)
-  );
-}
-
-export function hasPersistentAdminKey(): boolean {
-  if (typeof window === 'undefined') return false;
-  return readAdminKeyFrom(window.localStorage) !== null;
-}
-
-export function setAdminKey(key: string, persist = false) {
-  if (typeof window === 'undefined') return;
-  removeAdminKeyFrom(window.sessionStorage);
-  removeAdminKeyFrom(window.localStorage);
-  writeAdminKeyTo(persist ? window.localStorage : window.sessionStorage, key);
-}
-
-export function clearAdminKey() {
-  if (typeof window === 'undefined') return;
-  removeAdminKeyFrom(window.sessionStorage);
-  removeAdminKeyFrom(window.localStorage);
-}
-
-export function isAdminUnauthorizedError(
-  error: unknown,
-): error is AdminApiError {
-  return error instanceof AdminApiError && error.status === 401;
-}
-
-export function isAdminForbiddenError(error: unknown): error is AdminApiError {
-  return error instanceof AdminApiError && error.status === 403;
-}
-
-/**
- * 将管理端 API 错误转换成页面可直接展示的中文提示。
- */
-export function formatAdminErrorMessage(
-  error: unknown,
-  fallback: string,
-): string {
-  if (isAdminForbiddenError(error)) return '无权访问该管理功能';
-  return error instanceof Error ? error.message : fallback;
-}
+import { adminSystemApi } from './admin-system-api';
+import { adminBillingApi } from './admin-billing-api';
+import { adminUsersApi } from './admin-users-api';
+import { adminConversationsApi } from './admin-conversations-api';
+import { adminSkillsApi } from './admin-skills-api';
+import { adminRequest } from './admin-http';
+export {
+  AdminApiError,
+  adminRequest,
+  getAdminKey,
+  hasPersistentAdminKey,
+  setAdminKey,
+  clearAdminKey,
+  isAdminUnauthorizedError,
+  isAdminForbiddenError,
+  formatAdminErrorMessage,
+} from './admin-http';
 
 export type AdminRole = 'owner' | 'user_manager';
 export type AdminScope =
-  | 'admin:*'
-  | 'users:read'
-  | 'users:create'
-  | 'messages:read';
+  'admin:*' | 'users:read' | 'users:create' | 'messages:read';
 export type AdminHomePath = '/overview' | '/users';
 
 export interface AdminSession {
@@ -134,60 +53,6 @@ export interface AdminSession {
 
 /** 管理后台完整运行状态统计。 */
 export type AdminStatusStats = AdminStatusStatsDto;
-
-export async function adminRequest<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const key = getAdminKey();
-
-  const headers: Record<string, string> = {
-    ...((options.headers as Record<string, string>) || {}),
-  };
-
-  if (options.body) {
-    headers['Content-Type'] = 'application/json';
-  }
-
-  if (key) {
-    headers['X-Admin-Key'] = key;
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
-      ...options,
-      headers,
-    });
-  } catch {
-    throw new AdminApiError(0, DEFAULT_NETWORK_ERROR_MESSAGE);
-  }
-
-  // 检测非 JSON 响应（后端未运行或返回了 HTML 页面）
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    throw new AdminApiError(
-      res.status,
-      res.ok
-        ? DEFAULT_INVALID_RESPONSE_MESSAGE
-        : res.status >= 500
-          ? DEFAULT_SERVER_ERROR_MESSAGE
-          : '后端接口返回了非 JSON 响应，请确认服务是否正常运行',
-    );
-  }
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new AdminApiError(
-      res.status,
-      res.status >= 500
-        ? DEFAULT_SERVER_ERROR_MESSAGE
-        : body.error || `请求失败 (${res.status})`,
-    );
-  }
-
-  return res.json() as Promise<T>;
-}
 
 export interface AdminUser {
   id: string;
@@ -265,12 +130,7 @@ export interface UsageStats {
 }
 
 export type AdminRechargeStatsRange =
-  | 'today'
-  | '7d'
-  | '30d'
-  | 'month'
-  | 'custom'
-  | 'all';
+  'today' | '7d' | '30d' | 'month' | 'custom' | 'all';
 
 export interface AdminRechargePeriodStats {
   range: AdminRechargeStatsRange;
@@ -594,351 +454,11 @@ export interface AdminRuntimeStatus {
 }
 
 export const admin = {
-  verify: () =>
-    adminRequest<AdminSession>('/api/admin/verify', {
-      method: 'POST',
-    }),
-  runtimeStatus: () =>
-    adminRequest<AdminRuntimeStatus>('/api/admin/runtime-status'),
-  stats: (options?: {
-    rechargeRange?: AdminRechargeStatsRange;
-    rechargeStartDate?: string;
-    rechargeEndDate?: string;
-  }) => {
-    const params = new URLSearchParams();
-    if (options?.rechargeRange) {
-      params.set('recharge_range', options.rechargeRange);
-    }
-    if (options?.rechargeStartDate) {
-      params.set('recharge_start_date', options.rechargeStartDate);
-    }
-    if (options?.rechargeEndDate) {
-      params.set('recharge_end_date', options.rechargeEndDate);
-    }
-    const query = params.toString();
-    return adminRequest<GlobalStats>(
-      `/api/admin/stats${query ? `?${query}` : ''}`,
-    );
-  },
-  status: () => adminRequest<AdminStatusStats>('/api/admin/status'),
-  rechargeOrders: (opts?: {
-    user_id?: string;
-    status?: AdminRechargeOrderStatus;
-    pay_type?: AdminRechargePayType;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    if (opts?.status) params.set('status', opts.status);
-    if (opts?.pay_type) params.set('pay_type', opts.pay_type);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const query = params.toString();
-    return adminRequest<AdminRechargeOrdersResponse>(
-      `/api/admin/billing/recharge-orders${query ? `?${query}` : ''}`,
-    );
-  },
-  walletTransactions: (opts?: {
-    user_id?: string;
-    kind?: string;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    if (opts?.kind) params.set('kind', opts.kind);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const query = params.toString();
-    return adminRequest<AdminWalletTransactionsResponse>(
-      `/api/admin/billing/wallet-transactions${query ? `?${query}` : ''}`,
-    );
-  },
-  billingReservations: (opts?: {
-    user_id?: string;
-    hold_state?: AdminBillingHoldState;
-    charge_state?: AdminBillingChargeState;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    params.set('include_total', 'true');
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    if (opts?.hold_state) params.set('hold_state', opts.hold_state);
-    if (opts?.charge_state) params.set('charge_state', opts.charge_state);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const query = params.toString();
-    return adminRequest<AdminBillingReservationsResponse>(
-      `/api/admin/billing/reservations${query ? `?${query}` : ''}`,
-    );
-  },
-  reconcileBillingReservations: (data?: {
-    stale_ms?: number;
-    limit?: number;
-  }) =>
-    adminRequest<AdminBillingReconcileResult>('/api/admin/billing/reconcile', {
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    }),
-  systemConfig: () =>
-    adminRequest<AdminSystemConfigOverview>('/api/admin/system-config'),
-  runtimeConfig: () =>
-    adminRequest<RuntimeConfigDto>('/api/admin/system-config/runtime'),
-  updateRuntimeConfig: (data: RuntimeConfigUpdateDto) =>
-    adminRequest<RuntimeConfigDto>('/api/admin/system-config/runtime', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  benefitModelSettings: () =>
-    adminRequest<AdminSystemConfigOverview>('/api/admin/system-config/benefit'),
-  updateBenefitModelSettings: (data: AdminModelSettingsUpdate) =>
-    adminRequest<AdminSystemConfigOverview>(
-      '/api/admin/system-config/benefit',
-      { method: 'PUT', body: JSON.stringify(data) },
-    ),
-  rechargeConfig: () =>
-    adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config'),
-  updateRechargeConfig: (data: AdminRechargePaymentConfigUpdate) =>
-    adminRequest<AdminRechargePaymentConfig>('/api/admin/recharge-config', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  updateModelSettings: (data: AdminModelSettingsUpdate) =>
-    adminRequest<AdminSystemConfigOverview>('/api/admin/system-config/model', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  users: (params?: { page?: number; page_size?: number; q?: string }) => {
-    const search = new URLSearchParams();
-    if (params?.page != null) search.set('page', String(params.page));
-    if (params?.page_size != null)
-      search.set('page_size', String(params.page_size));
-    if (params?.q?.trim()) search.set('q', params.q.trim());
-    const query = search.toString();
-    return adminRequest<AdminUsersPageResult>(
-      `/api/admin/users${query ? `?${query}` : ''}`,
-    );
-  },
-  createUser: (data: {
-    phone: string;
-    password: string;
-    role: AdminUser['role'];
-    phone_verified: boolean;
-  }) =>
-    adminRequest<{ success: boolean; id: string }>('/api/admin/users', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  userDetail: (id: string) =>
-    adminRequest<UserDetail>(`/api/admin/users/${encodeURIComponent(id)}`),
-  resetUserPassword: (id: string, password: string) =>
-    adminRequest<{ id: string; auth_token_version: number }>(
-      `/api/admin/users/${encodeURIComponent(id)}/password`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ password }),
-      },
-    ),
-  setUserMembership: (
-    id: string,
-    data: { plan_key: MembershipPlanKey; current_period_end: string },
-  ) =>
-    adminRequest<AdminMembershipState>(
-      `/api/admin/users/${encodeURIComponent(id)}/membership`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-    ),
-  cancelUserMembership: (id: string) =>
-    adminRequest<AdminMembershipState>(
-      `/api/admin/users/${encodeURIComponent(id)}/membership`,
-      { method: 'DELETE' },
-    ),
-  adjustPurchasedBalance: (
-    id: string,
-    data: { amount_coins: number; note?: string },
-  ) =>
-    adminRequest<{
-      success: boolean;
-      purchased_coins: number;
-      bonus_coins: number;
-      reserved_coins: number;
-      available_coins: number;
-    }>(`/api/admin/users/${encodeURIComponent(id)}/balance/adjust`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  userTransactions: (id: string) =>
-    adminRequest<WalletTransaction[]>(
-      `/api/admin/users/${encodeURIComponent(id)}/transactions`,
-    ),
-  userBalanceGrants: (
-    id: string,
-    opts?: { include_exhausted?: boolean; limit?: number },
-  ) => {
-    const params = new URLSearchParams();
-    params.set('limit', String(opts?.limit ?? 20));
-    if (opts?.include_exhausted) params.set('include_exhausted', 'true');
-    return adminRequest<AdminBalanceGrant[]>(
-      `/api/admin/users/${encodeURIComponent(id)}/balance/grants?${params.toString()}`,
-    );
-  },
-  deleteUser: (id: string) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/users/${encodeURIComponent(id)}`,
-      { method: 'DELETE' },
-    ),
-  messages: (opts?: {
-    account_id?: string;
-    user_id?: string;
-    session_id?: string;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.account_id) params.set('account_id', opts.account_id);
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    if (opts?.session_id) params.set('session_id', opts.session_id);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const qs = params.toString();
-    return adminRequest<AdminMessagesResponse>(
-      `/api/admin/messages${qs ? `?${qs}` : ''}`,
-    );
-  },
-  chatSessions: (opts?: {
-    account_id?: string;
-    user_id?: string;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.account_id) params.set('account_id', opts.account_id);
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    if (opts?.limit) params.set('limit', String(opts.limit));
-    if (opts?.offset) params.set('offset', String(opts.offset));
-    const qs = params.toString();
-    return adminRequest<AdminChatSessionsResponse>(
-      `/api/admin/chat-sessions${qs ? `?${qs}` : ''}`,
-    );
-  },
-  /** 查看任意会话的完整内容（消息 + 卦象 + 关联客户档案）。 */
-  chatSessionDetail: (sessionId: string) =>
-    adminRequest<AdminChatSessionDetailResponse>(
-      `/api/admin/chat-sessions/${encodeURIComponent(sessionId)}`,
-    ),
-  /** 读取全部会员套餐配置（含已停用，后台改价用）。 */
-  membershipConfig: () =>
-    adminRequest<AdminMembershipConfigResponse>('/api/admin/membership-config'),
-  /** Updates the membership configuration. */
-  updateMembershipConfig: (
-    planKey: MembershipPlanKey,
-    data: AdminMembershipConfigUpdate,
-  ) =>
-    adminRequest<AdminMembershipPlanConfig>(
-      `/api/admin/membership-config/${encodeURIComponent(planKey)}`,
-      { method: 'PATCH', body: JSON.stringify(data) },
-    ),
-  cleanupPiSessions: (data: {
-    mode: 'soft_deleted' | 'inactive';
-    inactive_days?: number;
-  }) =>
-    adminRequest<AdminPiSessionCleanupResult>(
-      '/api/admin/chat-sessions/pi-sessions/cleanup',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-    ),
-  scanPiSessionOrphans: (data: {
-    action?: AdminPiSessionOrphanScanAction;
-    limit?: number;
-    sample_limit?: number;
-  }) =>
-    adminRequest<AdminPiSessionOrphanScanResult>(
-      '/api/admin/chat-sessions/pi-sessions/orphans/scan',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-    ),
-  globalSkills: () =>
-    adminRequest<AdminSkillGlobalConfig[]>('/api/admin/skills/global'),
-  setSkillGlobalEnabled: (name: string, enabled: boolean) =>
-    adminRequest<{ success: boolean }>(
-      `/api/admin/skills/global/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`,
-      { method: 'POST' },
-    ),
-  customSkills: (opts?: { user_id?: string }) => {
-    const params = new URLSearchParams();
-    if (opts?.user_id) params.set('user_id', opts.user_id);
-    const qs = params.toString();
-    return adminRequest<AdminCustomSkillSummary[]>(
-      `/api/admin/skills/custom${qs ? `?${qs}` : ''}`,
-    );
-  },
-  customSkill: (id: string) =>
-    adminRequest<AdminCustomSkill>(
-      `/api/admin/skills/custom/${encodeURIComponent(id)}`,
-    ),
-  updateCustomSkillState: (
-    id: string,
-    data: {
-      enabled?: boolean;
-      visibility?: 'private' | 'link_shared' | 'shared';
-    },
-  ) =>
-    adminRequest<AdminCustomSkill>(
-      `/api/admin/skills/custom/${encodeURIComponent(id)}/state`,
-      { method: 'PATCH', body: JSON.stringify(data) },
-    ),
-  skillComments: (opts?: {
-    status?: AdminSkillCommentStatus;
-    skill_id?: string;
-    limit?: number;
-  }) => {
-    const params = new URLSearchParams();
-    if (opts?.status) params.set('status', opts.status);
-    if (opts?.skill_id) params.set('skill_id', opts.skill_id);
-    if (opts?.limit != null) params.set('limit', String(opts.limit));
-    const qs = params.toString();
-    return adminRequest<AdminSkillCommentsResponse>(
-      `/api/admin/skills/comments${qs ? `?${qs}` : ''}`,
-    );
-  },
-  reviewSkillComment: (
-    id: string,
-    status: Exclude<AdminSkillCommentStatus, 'pending'>,
-  ) =>
-    adminRequest<AdminSkillComment>(
-      `/api/admin/skills/comments/${encodeURIComponent(id)}/review`,
-      { method: 'PATCH', body: JSON.stringify({ status }) },
-    ),
-  pinSkillComment: (id: string, pinned: boolean) =>
-    adminRequest<AdminSkillComment>(
-      `/api/admin/skills/comments/${encodeURIComponent(id)}/pin`,
-      { method: 'PATCH', body: JSON.stringify({ pinned }) },
-    ),
-  grantBonusBalance: (
-    id: string,
-    data: {
-      amount_coins: number;
-      source?: 'new_user_gift' | 'sign_in' | 'admin_grant' | 'promotion';
-      note?: string;
-      expires_at?: string | null;
-    },
-  ) =>
-    adminRequest<{
-      success: boolean;
-      grant_id: string;
-      bonus_coins: number;
-    }>(`/api/admin/users/${encodeURIComponent(id)}/balance/grant`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  ...adminSystemApi,
+  ...adminBillingApi,
+  ...adminUsersApi,
+  ...adminConversationsApi,
+  ...adminSkillsApi,
 };
 
 // Conversation Logs (re-use types from user API)
@@ -1090,5 +610,3 @@ export const adminLogs = {
       `/api/admin/logs/by-request/${encodeURIComponent(requestId)}`,
     ),
 };
-
-export { AdminApiError };

@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
     root: repoRoot,
   },
   // Compile shared workspace contracts with the application.
-  transpilePackages: ['@fateclaw/contracts'],
+  transpilePackages: ['@fateclaw/contracts', '@fateclaw/chat-ui'],
   // Production: static export served by Fastify / static host.
   // 使用 trailingSlash 让导出结果落成 route/index.html，
   // 对部署环境的静态目录托管更稳，不依赖 {path}.html 特判。

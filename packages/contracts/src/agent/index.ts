@@ -130,3 +130,11 @@ export interface AgentRequestData {
   piSessionBase?: PiSessionBase | null;
   acceptedAtMs?: number;
 }
+
+export type {
+  AgentCancelRequest,
+  AgentInboxRequest,
+  ProgressIpcPayload,
+  ResponseIpcPayload,
+  SendMessageIpcPayload,
+} from './ipc.js';

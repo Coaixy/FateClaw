@@ -1,0 +1,43 @@
+'use client';
+
+export const CHART = {
+  canvas: 'bg-canvas',
+  surfaceCard: 'bg-surface-card',
+  surfaceSoft: 'bg-surface-soft',
+  surfaceStrong: 'bg-surface-cream-strong',
+  border: 'border-hairline',
+  borderSoft: 'border-hairline-soft',
+  ink: 'text-ink',
+  body: 'text-body',
+  muted: 'text-muted',
+  mutedSoft: 'text-muted-soft',
+  primary: 'text-primary',
+  primaryBg: 'bg-primary',
+  primaryBgActive: 'bg-primary-active',
+  onPrimary: 'text-on-primary',
+  onDark: 'text-on-dark',
+  success: 'text-success',
+  warning: 'text-warning',
+  error: 'text-error',
+  accentTealBg: 'bg-accent-teal',
+  accentTeal: 'text-accent-teal',
+  line: 'bg-chart-line',
+  lineText: 'text-chart-line',
+  lineMutedText: 'text-chart-line-muted',
+  highlightBg: 'bg-chart-highlight',
+  badgeBg: 'bg-chart-badge',
+  badgeText: 'text-chart-earth',
+  metal: 'text-chart-metal',
+  wood: 'text-chart-wood',
+  water: 'text-chart-water',
+  fire: 'text-chart-fire',
+  earth: 'text-chart-earth',
+} as const;
+
+export const WUXING_TEXT: Record<string, string> = {
+  金: CHART.metal,
+  木: CHART.wood,
+  水: CHART.water,
+  火: CHART.fire,
+  土: CHART.earth,
+};

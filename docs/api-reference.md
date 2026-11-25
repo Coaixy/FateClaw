@@ -510,6 +510,8 @@ Direct chart endpoints call internal TypeScript runners in the API process and r
 
 `commit.target` supports `new_session_from_preview` and `current_session`. Pass `sessionId` when submitting to the current session. You can also pass `skill` + `input` for the server to calculate and save a chart immediately.
 
+Submitting the same `previewId` again as its owner returns the existing session and messages while they remain available. A guest preview is bound to the first successful submitter. Session creation and both chart messages commit together. Appending a chart to an existing session also writes both messages in one transaction.
+
 The built-in system chart catalog is maintained in `apps/api/src/modules/chat/paipan-registry.ts`. Common `skill` values include:
 
 - `bazi-paipan`: Bazi chart calculation

@@ -16,13 +16,15 @@ import {
   ProgressIpcPayload,
   ResponseIpcPayload,
   SendMessageIpcPayload,
-  releaseSessionProcessingLock,
   resolveAccountId,
   bindIpcPayloadIdentity,
   validateMessagePayload,
   validateProgressPayload,
   validateResponsePayload,
 } from './ipc-payloads.js';
+import {
+  releaseSessionProcessingLock,
+} from './session-processing-lock.js';
 import { normalizeRuntimeTokenUsage } from './token-usage.js';
 import { releaseLocalAgent } from './local-runner.js';
 import { logger } from '#infrastructure/logger';

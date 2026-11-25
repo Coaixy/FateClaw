@@ -16,7 +16,9 @@ import {
 } from '#infrastructure/db';
 import { getRedis } from '#infrastructure/redis';
 import { logger } from '#infrastructure/logger';
-import { sessionProcessingLockKey } from '#runtime/ipc-payloads';
+import {
+  sessionProcessingLockKey,
+} from '#runtime/session-processing-lock';
 import type { Account, User } from '#shared/types';
 
 const WECHAT_SESSION_LIST_LIMIT = 5;

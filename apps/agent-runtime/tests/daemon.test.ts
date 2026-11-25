@@ -10,8 +10,9 @@ beforeEach(() => {
   vi.stubEnv('FATECLAW_IPC_KEY', 'a'.repeat(64));
 });
 
-const { mockLog } = vi.hoisted(() => ({
+const { mockLog, mockAgentDbQuery } = vi.hoisted(() => ({
   mockLog: vi.fn(),
+  mockAgentDbQuery: vi.fn(),
 }));
 
 vi.mock('#agent/io', () => ({
@@ -19,12 +20,7 @@ vi.mock('#agent/io', () => ({
 }));
 
 vi.mock('#agent/agent-db', () => ({
-  closeAgentDb: vi.fn(),
-}));
-
-vi.mock('#agent/context', () => ({
-  getContext: vi.fn(),
-  initContext: vi.fn(() => ({ accountId: 'web:user-1' })),
+  getAgentDbPool: () => ({ query: mockAgentDbQuery }),
 }));
 
 vi.mock('#agent/redis', () => ({
@@ -41,11 +37,15 @@ import { markRequestActivity } from '#agent/request-scope';
 import { executeContainerInput } from '#agent/request-boundary';
 import { getRedis } from '#agent/redis';
 import {
-  __buildFatalOutboxResponseForTests,
-  __cleanupPendingCancelRequestsForTests,
-  __drainCancelRequestsForTests,
-  __processInboxMessageForTests,
-} from '#agent/daemon';
+  cleanupExpiredPendingCancelRequests,
+  drainCancelRequests,
+} from '#agent/inbox-cancellation';
+import { createInboxConsumer } from '#agent/inbox-consumer';
+import {
+  buildFatalOutboxResponse,
+  processInboxMessage,
+  type InboxRequestState,
+} from '#agent/inbox-request';
 
 const VALID_LLM_RUNTIME = {
   piApi: 'anthropic-messages',
@@ -84,12 +84,7 @@ describe('daemon cancel queue', () => {
         .mockResolvedValueOnce(null),
     };
 
-    await __drainCancelRequestsForTests(
-      'web:user-1',
-      activeSessions,
-      new Map(),
-      redis,
-    );
+    await drainCancelRequests('web:user-1', activeSessions, new Map(), redis);
 
     expect(redis.rpop).toHaveBeenCalledWith('ipc:web:user-1:cancel');
     expect(abort).toHaveBeenCalledTimes(1);
@@ -114,7 +109,7 @@ describe('daemon cancel queue', () => {
         .mockResolvedValueOnce(null),
     };
 
-    await __drainCancelRequestsForTests(
+    await drainCancelRequests(
       'web:user-1',
       new Map(),
       pendingCancelRequests,
@@ -131,11 +126,89 @@ describe('daemon cancel queue', () => {
       ['req-new', now - 10 * 60 * 1000],
     ]);
 
-    __cleanupPendingCancelRequestsForTests(pendingCancelRequests, now);
+    cleanupExpiredPendingCancelRequests(pendingCancelRequests, now);
 
     expect(pendingCancelRequests.has('req-old')).toBe(false);
     expect(pendingCancelRequests.has('req-new')).toBe(true);
   });
+});
+
+it('keeps an active execution in the drain when Redis redelivers its request', async () => {
+  const accountId = 'web:user-1';
+  const queue = `ipc:${accountId}:inbox`;
+  const raw = JSON.stringify({
+    type: 'chat',
+    requestId: 'req-duplicate',
+    executionId: 'execution-1',
+    accountId,
+    userMessage: 'hi',
+    llmRuntime: VALID_LLM_RUNTIME,
+  });
+  const envelope: [string, string] = [queue, encodeAgentIpc(queue, raw)];
+  const nextPop = Promise.withResolvers<typeof envelope>();
+  const bothDelivered = Promise.withResolvers<void>();
+  const originalResult =
+    Promise.withResolvers<Awaited<ReturnType<typeof executeContainerInput>>>();
+  const lpush = vi.fn(async () => 1);
+  const requeue = vi.fn(async () => 1);
+  const state: InboxRequestState = {
+    activeSessions: new Map(),
+    pendingCancelRequests: new Map(),
+    activeRequests: new Map(),
+  };
+
+  vi.mocked(getRedis).mockReturnValue({ lpush } as never);
+  vi.mocked(executeContainerInput)
+    .mockReset()
+    .mockReturnValue(originalResult.promise);
+  mockAgentDbQuery
+    .mockReset()
+    .mockResolvedValueOnce({ rowCount: 1 })
+    .mockResolvedValueOnce({ rowCount: 0 })
+    .mockResolvedValueOnce({ rowCount: 1 });
+  const consumer = createInboxConsumer({
+    accountId,
+    getConcurrency: async () => 2,
+    pop: vi
+      .fn<() => Promise<typeof envelope>>()
+      .mockResolvedValueOnce(envelope)
+      .mockResolvedValueOnce(envelope)
+      .mockImplementation(() => {
+        bothDelivered.resolve();
+        return nextPop.promise;
+      }),
+    requeue,
+    processMessage: (message) => processInboxMessage(accountId, message, state),
+  });
+
+  const running = consumer.run();
+  await bothDelivered.promise;
+  let drained = false;
+  const draining = consumer.stopAndDrain(1_000).then(() => {
+    drained = true;
+  });
+  nextPop.resolve(envelope);
+  try {
+    await running;
+    // Let drain settle if it lost the reference to the blocked execution.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(requeue).toHaveBeenCalledWith(...envelope);
+    expect(drained).toBe(false);
+    expect(state.activeRequests.get('req-duplicate')?.request.executionId).toBe(
+      'execution-1',
+    );
+  } finally {
+    originalResult.resolve({
+      status: 'success',
+      result: 'done',
+      model: 'test-model',
+      provider: 'anthropic-messages',
+    });
+  }
+  await draining;
+  expect(executeContainerInput).toHaveBeenCalledOnce();
+  expect(lpush).toHaveBeenCalledOnce();
+  expect(state.activeRequests.size).toBe(0);
 });
 
 describe('daemon request timeout', () => {
@@ -172,13 +245,11 @@ describe('daemon request timeout', () => {
       });
 
       const sessions = new Map();
-      const runPromise = __processInboxMessageForTests(
-        'web:user-1',
-        raw,
-        sessions,
-        new Map(),
-        new Map(),
-      );
+      const runPromise = processInboxMessage('web:user-1', raw, {
+        activeSessions: sessions,
+        pendingCancelRequests: new Map(),
+        activeRequests: new Map(),
+      });
 
       await vi.advanceTimersByTimeAsync(8 * 60 * 1000 + 1_000);
       await runPromise;
@@ -241,13 +312,11 @@ describe('daemon request timeout', () => {
         llmRuntime: VALID_LLM_RUNTIME,
       });
 
-      const runPromise = __processInboxMessageForTests(
-        'web:user-1',
-        raw,
-        new Map(),
-        new Map(),
-        new Map(),
-      );
+      const runPromise = processInboxMessage('web:user-1', raw, {
+        activeSessions: new Map(),
+        pendingCancelRequests: new Map(),
+        activeRequests: new Map(),
+      });
 
       await vi.advanceTimersByTimeAsync(9 * 60 * 1000 + 1_000);
       await runPromise;
@@ -274,22 +343,17 @@ describe('daemon fatal error response', () => {
     const scope = {
       partialUsage: { promptTokens: 5, completionTokens: 2, totalTokens: 7 },
     } as import('#agent/request-scope').RequestScope;
-    const result = __buildFatalOutboxResponseForTests(
+    const result = buildFatalOutboxResponse(
       'uncaughtException',
       'synthetic crash',
-      'r',
       request,
       scope,
     );
     expect(result.usage).toEqual(scope.partialUsage);
     expect(result.metadata).not.toHaveProperty('synthetic_terminal');
     expect(
-      __buildFatalOutboxResponseForTests(
-        'uncaughtException',
-        'synthetic crash',
-        'r',
-        request,
-      ).metadata,
+      buildFatalOutboxResponse('uncaughtException', 'synthetic crash', request)
+        .metadata,
     ).toHaveProperty('synthetic_terminal', true);
   });
   it('carries the exception stack in the internal error field and a friendly public message', () => {
@@ -306,10 +370,9 @@ describe('daemon fatal error response', () => {
       llmRuntime: VALID_LLM_RUNTIME,
     } as never;
 
-    const response = __buildFatalOutboxResponseForTests(
+    const response = buildFatalOutboxResponse(
       'uncaughtException',
       error.stack || error.message,
-      'req-fatal',
       request,
     );
 
@@ -334,10 +397,9 @@ describe('daemon fatal error response', () => {
       llmRuntime: VALID_LLM_RUNTIME,
     } as never;
 
-    const response = __buildFatalOutboxResponseForTests(
+    const response = buildFatalOutboxResponse(
       'unhandledRejection',
       'some rejection reason',
-      'req-fatal-2',
       request,
     );
 

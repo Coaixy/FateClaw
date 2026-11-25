@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github-dark.css';
-@import '../components/chat/chat.css';
+@import '@fateclaw/chat-ui/chat.css';
+
+@source '../../../packages/chat-ui/src';
 
 @theme {
   /* ==== 暖白陶土主题：清爽现代，正文与标题统一楷体 ====

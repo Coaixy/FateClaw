@@ -3,32 +3,17 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import type { SessionBoardContext } from '@fateclaw/contracts/agent';
-import { dispatchAiChatPrompt } from '#runtime/resident-agent';
-import {
-  claimOrRefreshSessionProcessingLock,
-  releaseSessionProcessingLock,
-} from '#runtime/ipc-payloads';
+import { runOpenSessionTurn } from '#modules/chat/open-session-turn';
 import {
   archiveChatSession,
   createChatSession,
   createOpenSession,
   findOpenSessionByIdForUser,
   softDeleteOpenSession,
-  storeMessage,
   toOpenSessionDto,
-  touchOpenSessionActivity,
 } from '#infrastructure/db';
-import type { OpenSessionRow } from '#infrastructure/repositories/open-sessions-repository';
-import {
-  WEB_CHAT_USER_NAME,
-  getWebChatRuntimeId,
-} from '#modules/chat/web-chat-runtime';
-import {
-  resolveOfficialLlmRuntime,
-  resolveOfficialRuntimeByModelKey,
-} from '#modules/system/system-config';
-import { getRuntimeEntitlementSnapshot } from '#modules/billing/entitlements';
+import { getWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
+import { resolveOfficialRuntimeByModelKey } from '#modules/system/system-config';
 import { requireApiKeyPrincipal, sendOpenAiError } from './api-key-auth.js';
 
 /** FateClaw 扩展字段（建会话时一次性传入，服务端按会话存快照）。 */
@@ -55,42 +40,10 @@ const CreateSessionSchema = z.object({
   fateclaw: FateclawSessionExtSchema,
 });
 
-/** 会话忙碌锁 TTL（秒）：与站内 AI Chat 一致，防同会话并发写同一 jsonl 致会话树错乱。 */
-const SESSION_PROCESSING_TTL_SECONDS = 2100;
-
 /** POST /api/v1/sessions/:sid/messages 请求体：发一轮消息，只需本轮文本。 */
 const SendMessageSchema = z.object({
   content: z.string().min(1),
 });
-
-/**
- * 把会话存的盘面快照重建为单个 SessionBoardContext（每轮服务端注入，客户端不重发）。
- *
- * 对外调用方提供的盘面一律按「用户自贴盘面」语义对待（而非平台权威排盘）：调用方能任意构造
- * 请求体，平台不应把其 board 当作可信的官方计算事实，故 source 用 user_pasted_board。
- */
-function buildSessionBoardContexts(
-  session: OpenSessionRow,
-): SessionBoardContext[] | undefined {
-  const board = session.board;
-  if (!board) return undefined;
-  const text =
-    board.text?.trim() ||
-    (board.data !== undefined ? JSON.stringify(board.data) : '');
-  if (!text) return undefined;
-  const category = board.type?.trim() || 'board';
-  return [
-    {
-      sourceMessageId: `openapi-board:${session.id}`,
-      source: 'user_pasted_board',
-      skill: `user-pasted-board::${category}`,
-      artifactTitle: `盘面: ${category}`,
-      promptText: text,
-      artifactData: board.data,
-      isCurrent: true,
-    },
-  ];
-}
 
 /**
  * 对外开放「有状态会话」路由（挂在 /api/v1/sessions 下，鉴权 + 错误体由父插件统一注入）。
@@ -168,153 +121,65 @@ export async function openSessionRoutes(app: FastifyInstance): Promise<void> {
         'invalid_request',
       );
     }
-    const body = parsed.data;
-
-    // 按 sid + 归属用户取会话；不命中即 404（不存在/不归属/已删/已过期），杜绝跨用户 resume。
-    const session = await findOpenSessionByIdForUser(sid, principal.userId);
-    if (!session) {
-      return sendOpenAiError(
-        reply,
-        404,
-        '会话不存在或无权访问',
-        'invalid_request_error',
-        'session_not_found',
-      );
-    }
-
-    // Existing sessions follow the current platform configuration on every turn.
-    const runtime = await resolveOfficialLlmRuntime();
-    if (!runtime) {
-      return sendOpenAiError(
-        reply,
-        400,
-        '官方模型暂不可用',
-        'invalid_request_error',
-        'model_not_found',
-      );
-    }
-
-    const entitlement = await getRuntimeEntitlementSnapshot(principal.userId);
-    const accountId = getWebChatRuntimeId(principal.userId);
-    // 复用会话内部持久 sessionId → runtime 原生 resume 复原历史；history 恒传 []。
-    const runtimeSessionId = session.runtime_session_id;
-    const sessionBoardContexts = buildSessionBoardContexts(session);
-    const personaPrompt = session.persona_prompt ?? undefined;
-    // 省略 fateclaw.skills 时必须传空数组（显式空作用域），不能传 undefined：runtime 的
-    // hasExplicitSkillBundleScope 把三个 skill 字段全 undefined 视为「非显式」，会降级为加载
-    // 该用户全部 skill（站内 web chat 的语义）。对外 API 是 opt-in 白名单，不传即不加载，
-    // 故归一化为 []，与建会话时 skills:[] 入库后的口径一致。
-    const authorizedSkillIds = session.authorized_skill_ids ?? [];
-
-    // 进 dispatch 前先抢会话忙碌锁（按 runtime_session_id）：同 sid 并发的第二条立即 409，
-    // 不进入 reserve/槽位分配做无用功；requestId 透传给 dispatch，使内部续期与此处同 owner。
-    const requestId = randomUUID();
-    const lockClaimed = await claimOrRefreshSessionProcessingLock(
-      runtimeSessionId,
-      requestId,
-      SESSION_PROCESSING_TTL_SECONDS,
-    );
-    if (!lockClaimed) {
-      return sendOpenAiError(
-        reply,
-        409,
-        '上一条消息仍在处理中，请稍后再试',
-        'invalid_request_error',
-        'session_busy',
-      );
-    }
-
-    try {
-      // 先持久化调用方这条用户消息：站内由 chat-session-service 在 dispatch 前存，对外路由
-      // 不走那一层，必须在此自己存，否则「API 使用详情」面板只见 AI 回复、看不到用户输入。
-      // 放在 dispatch 之前 → timestamp 早于 AI 回复（AI 回复经 outbox 落库），详情页按时间
-      // 升序排列时顺序才正确。存失败不阻断本轮回复（仅影响事后归档展示），降级记日志即可。
-      try {
-        await storeMessage({
-          id: randomUUID(),
-          account_id: accountId,
-          user_id: principal.userId,
-          sender: principal.userId,
-          sender_name: WEB_CHAT_USER_NAME,
-          content: body.content,
-          timestamp: new Date().toISOString(),
-          is_from_me: false,
-          is_bot_message: false,
-          session_id: runtimeSessionId,
-        });
-      } catch (storeErr) {
-        request.log.warn(
-          { err: storeErr, sid },
-          '对外会话用户消息持久化失败（不影响本轮回复）',
+    const turn = await runOpenSessionTurn({
+      userId: principal.userId,
+      sessionId: sid,
+      content: parsed.data.content,
+    });
+    switch (turn.status) {
+      case 'session_not_found':
+        return sendOpenAiError(
+          reply,
+          404,
+          '会话不存在或无权访问',
+          'invalid_request_error',
+          turn.status,
         );
-      }
-
-      const result = await dispatchAiChatPrompt({
-        accountId,
-        userMessage: body.content,
-        history: [],
-        sessionBoardContexts,
-        sessionId: runtimeSessionId,
-        requestId,
-        personaPrompt,
-        authorizedSkillIds,
-        llmRuntime: runtime,
-        entitlementSnapshot: entitlement,
-        waitForResponse: true,
-      });
-
-      if (result.status === 'error') {
+      case 'model_not_found':
+        return sendOpenAiError(
+          reply,
+          400,
+          '官方模型暂不可用',
+          'invalid_request_error',
+          turn.status,
+        );
+      case 'session_busy':
+        return sendOpenAiError(
+          reply,
+          409,
+          '上一条消息仍在处理中，请稍后再试',
+          'invalid_request_error',
+          turn.status,
+        );
+      case 'agent_error':
         return sendOpenAiError(
           reply,
           502,
-          result.publicErrorText ?? result.error ?? 'Agent 执行失败',
+          turn.message,
           'api_error',
-          result.publicReasonCode ?? 'agent_error',
+          turn.code,
         );
-      }
-
-      // 成功一轮：刷新会话活动时间并顺延 TTL。
-      void touchOpenSessionActivity(sid, principal.userId).catch(() => {});
-
-      // 真实 token 用量由 dispatchAiChatPrompt 经 IPC 回传（result.usage，归一化口径、与计费一致）；
-      // provider 未上报时回退 0。
-      const usage = result.usage;
-      return {
-        id: `chatcmpl-${result.requestId}`,
-        object: 'chat.completion',
-        created: Math.floor(Date.now() / 1000),
-        model: runtime.providerKey,
-        choices: [
-          {
-            index: 0,
-            message: { role: 'assistant', content: result.text ?? '' },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: {
-          prompt_tokens: usage?.promptTokens ?? 0,
-          completion_tokens: usage?.completionTokens ?? 0,
-          total_tokens: usage?.totalTokens ?? 0,
-        },
-      };
-    } catch (err) {
-      // dispatch reject（agent 超时 / 运行时不可用 / 入队失败等上游问题）→ 映射为结构化 502，
-      // 而非裸 500：让调用方能稳定区分「请求本身没问题、是 AI 后端失败」。真实错误仅进服务器日志，
-      // 不外泄内部细节。
-      request.log.error({ err, sid }, '对外会话发消息失败');
-      return sendOpenAiError(
-        reply,
-        502,
-        'AI 服务暂时不可用，请稍后重试',
-        'api_error',
-        'agent_error',
-      );
-    } finally {
-      // 本轮处理完毕（成功 / 失败 / 异常）即释放会话忙碌锁。
-      void releaseSessionProcessingLock(runtimeSessionId, requestId).catch(
-        () => {},
-      );
     }
+    const { result } = turn;
+    const usage = result.usage;
+    return {
+      id: `chatcmpl-${result.requestId}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: turn.providerKey,
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: result.text ?? '' },
+          finish_reason: 'stop',
+        },
+      ],
+      usage: {
+        prompt_tokens: usage?.promptTokens ?? 0,
+        completion_tokens: usage?.completionTokens ?? 0,
+        total_tokens: usage?.totalTokens ?? 0,
+      },
+    };
   });
 
   // GET /api/v1/sessions/:sid — 查会话元信息（不返回历史正文）。

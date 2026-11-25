@@ -32,6 +32,35 @@ export function reconcileMessagePage(previous: Message[], incoming: Message[]) {
   return [...prefix, ...tail];
 }
 
+/** Keep the active turn's streamed rows in event order while fetching history. */
+export function mergeStreamingTurnMessages(
+  persisted: Message[],
+  visible: Message[],
+  activeStreamingMessageIds: readonly string[],
+): Message[] {
+  if (activeStreamingMessageIds.length === 0) return persisted;
+
+  const visibleUserIndex = findLastUserMessageIndex(visible);
+  if (visibleUserIndex === -1 || visibleUserIndex === visible.length - 1) {
+    return persisted;
+  }
+
+  const persistedUserIndex = findLastUserMessageIndex(persisted);
+  if (persistedUserIndex === -1) return visible.slice(visibleUserIndex);
+
+  return [
+    ...persisted.slice(0, persistedUserIndex + 1),
+    ...visible.slice(visibleUserIndex + 1),
+  ];
+}
+
+function findLastUserMessageIndex(messages: Message[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (!messages[index].is_bot_message) return index;
+  }
+  return -1;
+}
+
 /** Backfill a disconnected stream until the refreshed tail overlaps known history. */
 export async function fetchRecentMessageWindow(
   readPage: (

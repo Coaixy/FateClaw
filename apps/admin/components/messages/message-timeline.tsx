@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import { MessageSquare } from 'lucide-react';
 import type { MessageDto } from '@fateclaw/contracts/chat';
-import { filterProgressMessages } from 'fateclaw-web/chat';
+import { filterProgressMessages } from '@fateclaw/chat-ui';
 
 import type { AdminMessage } from '@/lib/admin-api';
 import { AdminConversation } from '../chat/admin-conversation';

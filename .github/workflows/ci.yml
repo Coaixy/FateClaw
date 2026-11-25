@@ -7,6 +7,28 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fateclaw_test
+          POSTGRES_PASSWORD: fateclaw_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd="pg_isready -U fateclaw_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7.4
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -36,3 +58,33 @@ jobs:
 
       - name: Tests
         run: pnpm test
+
+      - name: Durable chat and chart integration
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+          REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+        run: |
+          for database in durable runtime_durable frames paipan migration; do
+            docker exec "$POSTGRES_CONTAINER" createdb -U fateclaw_test "$database"
+          done
+          postgres_url="postgres://fateclaw_test:fateclaw_test@127.0.0.1:$POSTGRES_PORT"
+          redis_url="redis://127.0.0.1:$REDIS_PORT"
+          export FATECLAW_TEST_DURABLE_DATABASE_URL="$postgres_url/durable"
+          export FATECLAW_DURABLE_TEST_DATABASE_URL="$postgres_url/runtime_durable"
+          export FATECLAW_TEST_FRAMES_DATABASE_URL="$postgres_url/frames"
+          export FATECLAW_TEST_MIGRATIONS_DATABASE_URL="$postgres_url/migration"
+          export FATECLAW_TEST_PAIPAN_DATABASE_URL="$postgres_url/paipan"
+          export FATECLAW_TEST_REDIS_URL="$redis_url/2"
+          export FATECLAW_TEST_SCHEDULER_REDIS_URL="$redis_url/3"
+          export FATECLAW_TEST_PAIPAN_REDIS_URL="$redis_url/4"
+          pnpm exec vitest run --maxWorkers=1 \
+            apps/api/tests/infrastructure/agent-requests-postgres.integration.test.ts \
+            apps/api/tests/infrastructure/pi-session-frames-postgres.integration.test.ts \
+            apps/api/tests/modules/chat/paipan-commit-postgres.integration.test.ts \
+            apps/api/tests/runtime/agent-scheduler.integration.test.ts \
+            apps/api/tests/runtime/ai-chat-delivery.integration.test.ts \
+            apps/api/tests/runtime/reliable-ai-chat-outbox.integration.test.ts \
+            apps/api/tests/runtime/paipan-tool.integration.test.ts \
+            apps/agent-runtime/tests/durable-postgres.integration.test.ts \
+            apps/agent-runtime/tests/redis.integration.test.ts

@@ -3,10 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "license": "GPL-3.0-only",
-  "exports": {
-    "./chat": "./components/ai-chat/read-only-chat.tsx",
-    "./chat.css": "./components/chat/chat.css"
-  },
   "scripts": {
     "dev": "next dev --turbopack -p 3001",
     "build": "next build --webpack",
@@ -14,6 +10,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@fateclaw/chat-ui": "workspace:*",
     "@fateclaw/contracts": "workspace:*",
     "clsx": "^2.1.1",
     "highlight.js": "^11.12.0",

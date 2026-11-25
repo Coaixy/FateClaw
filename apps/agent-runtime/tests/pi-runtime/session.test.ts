@@ -38,6 +38,7 @@ import { createRequestScope } from '#agent/request-scope';
 import type { AgentRuntimeDeps } from '#agent/deps';
 import type { ContainerInput, LlmRuntimeSnapshot } from '#agent/types';
 import type { RequestRuntime } from '#agent/runtime';
+import * as providerApi from '#agent/pi-runtime/provider';
 import { runPiSession } from '#agent/pi-runtime/session';
 import * as streamApi from '#agent/ai-chat-stream';
 import { SkillContentCache } from '#agent/skill-content-cache';
@@ -190,41 +191,49 @@ describe('runPiSession', () => {
     },
   );
 
-  it('releases skill snapshots when session initialization fails before prompt cleanup is installed', async () => {
-    const release = vi.fn();
-    vi.spyOn(SkillContentCache.prototype, 'acquire').mockResolvedValue({
-      baseDir: '/synthetic/skill',
-      filePath: '/synthetic/skill/SKILL.md',
-      release,
-    });
-    const deps = createDeps();
-    deps.skillCatalog.listEffectiveUserSkills = vi.fn(async () => [
-      {
-        id: 'skill-1',
-        dir: 'skill-1',
-        name: 'Skill',
-        description: '',
-        bundle_uri: '',
-        checksum: 'a'.repeat(64),
-        revision_id: 'revision-1',
-        format_version: 1,
-        install_status: 'installed',
-        visibility: 'private',
-        source: 'self',
-      },
-    ]);
-    mockCreateAgentSession.mockRejectedValueOnce(
-      new Error('synthetic session initialization failure'),
-    );
-    await expect(
-      runPiSession({
-        containerInput: createInput(),
-        runtime: { deps },
-        requestScope: createRequestScope(),
-      }),
-    ).rejects.toThrow('synthetic session initialization failure');
-    expect(release).toHaveBeenCalledOnce();
-  });
+  it.each(['provider preparation', 'session initialization'])(
+    'releases skill snapshots after %s fails',
+    async (stage) => {
+      const release = vi.fn();
+      vi.spyOn(SkillContentCache.prototype, 'acquire').mockResolvedValue({
+        baseDir: '/synthetic/skill',
+        filePath: '/synthetic/skill/SKILL.md',
+        release,
+      });
+      const deps = createDeps();
+      deps.skillCatalog.listEffectiveUserSkills = vi.fn(async () => [
+        {
+          id: 'skill-1',
+          dir: 'skill-1',
+          name: 'Skill',
+          description: '',
+          bundle_uri: '',
+          checksum: 'a'.repeat(64),
+          revision_id: 'revision-1',
+          format_version: 1,
+          install_status: 'installed',
+          visibility: 'private',
+          source: 'self',
+        },
+      ]);
+      const error = new Error(`synthetic ${stage} failure`);
+      if (stage === 'provider preparation') {
+        vi.spyOn(providerApi, 'createPiProviderRuntime').mockRejectedValueOnce(
+          error,
+        );
+      } else {
+        mockCreateAgentSession.mockRejectedValueOnce(error);
+      }
+      await expect(
+        runPiSession({
+          containerInput: createInput(),
+          runtime: { deps },
+          requestScope: createRequestScope(),
+        }),
+      ).rejects.toThrow(error);
+      expect(release).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each([false, true])(
     'flushes pending text and disposes on session exit (failure=%s)',

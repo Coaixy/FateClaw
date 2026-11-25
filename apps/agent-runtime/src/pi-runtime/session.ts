@@ -3,28 +3,20 @@ import {
   createAgentSession,
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
-import { randomUUID } from 'node:crypto';
 
-import { getContext } from '#agent/context';
 import { traceEvent } from '#agent/trace';
 import type {
-  ContainerInput,
   PiThinkingLevel,
   PiSessionSnapshot,
+  SkillContextEntry,
   TokenUsage,
 } from '#agent/types';
-import type { RequestRuntime } from '#agent/runtime';
-import type { RequestScope } from '#agent/request-scope';
-import { createPiResourceLoader } from './resource-loader.js';
 import {
-  assertCustomBaseUrlIsPublic,
-  createPiProviderRuntime,
-} from './provider.js';
+  preparePiSession,
+  type PreparePiSessionOptions,
+} from './prepare-session.js';
 import { createPiCustomTools } from './tools.js';
-import {
-  buildVisibleSessionBoardContexts,
-  createPiSessionContext,
-} from './context-layer.js';
+import { buildVisibleSessionBoardContexts } from './context-layer.js';
 import {
   createPiEventCollector,
   extractLatestAssistantResult,
@@ -40,11 +32,8 @@ import { attachPartialUsage } from '#agent/partial-usage';
 import { recordBenefitToolCall } from '#agent/benefit-execution';
 import { createFateClawPiSessionManager } from './session-manager.js';
 import type { PiToolExecutionRecord } from './types.js';
-import type { SkillContextEntry } from '#agent/types';
 import { getRequestId } from '#agent/request-scope';
 import { installModelPool } from './model-pool.js';
-import { createPaipanCaller } from '#agent/paipan-client';
-import { createHostToolCaller } from '#agent/host-tool-client';
 import {
   CancelledAgentRequestError,
   ModelCallError,
@@ -64,8 +53,7 @@ export interface PiSessionRunResult {
   records: PiToolExecutionRecord[];
   persistedSkillContext: SkillContextEntry[];
   piSession?:
-    | PiSessionSnapshot
-    | import('@fateclaw/contracts/agent').PiSessionFrame;
+    PiSessionSnapshot | import('@fateclaw/contracts/agent').PiSessionFrame;
 }
 
 function buildPiSessionSnapshot(args: {
@@ -100,25 +88,12 @@ function buildPiSessionSnapshot(args: {
   };
 }
 
-function resolveUserId(input: ContainerInput): string | undefined {
-  try {
-    const ctxUserId = getContext().userId.trim();
-    if (ctxUserId) return ctxUserId;
-  } catch {
-    // 单元测试和部分嵌入式调用不会初始化 AgentContext，此时回退到 web accountId。
-  }
-  return input.accountId.startsWith('web:')
-    ? input.accountId.slice(4)
-    : undefined;
-}
-
-export async function runPiSession(args: {
-  containerInput: ContainerInput;
-  runtime: RequestRuntime;
-  requestScope: RequestScope;
-  /** session 创建完成后暴露最小控制面，宿主可据此中断当前 turn。 */
-  onSessionReady?: (sessionControls: { abort: () => Promise<void> }) => void;
-}): Promise<PiSessionRunResult> {
+export async function runPiSession(
+  args: PreparePiSessionOptions & {
+    /** session 创建完成后暴露最小控制面，宿主可据此中断当前 turn。 */
+    onSessionReady?: (sessionControls: { abort: () => Promise<void> }) => void;
+  },
+): Promise<PiSessionRunResult> {
   const usage: TokenUsage = {
     promptTokens: 0,
     completionTokens: 0,
@@ -127,83 +102,15 @@ export async function runPiSession(args: {
   const records: PiToolExecutionRecord[] = [];
   let lastAssistantText: string | null = null;
 
-  // 自配（BYOK）Base URL 的解析型 SSRF 校验：同步字面量校验挡不住「公网域名解析到内网」，
-  // 建 provider（发起真实 LLM 请求）之前先做一次 DNS 解析级校验。
-  await assertCustomBaseUrlIsPublic(args.containerInput.llmRuntime);
-  const preparationStartedAt = Date.now();
-  const userId = resolveUserId(args.containerInput);
-  const requestId = getRequestId(args.requestScope);
-  const routingSessionId =
-    args.containerInput.sessionId?.trim() || requestId || randomUUID();
-  const paipan =
-    requestId &&
-    args.containerInput.executionId &&
-    args.containerInput.sessionId
-      ? createPaipanCaller({
-          accountId: args.containerInput.accountId,
-          requestId,
-          executionId: args.containerInput.executionId,
-        })
-      : undefined;
-  const visualization =
-    requestId &&
-    args.containerInput.executionId &&
-    args.containerInput.sessionId &&
-    args.containerInput.accountId.startsWith('web:')
-      ? createHostToolCaller('visualization', {
-          accountId: args.containerInput.accountId,
-          requestId,
-          executionId: args.containerInput.executionId,
-        })
-      : undefined;
-  const contextPromise = args.runtime.deps.soulStore
-    .canEdit(args.containerInput.accountId)
-    .then(async (soulEditEnabled) => ({
-      ...(await createPiSessionContext({
-        containerInput: args.containerInput,
-        runtime: args.runtime,
-        requestScope: args.requestScope,
-        soulEditEnabled,
-        paipanEnabled: Boolean(paipan),
-      })),
-      soulEditEnabled,
-    }));
-  const prepared = await Promise.allSettled([
-    createPiProviderRuntime(args.containerInput.llmRuntime, routingSessionId),
-    contextPromise,
-    createPiResourceLoader({
-      deps: args.runtime.deps,
-      userId,
-      requestScope: args.requestScope,
-      containerInput: args.containerInput,
-      context: contextPromise,
-      paipanEnabled: Boolean(paipan),
-    }),
-  ]);
-  const failure = prepared.find((result) => result.status === 'rejected');
-  if (failure?.status === 'rejected') {
-    if (prepared[2].status === 'fulfilled')
-      prepared[2].value.disposeSkillSnapshots();
-    throw failure.reason;
-  }
-  if (
-    prepared[0].status !== 'fulfilled' ||
-    prepared[1].status !== 'fulfilled' ||
-    prepared[2].status !== 'fulfilled'
-  )
-    throw new Error('Request resource preparation failed');
-  const providerRuntime = prepared[0].value;
-  const sessionContext = prepared[1].value;
-  const soulEditEnabled = sessionContext.soulEditEnabled;
-  const resourceLoader = prepared[2].value;
-  traceEvent(
-    {
-      type: 'agent_timing',
-      stage: 'preparation',
-      durationMs: Date.now() - preparationStartedAt,
-    },
-    args.requestScope,
-  );
+  const {
+    routingSessionId,
+    paipan,
+    visualization,
+    providerRuntime,
+    sessionContext,
+    resourceLoader,
+  } = await preparePiSession(args);
+
   try {
     const readableSkills = resourceLoader
       .getSkills()
@@ -217,7 +124,7 @@ export async function runPiSession(args: {
       visualization,
       accountId: args.containerInput.accountId,
       soulStore: args.runtime.deps.soulStore,
-      soulEditEnabled,
+      soulEditEnabled: sessionContext.soulEditEnabled,
       recordExecution(record) {
         records.push(record);
       },

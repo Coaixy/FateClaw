@@ -1,6 +1,7 @@
 import type {
   ChatInputKindDto,
   ChatSessionDto,
+  ChatSessionStreamTicket,
   SessionBoardListResponseDto,
   ChatSessionShareResponseDto,
   ChatSessionSendRequestDto,
@@ -36,95 +37,16 @@ type UserPastedBoardChatSessionSendOptions = {
 };
 
 export type ChatSessionSendOptions =
-  | NormalChatSessionSendOptions
-  | UserPastedBoardChatSessionSendOptions;
+  NormalChatSessionSendOptions | UserPastedBoardChatSessionSendOptions;
 
 export type ChatSessionRequestOptions = {
   signal?: AbortSignal;
 };
 
-export type ChatSessionStreamTicket = {
-  ticket: string;
-  expiresAt: string;
-};
-
-export type ChatSessionStreamEvent = (
-  | { type: 'connected'; timestamp?: string; sessionId?: string }
-  | {
-      type: 'agent_start' | 'agent_end' | 'turn_start';
-      timestamp?: string;
-      sessionId?: string;
-      turnIndex?: number;
-      willRetry?: boolean;
-      messageCount?: number;
-    }
-  | {
-      type: 'assistant_delta';
-      timestamp?: string;
-      sessionId?: string;
-      delta: string;
-      snapshot: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'thinking_delta';
-      timestamp?: string;
-      sessionId?: string;
-      delta: string;
-      snapshot: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'assistant_message';
-      timestamp?: string;
-      sessionId?: string;
-      text: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'tool_start' | 'tool_update' | 'tool_end';
-      timestamp?: string;
-      sessionId?: string;
-      toolCallId: string;
-      toolName: string;
-      args?: unknown;
-      result?: unknown;
-      partialResult?: unknown;
-      isError?: boolean;
-    }
-  | {
-      type: 'progress';
-      timestamp?: string;
-      sessionId?: string;
-      text: string;
-      stage?: string;
-      workflow?: string;
-      metadata?: unknown;
-    }
-  | {
-      type: 'final';
-      timestamp?: string;
-      sessionId?: string;
-      text: string;
-      status: 'success' | 'error';
-      metadata?: unknown;
-    }
-  | {
-      type: 'message';
-      timestamp?: string;
-      sessionId?: string;
-      text: string;
-      metadata?: unknown;
-      skillContext?: unknown;
-    }
-  | {
-      type: 'error';
-      timestamp?: string;
-      sessionId?: string;
-      error: string;
-      publicErrorText?: string;
-    }
-) & { requestId?: string };
+export type {
+  ChatSessionStreamEvent,
+  ChatSessionStreamTicket,
+} from '@fateclaw/contracts/chat';
 
 export type { SkillContextEntryDto as SkillContextEntry } from '@fateclaw/contracts/chat';
 export { parseToolContext } from './utils/tool-context';
@@ -147,7 +69,9 @@ export function buildChatSessionStreamUrl(sessionId: string, ticket: string) {
   return url.toString();
 }
 
-const chatSessionListRequestCache = createAuthScopedInFlightCache<ChatSession[]>({
+const chatSessionListRequestCache = createAuthScopedInFlightCache<
+  ChatSession[]
+>({
   maxAgeMs: 30_000,
 });
 
@@ -210,10 +134,13 @@ export const chatSessionsApi = {
       `/api/chat-sessions/shared/${encodeURIComponent(token)}`,
       { signal: options.signal, timeoutMs: 15_000 },
     ),
-  createStreamTicket: (sessionId: string) =>
+  createStreamTicket: (
+    sessionId: string,
+    options: ChatSessionRequestOptions = {},
+  ) =>
     requestJson<ChatSessionStreamTicket>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/stream-ticket`,
-      { method: 'POST', timeoutMs: 15_000 },
+      { method: 'POST', signal: options.signal, timeoutMs: 15_000 },
     ),
   cancel: (sessionId: string) =>
     requestJson<SuccessResponse>(

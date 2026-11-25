@@ -50,51 +50,11 @@ export interface ContainerInput {
 export type { SessionBoardContext } from '@fateclaw/contracts/agent';
 import type { SessionBoardContext } from '@fateclaw/contracts/agent';
 
-export interface ChatTaskInboxRequest {
-  piSessionBase?: import('@fateclaw/contracts/agent').PiSessionBase | null;
-  acceptedAtMs?: number;
-  executionId?: string;
-  type: 'chat' | 'task';
-  requestId: string;
-  accountId: string;
-  timestamp: string;
-  llmRuntime: LlmRuntimeSnapshot;
-  userMessage: string;
-  history: HistoryMessage[];
-  inputKind?: ChatInputKind;
-  pastedBoard?: UserPastedBoardInput;
-  /** AI Chat 当前会话内的全部有效盘面上下文。 */
-  sessionBoardContexts?: SessionBoardContext[];
-  /** AI Chat 真实会话 ID，用于同一 session 内查找历史工具上下文。 */
-  sessionId?: string;
-  /** 本轮用户消息 ID；最终 assistant 消息用它派生稳定 ID。 */
-  userMessageId?: string;
-  /** 请求归属用户 ID；最终响应回传给宿主机用于独立落库。 */
-  ownerUserId?: string;
-  userName?: string;
-  assistantName?: string;
-  personaPrompt?: string;
-  /** 本轮按单个 Skill id 授权（对外开放 API 用）；空数组=本轮不加载任何用户 Skill。 */
-  authorizedSkillIds?: string[];
-  /** 指定响应写入的 outbox 队列（不指定则用默认队列） */
-  outboxQueue?: string;
-}
-
-export type InboxRequest = ChatTaskInboxRequest;
-
-/**
- * 宿主机请求中断正在执行的 AI Chat。
- *
- * requestId 用于匹配当前 agent-runtime 进程内的 active session。
- */
-export interface CancelInboxRequest {
-  type: 'cancel';
-  requestId: string;
-  accountId: string;
-  sessionId?: string;
-  reason?: string;
-  timestamp?: string;
-}
+export type {
+  AgentInboxRequest as ChatTaskInboxRequest,
+  AgentInboxRequest as InboxRequest,
+  AgentCancelRequest as CancelInboxRequest,
+} from '@fateclaw/contracts/agent';
 
 /** API 返回的真实 token 用量（多轮累加后的总和）。 */
 export type { TokenUsage } from '@fateclaw/contracts/agent';
@@ -160,142 +120,9 @@ export interface AgentGraphSummary {
   finalTextPreview?: string;
 }
 
-export interface AiChatStreamUsage {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-}
-
-export type AiChatStreamEvent =
-  | {
-      type: 'connected';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-    }
-  | {
-      type: 'agent_start' | 'agent_end' | 'turn_start';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      turnIndex?: number;
-      willRetry?: boolean;
-      messageCount?: number;
-    }
-  | {
-      type: 'assistant_delta';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      delta: string;
-      snapshot: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'thinking_delta';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      delta: string;
-      snapshot: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'assistant_message';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      turnIndex?: number;
-    }
-  | {
-      type: 'tool_start' | 'tool_update' | 'tool_end';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      toolCallId: string;
-      toolName: string;
-      args?: unknown;
-      partialResult?: unknown;
-      result?: unknown;
-      isError?: boolean;
-    }
-  | {
-      type: 'progress';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      stage?: string;
-      workflow?: string;
-      metadata?: unknown;
-    }
-  | {
-      type: 'final';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      text: string;
-      status: 'success' | 'error';
-      usage?: AiChatStreamUsage;
-      metadata?: unknown;
-    }
-  | {
-      type: 'error';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      error: string;
-      publicErrorText?: string;
-      publicReasonCode?: string;
-    }
-  | {
-      type: 'usage';
-      timestamp?: string;
-      requestId?: string;
-      accountId?: string;
-      sessionId?: string;
-      usage: AiChatStreamUsage;
-    };
-
-export interface AiChatProgressOutboxMessage {
-  type: 'progress';
-  accountId?: string;
-  requestId?: string;
-  text: string;
-  timestamp?: string;
-  metadata?: {
-    kind?: string;
-    stage?: string;
-    workflow?: string;
-    tool_call_id?: string;
-    tool_name?: string;
-    tool_label?: string;
-    tool_status?: 'running' | 'completed' | 'failed';
-    tool_path?: string;
-    /** 工具输入摘要 / 搜索词，用作富卡片标题。 */
-    query_text?: string;
-    /** 所属 agent 回合序号；思考块稳定 id 与穿插排序用。 */
-    turn_index?: number;
-    /** 工具调用结果预览（已归一化限长），供历史富卡片回看。 */
-    tool_result?: {
-      query?: string;
-      count?: number;
-      items?: Array<{ title: string; url?: string; domain?: string }>;
-      text?: string;
-      truncated?: boolean;
-    };
-  };
-}
+export type { ChatSessionStreamEvent as AiChatStreamEvent } from '@fateclaw/contracts/chat';
+export type AiChatProgressOutboxMessage =
+  import('@fateclaw/contracts/agent').ProgressIpcPayload & { text: string };
 
 export interface AgentTaskGraph {
   version: 1;
@@ -337,9 +164,7 @@ export interface TranscriptToolResultEvent {
 }
 
 export type TranscriptEvent =
-  | TranscriptAssistantEvent
-  | TranscriptToolUseEvent
-  | TranscriptToolResultEvent;
+  TranscriptAssistantEvent | TranscriptToolUseEvent | TranscriptToolResultEvent;
 
 /**
  * 结构化 trace 事件。由 traceEvent() 产生，按请求缓冲到 request-state，
@@ -385,8 +210,7 @@ export interface ContainerOutput {
   agentGraph?: AgentTaskGraph;
   /** Pi session 持久化状态与本轮完成后的消息快照。 */
   piSession?:
-    | PiSessionSnapshot
-    | import('@fateclaw/contracts/agent').PiSessionFrame;
+    PiSessionSnapshot | import('@fateclaw/contracts/agent').PiSessionFrame;
 }
 
 export interface OutboxResponse {
@@ -420,8 +244,7 @@ export interface OutboxResponse {
   agentGraph?: AgentTaskGraph;
   /** Pi session 持久化状态与本轮完成后的消息快照。 */
   piSession?:
-    | PiSessionSnapshot
-    | import('@fateclaw/contracts/agent').PiSessionFrame;
+    PiSessionSnapshot | import('@fateclaw/contracts/agent').PiSessionFrame;
   /** 结构化响应标识，例如最终回复完成标记。 */
   metadata?: unknown;
 }

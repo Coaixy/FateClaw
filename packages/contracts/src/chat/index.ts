@@ -212,16 +212,10 @@ export interface UserPastedBoardChatSessionSendRequestDto {
 }
 
 export type ChatSessionSendRequestDto =
-  | NormalChatSessionSendRequestDto
-  | UserPastedBoardChatSessionSendRequestDto;
+  NormalChatSessionSendRequestDto | UserPastedBoardChatSessionSendRequestDto;
 
 export type SkillParamTypeDto =
-  | 'string'
-  | 'number'
-  | 'integer'
-  | 'boolean'
-  | 'array'
-  | 'object';
+  'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
 
 export interface SkillParamItemSchemaDto {
   type: SkillParamTypeDto;
@@ -374,3 +368,8 @@ export interface ChatSessionSendResponseDto extends TextResponse {
   /** 为 true 表示服务端已接收并开始后台处理，text 可为空。 */
   accepted?: true;
 }
+
+export type {
+  ChatSessionStreamEvent,
+  ChatSessionStreamTicket,
+} from './stream.js';

@@ -1,7 +1,6 @@
-import crypto from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 import type {
-  MessageDto,
   PaipanCatalogItemDto,
   PaipanCommitRequestDto,
   PaipanCommitResponseDto,
@@ -10,12 +9,15 @@ import type {
 } from '@fateclaw/contracts/chat';
 
 import { getPreferredModelPool } from '#infrastructure/repositories/benefit-repository';
+import { getChatSession } from '#infrastructure/db';
 import {
-  createChatSession,
-  getChatSession,
-  storeMessage,
-  touchChatSession,
-} from '#infrastructure/db';
+  appendDirectPaipanToSession,
+  createDirectPaipanFromPreview,
+  findDirectPaipanCommit,
+  type DirectPaipanMessages,
+  type DirectPaipanWriteResult,
+  type StoredDirectPaipan,
+} from '#infrastructure/repositories/direct-paipan-repository';
 import { logger } from '#infrastructure/logger';
 import { getRedis } from '#infrastructure/redis';
 import {
@@ -37,6 +39,9 @@ import {
 } from './web-chat-runtime.js';
 
 const PAIPAN_PREVIEW_TTL_MS = 30 * 60 * 1000;
+const PREVIEW_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const PREVIEW_EXPIRED_MESSAGE = '预览结果已失效，请重新排盘';
 
 interface DirectPaipanPreviewRecord {
   previewId: string;
@@ -68,29 +73,20 @@ async function verifyOwnedSession(
   return ok(session);
 }
 
-function createMessageId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function buildDirectPaipanMessages(args: {
   userId: string;
   runtimeId: string;
-  session: ChatSession;
+  sessionId: string;
   requestSummary: string;
   skillContextEntry: SkillContextEntryDto;
-}): {
-  requestMessage: NewMessage;
-  resultMessage: NewMessage;
-} {
-  const requestId = createMessageId('paipan-req');
-  const resultId = createMessageId('paipan-res');
+}): DirectPaipanMessages {
   const now = new Date().toISOString();
   const title =
     args.skillContextEntry.artifactTitle || args.skillContextEntry.skill;
   const resultText = `已生成${title}。你可以直接提问，后续未切换主题时会参考此盘面。`;
   return {
     requestMessage: {
-      id: requestId,
+      id: `paipan-req-${randomUUID()}`,
       account_id: args.runtimeId,
       user_id: args.userId,
       sender: args.userId,
@@ -99,7 +95,7 @@ function buildDirectPaipanMessages(args: {
       timestamp: now,
       is_from_me: false,
       is_bot_message: false,
-      session_id: args.session.id,
+      session_id: args.sessionId,
       metadata: {
         kind: 'board_request',
         workflow: 'direct_paipan',
@@ -107,7 +103,7 @@ function buildDirectPaipanMessages(args: {
       },
     },
     resultMessage: {
-      id: resultId,
+      id: `paipan-res-${randomUUID()}`,
       account_id: args.runtimeId,
       user_id: args.userId,
       sender: args.runtimeId,
@@ -116,7 +112,7 @@ function buildDirectPaipanMessages(args: {
       timestamp: now,
       is_from_me: true,
       is_bot_message: true,
-      session_id: args.session.id,
+      session_id: args.sessionId,
       tool_context: JSON.stringify([args.skillContextEntry]),
       metadata: {
         kind: 'board_result',
@@ -156,7 +152,7 @@ async function loadDirectPaipanPreviewRecord(
   try {
     const parsed = JSON.parse(raw) as DirectPaipanPreviewRecord;
     if (
-      typeof parsed.previewId !== 'string' ||
+      parsed.previewId !== previewId ||
       (parsed.userId !== null && typeof parsed.userId !== 'string') ||
       typeof parsed.runtimeId !== 'string' ||
       typeof parsed.skill !== 'string' ||
@@ -176,76 +172,29 @@ async function loadDirectPaipanPreviewRecord(
   }
 }
 
-async function deleteDirectPaipanPreviewRecord(
-  previewId: string,
-): Promise<void> {
-  await getRedis().del(`direct-paipan:preview:${previewId}`);
-}
-
-async function createSessionWithBoardMessages(args: {
-  userId: string;
-  runtimeId: string;
-  sessionTitle: string;
-  requestSummary: string;
-  skillContextEntry: SkillContextEntryDto;
-  clientId?: string | null;
-}): Promise<{
-  session: ChatSession;
-  requestMessage: MessageDto;
-  resultMessage: MessageDto;
-}> {
-  const session = await createChatSession({
-    modelPoolKey: await getPreferredModelPool(args.userId),
-    id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    accountId: args.runtimeId,
-    userId: args.userId,
-    title: args.sessionTitle,
-    clientId: args.clientId ?? undefined,
-  });
-  const { requestMessage, resultMessage } = buildDirectPaipanMessages({
-    userId: args.userId,
-    runtimeId: args.runtimeId,
-    session,
-    requestSummary: args.requestSummary,
-    skillContextEntry: args.skillContextEntry,
-  });
-  await storeMessage(requestMessage);
-  await storeMessage(resultMessage);
-  await touchChatSession(session.id);
-
+function toCommitResponse(saved: StoredDirectPaipan): PaipanCommitResponseDto {
+  const messageDto = (message: NewMessage) =>
+    toMessageDto({
+      ...message,
+      timestamp: new Date(message.timestamp).toISOString(),
+    });
   return {
-    session,
-    requestMessage: toMessageDto(requestMessage),
-    resultMessage: toMessageDto(resultMessage),
+    session: toChatSessionDto({
+      ...saved.session,
+      created_at: new Date(saved.session.created_at).toISOString(),
+      updated_at: new Date(saved.session.updated_at).toISOString(),
+    }),
+    requestMessage: messageDto(saved.requestMessage),
+    resultMessage: messageDto(saved.resultMessage),
   };
 }
 
-async function appendBoardMessagesToExistingSession(args: {
-  userId: string;
-  runtimeId: string;
-  session: ChatSession;
-  requestSummary: string;
-  skillContextEntry: SkillContextEntryDto;
-}): Promise<{
-  session: ChatSession;
-  requestMessage: MessageDto;
-  resultMessage: MessageDto;
-}> {
-  const { requestMessage, resultMessage } = buildDirectPaipanMessages({
-    userId: args.userId,
-    runtimeId: args.runtimeId,
-    session: args.session,
-    requestSummary: args.requestSummary,
-    skillContextEntry: args.skillContextEntry,
-  });
-  await storeMessage(requestMessage);
-  await storeMessage(resultMessage);
-  await touchChatSession(args.session.id);
-  return {
-    session: args.session,
-    requestMessage: toMessageDto(requestMessage),
-    resultMessage: toMessageDto(resultMessage),
-  };
+function previewCommitResponse(
+  result: DirectPaipanWriteResult | undefined,
+): ServiceResult<PaipanCommitResponseDto> {
+  if (result?.status === 'saved') return ok(toCommitResponse(result.data));
+  if (result?.status === 'forbidden') return fail(403, '无权提交该预览结果');
+  return fail(410, PREVIEW_EXPIRED_MESSAGE);
 }
 
 /**
@@ -293,7 +242,7 @@ export async function previewDirectPaipanForOwnedUser(args: {
       skillDir: args.skill,
       input: effectiveInput,
     });
-    const previewId = crypto.randomUUID();
+    const previewId = randomUUID();
     const createdAt = new Date().toISOString();
     const expiresAt = new Date(
       Date.now() + PAIPAN_PREVIEW_TTL_MS,
@@ -332,6 +281,69 @@ export async function previewDirectPaipanForOwnedUser(args: {
   }
 }
 
+async function commitStoredPreview(
+  userId: string,
+  previewId: string,
+  clientId: string | undefined,
+): Promise<ServiceResult<PaipanCommitResponseDto>> {
+  if (!PREVIEW_ID_PATTERN.test(previewId))
+    return fail(410, PREVIEW_EXPIRED_MESSAGE);
+
+  const existing = await findDirectPaipanCommit(previewId, userId);
+  if (existing) return previewCommitResponse(existing);
+
+  const preview = await loadDirectPaipanPreviewRecord(previewId);
+  if (!preview) {
+    // A concurrent submit can commit and evict Redis after the first receipt read.
+    return previewCommitResponse(
+      await findDirectPaipanCommit(previewId, userId),
+    );
+  }
+  if (preview.userId && preview.userId !== userId)
+    return fail(403, '无权提交该预览结果');
+
+  const accountId = preview.userId
+    ? preview.runtimeId
+    : getWebChatRuntimeId(userId);
+  const sessionId = `session-${randomUUID()}`;
+  const result = await createDirectPaipanFromPreview({
+    previewId,
+    session: {
+      id: sessionId,
+      accountId,
+      userId,
+      title: preview.sessionTitle,
+      clientId: preview.clientId ?? clientId,
+      modelPoolKey: await getPreferredModelPool(userId),
+    },
+    messages: buildDirectPaipanMessages({
+      userId,
+      runtimeId: accountId,
+      sessionId,
+      requestSummary: preview.requestSummary,
+      skillContextEntry: preview.skillContextEntry,
+    }),
+  });
+  if (result.status !== 'saved') return previewCommitResponse(result);
+
+  try {
+    await getRedis().del(`direct-paipan:preview:${previewId}`);
+  } catch {
+    logger.warn({ sessionId: result.data.session.id }, '排盘预览缓存清理失败');
+  }
+  logger.info(
+    {
+      userId,
+      accountId,
+      sessionId: result.data.session.id,
+      skill: preview.skill,
+      workflow: 'direct_paipan_commit',
+    },
+    '纯排盘预览已提交为新会话',
+  );
+  return ok(toCommitResponse(result.data));
+}
+
 /**
  * 将直接排盘结果写入用户会话。
  * 从预览提交时会校验已绑定预览的归属；游客预览则在提交时归属到当前登录用户。
@@ -346,48 +358,14 @@ export async function commitDirectPaipanForOwnedUser(
   clientId?: string,
 ): Promise<ServiceResult<PaipanCommitResponseDto>> {
   if (request.target === 'new_session_from_preview') {
-    if (!request.previewId) {
+    if (typeof request.previewId !== 'string' || !request.previewId) {
       return fail(400, '缺少 previewId');
     }
-
-    const preview = await loadDirectPaipanPreviewRecord(request.previewId);
-    if (!preview) {
-      return fail(410, '预览结果已失效，请重新排盘');
+    try {
+      return await commitStoredPreview(userId, request.previewId, clientId);
+    } catch (error) {
+      return mapDirectPaipanError(error);
     }
-    if (preview.userId && preview.userId !== userId) {
-      return fail(403, '无权提交该预览结果');
-    }
-    const runtimeId = preview.userId
-      ? preview.runtimeId
-      : getWebChatRuntimeId(userId);
-
-    // 优先使用预览时已关联的客户；预览未关联时回落到本次提交携带的 clientId。
-    const created = await createSessionWithBoardMessages({
-      userId,
-      runtimeId,
-      sessionTitle: preview.sessionTitle,
-      requestSummary: preview.requestSummary,
-      skillContextEntry: preview.skillContextEntry,
-      clientId: preview.clientId ?? clientId ?? null,
-    });
-    await deleteDirectPaipanPreviewRecord(request.previewId);
-
-    logger.info(
-      {
-        userId,
-        accountId: runtimeId,
-        sessionId: created.session.id,
-        skill: preview.skill,
-        workflow: 'direct_paipan_commit',
-      },
-      '纯排盘预览已提交为新会话',
-    );
-
-    return ok({
-      session: toChatSessionDto(created.session),
-      requestMessage: created.requestMessage,
-      resultMessage: created.resultMessage,
-    });
   }
 
   if (request.target !== 'current_session') {
@@ -427,13 +405,20 @@ export async function commitDirectPaipanForOwnedUser(
       input: effectiveInput,
     });
 
-    const appended = await appendBoardMessagesToExistingSession({
+    const appended = await appendDirectPaipanToSession({
       userId,
-      runtimeId: sessionResult.data.account_id,
-      session: sessionResult.data,
-      requestSummary: execution.requestSummary,
-      skillContextEntry: execution.skillContextEntry,
+      accountId: sessionResult.data.account_id,
+      sessionId: sessionResult.data.id,
+      messages: buildDirectPaipanMessages({
+        userId,
+        runtimeId: sessionResult.data.account_id,
+        sessionId: sessionResult.data.id,
+        requestSummary: execution.requestSummary,
+        skillContextEntry: execution.skillContextEntry,
+      }),
     });
+    if (appended.status === 'missing') return fail(404, '会话不存在');
+    if (appended.status === 'forbidden') return fail(403, '无权访问该会话');
 
     logger.info(
       {
@@ -446,11 +431,7 @@ export async function commitDirectPaipanForOwnedUser(
       '纯排盘结果已插入当前会话',
     );
 
-    return ok({
-      session: toChatSessionDto(appended.session),
-      requestMessage: appended.requestMessage,
-      resultMessage: appended.resultMessage,
-    });
+    return ok(toCommitResponse(appended.data));
   } catch (error) {
     return mapDirectPaipanError(error);
   }

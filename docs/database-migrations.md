@@ -26,6 +26,8 @@ The `0085_ai_service_status` migration creates a shared check schedule and aggre
 
 The `0102_service_network_status` migration identifies previous observations as inference checks and starts two independent schedules for HTTP HEAD probes. The status page's network history begins with the first new observations.
 
+The `0103_direct_paipan_commits` migration adds one submission receipt per direct chart preview. New sessions and their two chart messages commit with the receipt. Session and user deletion clear their receipt references so a residual cached preview cannot be submitted again. The receipt holds identifiers for replay and the chart messages remain in the existing message table. Fresh installs and upgrades both apply this migration after the frozen baseline.
+
 The snapshot and all covered migration IDs are committed in one transaction. A failure rolls back the schema and those ledger entries together, allowing a later startup to retry. The empty ledger table may remain after a failed bootstrap.
 
 Databases with recorded migration history always use [versions/](../apps/api/src/infrastructure/migrations/versions/). Each missing migration runs in its own transaction and records its original ID and description. The legacy `0001_core_schema_baseline` already represents historical migrations 0001–0067. Older ledgers may additionally contain historical 0002–0069 IDs; those records remain intact.

@@ -1,6 +1,1 @@
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+export * from '@fateclaw/chat-ui/utils/chart/cn';

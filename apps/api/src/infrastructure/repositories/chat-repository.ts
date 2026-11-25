@@ -240,16 +240,19 @@ export async function hasFinalAiChatSessionReply(
   return rows.length > 0;
 }
 
-export async function createChatSession(session: {
-  modelPoolKey?: 'official' | 'benefit';
-  id: string;
-  accountId: string;
-  userId: string;
-  title: string;
-  /** 关联的客户档案 id；不传则会话不绑定客户。 */
-  clientId?: string;
-}): Promise<ChatSession> {
-  const { rows } = await getDbPool().query(
+export async function createChatSession(
+  session: {
+    modelPoolKey?: 'official' | 'benefit';
+    id: string;
+    accountId: string;
+    userId: string;
+    title: string;
+    /** 关联的客户档案 id；不传则会话不绑定客户。 */
+    clientId?: string;
+  },
+  db: DbQueryable = getDbPool(),
+): Promise<ChatSession> {
+  const { rows } = await db.query(
     `INSERT INTO chat_sessions (id, account_id, user_id, title, client_id,model_pool_key)
      VALUES ($1, $2, $3, $4, $5,$6) RETURNING *`,
     [

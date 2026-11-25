@@ -2,7 +2,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import type { MessageDto } from '@fateclaw/contracts/chat';
-import { ChatToastContext, ReadOnlyChat } from 'fateclaw-web/chat';
+import { ChatToastContext, ReadOnlyChat } from '@fateclaw/chat-ui';
 
 import { useToast } from '@/lib/use-toast';
 

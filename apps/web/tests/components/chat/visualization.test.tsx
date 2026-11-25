@@ -5,7 +5,7 @@ import { VisualizationContext } from '@/components/chat/visualization-context';
 import { I18nProvider } from '@/lib/i18n';
 import { visualizationReference } from '@fateclaw/contracts/visualization';
 
-vi.mock('@/components/chat/artifact-renderer', () => ({
+vi.mock('@fateclaw/chat-ui/components/chat/artifact-renderer', () => ({
   ArtifactRenderer: ({
     entries,
   }: {

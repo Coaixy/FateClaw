@@ -1,4 +1,7 @@
-import { recordAgentTiming } from './agent-performance.js';
+import { submitAiChatRequest } from './ai-chat-dispatch.js';
+import { releasePerUserMeteredSlotByRequestId } from './metered-request-slots.js';
+import { releaseLocalAgentLeaseForPending } from './request-agent-lease.js';
+export { releasePerUserMeteredSlotByRequestId } from './metered-request-slots.js';
 import { decodeRuntimeIpc, encodeRuntimeIpc } from './ipc-security.js';
 import { InvalidRuntimeIpcError } from '@fateclaw/contracts/runtime-ipc';
 import { paipanRequestQueue } from '@fateclaw/contracts/agent/paipan';
@@ -6,7 +9,6 @@ import { processPaipanToolPayload } from './paipan-tool-handler.js';
 import { visualizationRequestQueue } from '@fateclaw/contracts/agent/visualization';
 import { processVisualizationToolPayload } from './visualization-tool-handler.js';
 import {
-  acquireAgentExecution,
   releaseGlobalAgentSlot,
   resetAgentScheduler,
   getAgentConcurrencyKeys,
@@ -26,22 +28,9 @@ import {
 
 import { Redis } from 'ioredis';
 
-import { getUserByAccountId, getUserById } from '#infrastructure/db';
-import { LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS } from '#infrastructure/config';
 import { processOutboxPayload } from './ipc-outbox-handler.js';
 import { processAiChatOutboxPayload } from './ipc-ai-chat-outbox-handler.js';
-import {
-  getRuntimeEntitlementSnapshot,
-  type RuntimeEntitlementSnapshot,
-} from '#modules/billing/entitlements';
 
-import {
-  AI_CHAT_REQUEST_TIMEOUT_MS as AI_CHAT_REQUEST_TIMEOUT,
-  MAX_REQUEST_TIMEOUT_MS,
-  SESSION_PROCESSING_LOCK_TTL_SECONDS,
-} from '#shared/timeout-chain';
-
-const GLOBAL_AGENT_GATE_POLL_MS = 500;
 const IPC_LISTENER_RESTART_INITIAL_MS = 1_000;
 const IPC_LISTENER_RESTART_MAX_MS = 30_000;
 const IPC_LISTENER_STABLE_MS = 60_000;
@@ -49,76 +38,21 @@ import {
   InvalidAiChatPayloadError,
   buildAiChatErrorResponsePayload,
   type CancelInboxRequestPayload,
-  claimOrRefreshSessionProcessingLock,
   InboxRequestResult,
-  type LlmRuntimeSnapshot,
   PendingInboxRequest,
+} from './ipc-payloads.js';
+import {
   releaseSessionProcessingLock,
   sessionProcessingLockKey,
-} from './ipc-payloads.js';
+} from './session-processing-lock.js';
 import { logger } from '#infrastructure/logger';
-import type { BillingReservation } from '#modules/billing/plans';
-import {
-  applyNonMemberPricingMarkup,
-  reserveBillingForRequest,
-  settleBillingReservationDetailed,
-} from '#modules/billing/plans';
 import { getRedis } from '#infrastructure/redis';
 import {
-  resolveUserLlmRuntime,
-  type EffectiveLlmRuntimeConfig,
-} from '#modules/system/system-config';
-import {
-  releaseLocalAgent,
   onLocalAgentProcessExit,
   type LocalAgentProcessExitInfo,
 } from './local-runner.js';
-import { getUserIdFromWebChatRuntimeId } from '#modules/chat/web-chat-runtime';
-import type { User } from '#shared/types';
-import {
-  admitAgentRequest,
-  markAgentRequestDispatched,
-  requestAgentCancellation,
-  persistAgentFailure,
-} from '#infrastructure/repositories/agent-requests-repository';
-import {
-  tryAcquireBenefitExecutionSlot,
-  ModelSelectionError,
-} from '#infrastructure/repositories/benefit-repository';
+import { requestAgentCancellation } from '#infrastructure/repositories/agent-requests-repository';
 export type { InboxRequestResult } from './ipc-payloads.js';
-
-async function resolveLlmRuntimeSnapshot(
-  userId: string,
-): Promise<LlmRuntimeSnapshot> {
-  const runtime = await resolveUserLlmRuntime(userId);
-  return llmRuntimeToSnapshot(runtime);
-}
-
-function llmRuntimeToSnapshot(
-  runtime: EffectiveLlmRuntimeConfig,
-): LlmRuntimeSnapshot {
-  return {
-    poolKey: runtime.poolKey,
-    poolRevision: runtime.poolRevision,
-    benefitPolicy: runtime.benefitPolicy,
-    benefitRequestId: runtime.benefitRequestId,
-    source: runtime.source,
-    billingMode: runtime.billingMode,
-    modelConfigId: runtime.modelConfigId,
-    piApi: runtime.piApi,
-    model: runtime.model,
-    contextWindowTokens: runtime.contextWindowTokens,
-    maxOutputTokens: runtime.maxOutputTokens,
-    thinkingLevel: runtime.thinkingLevel,
-    apiKey: runtime.secret,
-    baseUrl: runtime.baseUrl || undefined,
-    authMode: runtime.authMode,
-    providerKey: runtime.providerKey,
-    poolNodes: runtime.poolNodes,
-    inputTokenPricePerMillionCoins: runtime.inputTokenPricePerMillionCoins,
-    outputTokenPricePerMillionCoins: runtime.outputTokenPricePerMillionCoins,
-  };
-}
 
 let ipcWorkerRunning = false;
 const pendingInboxRequests = new Map<string, PendingInboxRequest>();
@@ -140,40 +74,6 @@ const listenerSupervisors = new Map<string, { running: boolean }>();
 const pinnedAccountListeners = new Set<string>();
 /** 非 pinned 监听器的空闲回收阈值：超过此时长无任何 outbox 消息且无在途请求即退出。 */
 const ACCOUNT_LISTENER_IDLE_TTL_MS = 10 * 60 * 1000;
-
-function resolveInboxPriority(
-  entitlement: RuntimeEntitlementSnapshot,
-): 'member' | 'normal' {
-  return entitlement.hasPriorityQueue ? 'member' : 'normal';
-}
-
-function entitlementMetadata(snapshot: RuntimeEntitlementSnapshot) {
-  return {
-    membershipActive: snapshot.membershipActive,
-    availableCoins: snapshot.wallet.availableCoins,
-    wallet: {
-      purchased_coins: snapshot.wallet.purchasedCoins,
-      bonus_coins: snapshot.wallet.bonusCoins,
-      reserved_coins: snapshot.wallet.reservedCoins,
-      inArrears: snapshot.wallet.inArrears,
-    },
-  };
-}
-
-async function enqueueInboxPayload(
-  accountId: string,
-  priority: 'member' | 'normal',
-  payload: string,
-) {
-  const key =
-    priority === 'member'
-      ? `ipc:${accountId}:inbox:member`
-      : `ipc:${accountId}:inbox`;
-  await getRedis().lpush(
-    key,
-    encodeRuntimeIpc(accountId, key, payload, MAX_REQUEST_TIMEOUT_MS),
-  );
-}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -204,133 +104,6 @@ async function releaseGlobalAgentSlotForPayload(
   const pending = pendingMapForQueue(queue)?.get(requestId);
   await releaseGlobalAgentSlot(pending?.concurrencySlotId ?? requestId);
   await releasePerUserMeteredSlotByRequestId(requestId);
-}
-
-// ---------------------------------------------------------------------------
-// per-user 余额感知 metered 并发门
-//
-// 洞：入口只挡 inArrears（余额<0）、不冻结、不限并发；余额≈0 的会员可开多 session
-// 几乎同时发请求，全部放行各自赊账，负债 = 单请求成本 × min(session 数, 全局上限)。
-// 修法：低余额用户（availableCoins < 阈值）同一时刻只允许 1 个 metered 请求在跑——
-// 那 1 个跑完进入欠费后，后续请求被入口 inArrears 挡住，故最坏赊账锁到「1 个请求」。
-// 健康余额用户不进入此门，沿用全局并发上限，零额外开销。
-//
-// 计数用 per-user ZSET（member=requestId, score=now），acquire 时 ZREMRANGEBYSCORE
-// 自动剪除超时窗口外的陈旧项 → 漏释放最多卡一个窗口；再配 PEXPIRE 兜底键过期。
-// 释放点（全局槽的各个 release 处）拿不到 userId，故用 requestId→userId 反查键，
-// 释放只凭 requestId 即可定位，未 gate 的请求查不到 → 空操作。
-// ---------------------------------------------------------------------------
-const PER_USER_METERED_ZKEY_PREFIX = 'agent:user-metered:z:';
-const PER_USER_METERED_OWNER_PREFIX = 'agent:user-metered:o:';
-// 含「积分不足」关键词，chat-session-service 据此映射为 402（见 isPaymentRequiredError）。
-const LOW_BALANCE_CONCURRENCY_MESSAGE =
-  '积分不足以同时进行多个解读，请等当前解读完成或充值后再试';
-
-function perUserMeteredZKey(userId: string): string {
-  return `${PER_USER_METERED_ZKEY_PREFIX}${userId}`;
-}
-function perUserMeteredOwnerKey(requestId: string): string {
-  return `${PER_USER_METERED_OWNER_PREFIX}${requestId}`;
-}
-
-/**
- * 尝试为低余额用户领取一个 per-user metered 在途名额。
- *
- * @returns 名额未满则占用并返回 true；已达上限返回 false（调用方应拒绝该请求）。
- * @remarks 仅对低余额 metered 请求调用；陈旧项按超时窗口自动剪除，避免漏释放永久锁死。
- */
-async function tryAcquirePerUserMeteredSlot(input: {
-  userId: string;
-  requestId: string;
-  limit: number;
-}): Promise<boolean> {
-  const now = Date.now();
-  // 超时窗口：取两类请求超时的较大值，确保不会把仍可能在途的请求误剪。
-  const staleMs = MAX_REQUEST_TIMEOUT_MS;
-  const acquired = await getRedis().eval(
-    `
-    redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[3])
-    if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[1]) then
-      return 0
-    end
-    redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
-    redis.call('PEXPIRE', KEYS[1], ARGV[5])
-    return 1
-    `,
-    1,
-    perUserMeteredZKey(input.userId),
-    input.limit,
-    now,
-    now - staleMs,
-    input.requestId,
-    staleMs,
-  );
-  if (acquired === 1) {
-    // 反查键：释放点只有 requestId，借此定位 userId。带 TTL 兜底漏释放。
-    await getRedis().set(
-      perUserMeteredOwnerKey(input.requestId),
-      input.userId,
-      'PX',
-      staleMs,
-    );
-    return true;
-  }
-  return false;
-}
-
-/**
- * 释放某请求占用的 per-user metered 名额（只凭 requestId）。
- *
- * @remarks 幂等：未 gate 或已释放的请求查不到反查键 → 直接返回，无副作用；
- *          可在所有全局槽释放点无条件调用，对非 gated（含微信）请求是空操作。
- *          导出供 inbox-stall-sweeper 在代消费无主 outbox 响应时释放对应名额。
- */
-export async function releasePerUserMeteredSlotByRequestId(
-  requestId?: string,
-): Promise<void> {
-  if (!requestId) return;
-  const ownerKey = perUserMeteredOwnerKey(requestId);
-  const userId = await getRedis().get(ownerKey);
-  if (!userId) return;
-  await getRedis().zrem(perUserMeteredZKey(userId), requestId);
-  await getRedis().del(ownerKey);
-}
-
-async function releaseLocalAgentLeaseForPending(
-  pending: PendingInboxRequest | undefined,
-  context: { accountId?: string; requestId?: string; reason: string },
-): Promise<void> {
-  if (!pending?.localAgentLeaseId) return;
-  await releaseLocalAgent(pending.localAgentLeaseId).catch((err) => {
-    logger.warn(
-      {
-        accountId: context.accountId ?? pending.accountId,
-        requestId: context.requestId,
-        reason: context.reason,
-        err,
-      },
-      '释放本地 agent-runtime 租约失败',
-    );
-  });
-}
-
-async function releaseLocalAgentLeaseById(
-  leaseId: string | undefined,
-  context: { accountId?: string; requestId?: string; reason: string },
-): Promise<void> {
-  if (!leaseId) return;
-  await releaseLocalAgent(leaseId).catch((err) => {
-    logger.warn(
-      {
-        accountId: context.accountId,
-        leaseId,
-        requestId: context.requestId,
-        reason: context.reason,
-        err,
-      },
-      '释放本地 agent-runtime 租约失败',
-    );
-  });
 }
 
 function buildAiChatCancelPayload(input: {
@@ -429,19 +202,6 @@ export async function cancelAiChatSessionRequest(
   return true;
 }
 
-async function getOwnerByRuntimeId(
-  runtimeId: string,
-): Promise<User | undefined> {
-  const webUserId = getUserIdFromWebChatRuntimeId(runtimeId);
-  return webUserId ? getUserById(webUserId) : getUserByAccountId(runtimeId);
-}
-
-/**
- * 判断指定账号当前是否还有等待响应的在途请求（微信或 AI Chat 任一）。
- *
- * @param accountId 运行时账号 ID。
- * @returns 存在在途请求时返回 true。
- */
 function hasPendingRequestsForAccount(accountId: string): boolean {
   for (const pending of pendingAiChatRequests.values()) {
     if (pending.accountId === accountId) return true;
@@ -889,393 +649,7 @@ export async function __peekNextGlobalAgentWaiterForTests(): Promise<
 export function submitAiChatInboxRequest(
   input: AiChatSubmission,
 ): Promise<InboxRequestResult> {
-  const requestId =
-    input.requestId ??
-    `aichat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const startedAtMs = Date.now();
-  const aiChatOutboxQueue = `ipc:${input.accountId}:ai-chat:outbox`;
-  let acceptedEarly = false;
-  let payloadQueued = false;
-  let payloadEnqueueAttempted = false;
-  let executionId = input.recoveryExecutionId;
-  let admissionRuntime: LlmRuntimeSnapshot | undefined;
-  const deadlineAtMs = input.recoveryDeadlineAt
-    ? Date.parse(input.recoveryDeadlineAt)
-    : startedAtMs + AI_CHAT_REQUEST_TIMEOUT;
-
-  return new Promise<InboxRequestResult>((resolve, reject) => {
-    void (async () => {
-      let timeout: NodeJS.Timeout | null = null;
-      let billingReservation: BillingReservation | null = null;
-      let concurrencySlotId: string | undefined;
-      let localAgentLeaseId: string | undefined;
-
-      try {
-        const ownerUserId =
-          input.entitlementSnapshot?.userId ??
-          (await getOwnerByRuntimeId(input.accountId))?.id;
-        if (!ownerUserId) {
-          // 未绑定平台用户的账号不应消费 token：拒绝并明确日志，避免无追踪计费泄漏。
-          logger.warn(
-            { accountId: input.accountId, kind: 'ai-chat' },
-            '收件箱请求被拒绝：账号未绑定到平台用户',
-          );
-          reject(new Error('账号未绑定平台用户，无法处理 AI 请求'));
-          return;
-        }
-        const baseRuntime = input.llmRuntime
-          ? llmRuntimeToSnapshot(input.llmRuntime)
-          : await resolveLlmRuntimeSnapshot(ownerUserId);
-        if (baseRuntime.poolKey === 'benefit')
-          baseRuntime.benefitRequestId = requestId;
-        const entitlement =
-          input.entitlementSnapshot ??
-          (await getRuntimeEntitlementSnapshot(ownerUserId));
-        // 非会员专家模式加价：把官方模型 token 单价烙进快照，贯穿 reserve/settle/recover。
-        const llmRuntime = applyNonMemberPricingMarkup(
-          baseRuntime,
-          entitlement.membershipActive,
-        );
-
-        admissionRuntime = llmRuntime;
-        // per-user 余额感知并发门：低余额用户同一时刻只允许 1 个 metered 请求在跑，
-        // 封住「多 session 并发把余额刷成大额欠费」的白嫖。健康余额用户不进入此门。
-        // 置于一切资源分配（预留/定时器/pending/槽位）之前——被拒时无需任何清理。
-        if (
-          llmRuntime.billingMode === 'metered' &&
-          entitlement.wallet.availableCoins <
-            LOW_BALANCE_CONCURRENCY_THRESHOLD_COINS
-        ) {
-          const slotAcquired = await tryAcquirePerUserMeteredSlot({
-            userId: ownerUserId,
-            requestId,
-            limit: 1,
-          });
-          if (!slotAcquired) {
-            logger.info(
-              {
-                accountId: input.accountId,
-                ownerUserId,
-                requestId,
-                availableCoins: entitlement.wallet.availableCoins,
-              },
-              'AI Chat 低余额用户已有 metered 请求在跑，拒绝并发新请求',
-            );
-            reject(new Error(LOW_BALANCE_CONCURRENCY_MESSAGE));
-            return;
-          }
-        }
-
-        billingReservation = await reserveBillingForRequest({
-          userId: ownerUserId,
-          requestId,
-          runtime: llmRuntime,
-          entitlementSnapshot: entitlementMetadata(entitlement),
-        });
-        const priority = resolveInboxPriority(entitlement);
-        executionId ??= await admitAgentRequest({
-          input: { ...input, entitlementSnapshot: entitlement },
-          requestId,
-          ownerUserId,
-          runtime: baseRuntime,
-          deadlineAt: deadlineAtMs,
-        });
-
-        timeout = setTimeout(
-          async () => {
-            void requestAgentCancellation(requestId).catch((err) => {
-              logger.error(
-                { requestId, err },
-                'Failed to persist request timeout cancellation',
-              );
-            });
-            const pending = pendingAiChatRequests.get(requestId);
-            pendingAiChatRequests.delete(requestId);
-            // 清除当前请求持有的会话忙碌标记，避免误删后续请求的锁。
-            void releaseSessionProcessingLock(input.sessionId, requestId).catch(
-              () => {},
-            );
-            void releaseGlobalAgentSlot(
-              pending?.concurrencySlotId ?? concurrencySlotId ?? requestId,
-            );
-            void releasePerUserMeteredSlotByRequestId(requestId);
-            void releaseLocalAgentLeaseForPending(pending, {
-              accountId: input.accountId,
-              requestId,
-              reason: 'timeout',
-            });
-            logger.error(
-              {
-                accountId: input.accountId,
-                requestId,
-                sessionId: input.sessionId,
-              },
-              'AI Chat 请求超时',
-            );
-            reject(new Error(`AI Chat 请求超时: ${requestId}`));
-          },
-          Math.max(1, deadlineAtMs - Date.now()),
-        );
-
-        pendingAiChatRequests.set(requestId, {
-          accountId: input.accountId,
-          ownerUserId,
-          toUserId: undefined,
-          contextToken: undefined,
-          autoDeliver: false, // AI Chat 永远不发微信
-          sessionId: input.sessionId,
-          userMessageId: input.userMessageId,
-          sessionProcessingRequestId: requestId,
-          llmRuntime,
-          billingReservation,
-          startedAtMs,
-          timings: [
-            {
-              type: 'agent_timing',
-              stage: 'admission',
-              durationMs: Date.now() - startedAtMs,
-            },
-          ],
-          priority,
-          concurrencySlotId,
-          resolve,
-          reject,
-          timeout,
-        });
-        recordAgentTiming('admission', Date.now() - startedAtMs);
-        if (input.waitForResponse === false) {
-          acceptedEarly = true;
-          resolve({ requestId, status: 'success', text: '' });
-        }
-        concurrencySlotId = await acquireAgentExecution({
-          requestId,
-          accountId: input.accountId,
-          priority,
-          deadlineAtMs,
-          beforeGlobal: async () => {
-            if (llmRuntime.poolKey === 'benefit') {
-              while (!(await tryAcquireBenefitExecutionSlot(requestId))) {
-                if (
-                  !pendingAiChatRequests.has(requestId) ||
-                  Date.now() >= deadlineAtMs
-                )
-                  throw new Error(
-                    '免费服务繁忙，请稍后重试。本次未扣免费次数。',
-                  );
-                await new Promise<void>((done) =>
-                  setTimeout(done, GLOBAL_AGENT_GATE_POLL_MS),
-                );
-              }
-            }
-          },
-          onTiming: (stage, durationMs) => {
-            recordAgentTiming(stage, durationMs);
-            pendingAiChatRequests
-              .get(requestId)
-              ?.timings?.push({ type: 'agent_timing', stage, durationMs });
-          },
-          shouldContinue: () =>
-            pendingAiChatRequests.has(requestId) && Date.now() < deadlineAtMs,
-          onRuntimeReady: (leaseId, capacityToken) => {
-            const pending = pendingAiChatRequests.get(requestId);
-            if (!pending) return false;
-            localAgentLeaseId = leaseId;
-            pending.localAgentLeaseId = leaseId;
-            pending.capacityToken = capacityToken;
-            addAccountListener(input.accountId);
-            return true;
-          },
-          onAcquired: (slotId) => {
-            concurrencySlotId = slotId;
-            const pending = pendingAiChatRequests.get(requestId);
-            if (pending) pending.concurrencySlotId = slotId;
-          },
-        });
-        if (!pendingAiChatRequests.has(requestId))
-          throw new Error('请求已取消或超时');
-
-        const payload = JSON.stringify({
-          type: 'chat',
-          requestId,
-          executionId,
-          accountId: input.accountId,
-          userMessage: input.userMessage,
-          inputKind: input.inputKind,
-          pastedBoard: input.pastedBoard,
-          history: input.history,
-          sessionBoardContexts: input.sessionBoardContexts,
-          piSessionBase: input.piSessionBase,
-          acceptedAtMs: startedAtMs,
-          sessionId: input.sessionId,
-          userMessageId: input.userMessageId,
-          ownerUserId,
-          userName: input.userName,
-          assistantName: input.assistantName,
-          personaPrompt: input.personaPrompt,
-          authorizedSkillIds: input.authorizedSkillIds,
-          llmRuntime,
-          timestamp: new Date().toISOString(),
-          outboxQueue: aiChatOutboxQueue, // 指定响应队列
-        });
-
-        // chat-session-service 已用同一个 requestId 预抢占锁；这里仅续期自有锁，避免旧请求覆盖新 owner。
-        const processingClaimed = await claimOrRefreshSessionProcessingLock(
-          input.sessionId,
-          requestId,
-          SESSION_PROCESSING_LOCK_TTL_SECONDS, // 从超时链派生（API 超时 + 5 分钟缓冲）
-        );
-        if (!processingClaimed) {
-          throw new Error('会话正在处理其他请求');
-        }
-
-        const pending = pendingAiChatRequests.get(requestId);
-        if (!pending) {
-          throw new Error('请求已取消或超时');
-        }
-        if (!(await markAgentRequestDispatched(requestId))) {
-          throw new Error('Request cancelled, expired, or claimed by recovery');
-        }
-        payloadEnqueueAttempted = true;
-        await enqueueInboxPayload(
-          input.accountId,
-          pending.priority ?? 'normal',
-          payload,
-        );
-        payloadQueued = true;
-        logger.info(
-          {
-            accountId: input.accountId,
-            requestId,
-            sessionId: input.sessionId,
-            outboxQueue: aiChatOutboxQueue,
-            billingRecorded: Boolean(billingReservation),
-            priority: pending.priority ?? 'normal',
-            concurrencySlotId,
-          },
-          'AI Chat 请求已提交到 Redis',
-        );
-      } catch (err) {
-        let submissionFailure: unknown = null;
-        if (
-          err instanceof ModelSelectionError &&
-          !executionId &&
-          billingReservation &&
-          admissionRuntime
-        ) {
-          // A selection conflict occurs before admission or dispatch; its zero-usage reservation can close immediately.
-          try {
-            await settleBillingReservationDetailed({
-              requestId,
-              runtime: admissionRuntime,
-              promptTokens: 0,
-              completionTokens: 0,
-            });
-          } catch (error) {
-            logger.error(
-              { requestId, err: error },
-              'Failed to close undispatched billing reservation',
-            );
-          }
-        }
-        if (executionId && !payloadQueued) {
-          submissionFailure = await persistAgentFailure(
-            requestId,
-            buildAiChatErrorResponsePayload({
-              accountId: input.accountId,
-              requestId,
-              sessionId: input.sessionId,
-              userMessageId: input.userMessageId,
-              ownerUserId: input.entitlementSnapshot?.userId,
-              publicErrorText: '抱歉，AI 服务暂时不可用',
-              error: 'Request submission interrupted',
-              reasonCode: 'submit_error',
-              usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-            }),
-          ).catch((failure) =>
-            logger.error(
-              { requestId, err: failure },
-              'Failed to persist submission failure',
-            ),
-          );
-        }
-        // 占用的 per-user metered 名额在任何失败分支都要释放,否则低余额用户会被永久卡住。
-        await releasePerUserMeteredSlotByRequestId(requestId).catch(() => {});
-        if (acceptedEarly && !payloadQueued) {
-          if (!submissionFailure) {
-            const pending = pendingAiChatRequests.get(requestId);
-            if (!payloadEnqueueAttempted && pending) {
-              if (pending.capacityToken)
-                await releaseGlobalAgentSlot(
-                  requestId,
-                  pending.capacityToken,
-                ).catch(() => {});
-              await releaseLocalAgentLeaseForPending(pending, {
-                accountId: input.accountId,
-                requestId,
-                reason: 'undispatched_submission_failure',
-              });
-              clearTimeout(pending.timeout);
-              pendingAiChatRequests.delete(requestId);
-            }
-            return;
-          }
-          await releaseGlobalAgentSlot(concurrencySlotId ?? requestId);
-          const pending = pendingAiChatRequests.get(requestId);
-          if (pending) {
-            await processAiChatOutboxPayload(
-              submissionFailure,
-              input.accountId,
-              pendingAiChatRequests,
-            ).catch((handlerErr) => {
-              clearTimeout(pending.timeout);
-              pendingAiChatRequests.delete(requestId);
-              void releaseSessionProcessingLock(
-                input.sessionId,
-                requestId,
-              ).catch(() => {});
-              void releaseLocalAgentLeaseForPending(pending, {
-                accountId: input.accountId,
-                requestId,
-                reason: 'submit_error_fallback',
-              });
-              logger.error(
-                { accountId: input.accountId, requestId, err: handlerErr },
-                'AI Chat 入队失败后的错误消息落库失败',
-              );
-            });
-          }
-          return;
-        }
-        if (timeout) {
-          clearTimeout(timeout);
-        }
-        const pending = pendingAiChatRequests.get(requestId);
-        pendingAiChatRequests.delete(requestId);
-        void releaseSessionProcessingLock(input.sessionId, requestId).catch(
-          () => {},
-        );
-        void releaseGlobalAgentSlot(concurrencySlotId ?? requestId);
-        if (pending) {
-          void releaseLocalAgentLeaseForPending(pending, {
-            accountId: input.accountId,
-            requestId,
-            reason: 'submit_error',
-          });
-        } else {
-          void releaseLocalAgentLeaseById(localAgentLeaseId, {
-            accountId: input.accountId,
-            requestId,
-            reason: 'submit_error',
-          });
-        }
-        reject(
-          err instanceof Error
-            ? err
-            : new Error(`写入 Redis 收件箱失败: ${String(err)}`),
-        );
-      }
-    })().catch(reject);
-  });
+  return submitAiChatRequest(input, pendingAiChatRequests, addAccountListener);
 }
 
 export type { AiChatSubmission } from './request-types.js';

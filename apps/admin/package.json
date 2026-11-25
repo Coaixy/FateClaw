@@ -10,8 +10,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@fateclaw/chat-ui": "workspace:*",
     "@fateclaw/contracts": "workspace:*",
-    "fateclaw-web": "workspace:*",
     "highlight.js": "^11.12.0",
     "lucide-react": "^1.78.0",
     "next": "^16.4.6",

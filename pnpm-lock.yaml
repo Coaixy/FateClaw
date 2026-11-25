@@ -78,12 +78,12 @@ importers:
 
   apps/admin:
     dependencies:
+      '@fateclaw/chat-ui':
+        specifier: workspace:*
+        version: link:../../packages/chat-ui
       '@fateclaw/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      fateclaw-web:
-        specifier: workspace:*
-        version: link:../web
       highlight.js:
         specifier: ^11.12.0
         version: 11.12.0
@@ -291,6 +291,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@fateclaw/chat-ui':
+        specifier: workspace:*
+        version: link:../../packages/chat-ui
       '@fateclaw/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -366,6 +369,58 @@ importers:
         version: 6.0.3
 
   packages/backend-shared: {}
+
+  packages/chat-ui:
+    dependencies:
+      '@fateclaw/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      lucide-react:
+        specifier: ^1.78.0
+        version: 1.78.0(@types/react@19.3.0)(react@19.3.1)
+      mermaid:
+        specifier: 12.3.0
+        version: 12.3.0
+      next:
+        specifier: ^16.4.6
+        version: 16.4.6(@babel/core@7.29.7)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react:
+        specifier: ^19.3.1
+        version: 19.3.1
+      react-dom:
+        specifier: ^19.3.1
+        version: 19.3.1(react@19.3.1)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@19.3.0)(react@19.3.1)
+      rehype-highlight:
+        specifier: ^7.0.2
+        version: 7.0.2
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1
+      tailwind-merge:
+        specifier: ^3.7.1
+        version: 3.7.1
+      vega:
+        specifier: 6.4.0
+        version: 6.4.0
+      vega-interpreter:
+        specifier: 2.3.2
+        version: 2.3.2
+      vega-lite:
+        specifier: 6.5.0
+        version: 6.5.0(vega@6.4.0)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.3.0
+        version: 19.3.0(@types/react@19.3.0)
 
   packages/contracts:
     dependencies:

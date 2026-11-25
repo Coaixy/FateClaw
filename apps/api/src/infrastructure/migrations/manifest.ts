@@ -34,6 +34,7 @@ import { issueReadMarkersMigration } from '#infrastructure/migrations/versions/0
 import { announcementPollsMigration } from '#infrastructure/migrations/versions/0100-announcement-polls';
 import { announcementMultipleChoiceMigration } from '#infrastructure/migrations/versions/0101-announcement-multiple-choice';
 import { serviceNetworkStatusMigration } from '#infrastructure/migrations/versions/0102-service-network-status';
+import { directPaipanCommitsMigration } from '#infrastructure/migrations/versions/0103-direct-paipan-commits';
 
 // IDs and order are part of the upgrade contract for existing databases.
 export const MIGRATIONS: readonly DatabaseMigration[] = [
@@ -71,6 +72,7 @@ export const MIGRATIONS: readonly DatabaseMigration[] = [
   announcementPollsMigration,
   announcementMultipleChoiceMigration,
   serviceNetworkStatusMigration,
+  directPaipanCommitsMigration,
 ];
 
 export const BASELINES: readonly DatabaseBaseline[] = [currentSchemaBaseline];

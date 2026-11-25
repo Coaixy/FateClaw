@@ -145,14 +145,15 @@ function Harness() {
     userId: 'synthetic-user',
     sessionId: selectedSession,
   });
+  const { adoptDraft } = draft;
   const submissionRef = useRef<ChatDraftSubmission | null>(null);
   const createSessionWithDraft = useCallback(
     (onCreated?: (session: ChatSession) => void) =>
       createSession((session) => {
         onCreated?.(session);
-        draft.adoptDraft(session.id, submissionRef.current ?? undefined);
+        adoptDraft(session.id, submissionRef.current ?? undefined);
       }),
-    [createSession, draft.adoptDraft],
+    [createSession, adoptDraft],
   );
   const chat = useChatMessages({
     chatAvailable: true,
@@ -285,6 +286,134 @@ afterEach(async () => {
 });
 
 describe('chat lifecycle', () => {
+  it('abandons the pending stream ticket when the user selects another session', async () => {
+    const firstTicket =
+      deferred<
+        Awaited<ReturnType<typeof chatSessionsApi.createStreamTicket>>
+      >();
+    vi.mocked(chatSessionsApi.createStreamTicket).mockReturnValueOnce(
+      firstTicket.promise,
+    );
+    await mount();
+    const signal = vi.mocked(chatSessionsApi.createStreamTicket).mock
+      .calls[0]?.[1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    expect(SyntheticSocket.instances).toHaveLength(0);
+
+    await selectSession('B');
+    expect(signal?.aborted).toBe(true);
+    await act(async () =>
+      firstTicket.resolve({ ticket: 'obsolete-ticket', expiresAt: timestamp }),
+    );
+
+    expect(SyntheticSocket.instances.map(({ url }) => url)).toEqual([
+      'ws://synthetic/B',
+    ]);
+  });
+
+  it('rejects queued callbacks from an earlier visit to the same session', async () => {
+    await mount();
+    const firstSocket = SyntheticSocket.instances[0];
+    const oldMessage = firstSocket.onmessage!;
+    const oldError = firstSocket.onerror!;
+    const oldClose = firstSocket.onclose!;
+
+    await selectSession('B');
+    await selectSession('A');
+    expect(firstSocket.closed).toBe(true);
+    await act(async () => {
+      oldMessage({
+        data: JSON.stringify({ type: 'agent_start', requestId: 'old-request' }),
+      } as MessageEvent);
+    });
+    expect(latest.chat.run).toMatchObject({ phase: 'idle', requestId: null });
+
+    const user = message('current-user');
+    vi.mocked(chatSessionsApi.messages).mockResolvedValue(
+      history([user], 'request-1'),
+    );
+    await act(async () => {
+      expect(await latest.chat.sendMessage('Current request')).toBe(true);
+    });
+    const currentSocket = SyntheticSocket.instances.at(-1)!;
+    await act(async () => {
+      currentSocket.emit({ type: 'connected' });
+      oldError();
+      oldClose();
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(SyntheticSocket.instances).toHaveLength(3);
+    expect(currentSocket.closed).toBe(false);
+    expect(latest.chat.messages).toEqual([user]);
+    expect(latest.chat.run).toMatchObject({ requestId: 'request-1' });
+  });
+
+  it('reconnects after a disconnect and accepts events only from the new socket', async () => {
+    await mount();
+    const firstSocket = SyntheticSocket.instances[0];
+    const obsoleteMessage = firstSocket.onmessage!;
+    await act(async () => {
+      firstSocket.close();
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(SyntheticSocket.instances).toHaveLength(2);
+
+    await act(async () => {
+      obsoleteMessage({
+        data: JSON.stringify({ type: 'agent_start', requestId: 'old-request' }),
+      } as MessageEvent);
+    });
+    expect(latest.chat.run).toMatchObject({ phase: 'idle', requestId: null });
+    vi.mocked(chatSessionsApi.messages).mockResolvedValue(
+      history([message('current-user')], 'current-request'),
+    );
+    await act(async () =>
+      SyntheticSocket.instances[1].emit({
+        type: 'agent_start',
+        requestId: 'current-request',
+      }),
+    );
+    expect(latest.chat.run).toMatchObject({
+      phase: 'running',
+      requestId: 'current-request',
+    });
+  });
+
+  it('polls the selected session while a previous session poll is pending', async () => {
+    await mount();
+    const firstPoll = deferred<SessionMessageListResponseDto>();
+    const userB = message('user-B');
+    const finalB = message('final-B', true, 'final', 'request-B');
+    let readsInB = 0;
+    vi.mocked(chatSessionsApi.messages).mockImplementation(async (id) => {
+      if (id === 'A') return firstPoll.promise;
+      readsInB += 1;
+      return readsInB === 1
+        ? history([userB], 'request-B')
+        : history([userB, finalB]);
+    });
+    vi.mocked(chatSessionsApi.messages).mockClear();
+    await act(async () =>
+      SyntheticSocket.instances[0].emit({
+        type: 'agent_start',
+        requestId: 'request-A',
+      }),
+    );
+    expect(chatSessionsApi.messages).toHaveBeenCalledTimes(1);
+
+    await selectSession('B');
+    expect(latest.chat.run).toMatchObject({
+      sessionId: 'B',
+      phase: 'completed',
+      requestId: 'request-B',
+    });
+    expect(latest.chat.messages).toEqual([userB, finalB]);
+
+    await act(async () => firstPoll.resolve(history([message('user-A')])));
+    expect(latest.chat.messages).toEqual([userB, finalB]);
+  });
+
   it('loads a saved board notification while the assistant continues interpreting', async () => {
     await mount();
     const socket = SyntheticSocket.instances[0];
@@ -649,6 +778,18 @@ describe('chat lifecycle', () => {
     });
     expect(latest.chat.run.phase).toBe('completed');
     expect(latest.chat.sending).toBe(false);
+
+    expect(socket.closed).toBe(false);
+    vi.mocked(chatSessionsApi.messages).mockResolvedValue(
+      history([message('next-user')], 'next-request'),
+    );
+    await act(async () =>
+      socket.emit({ type: 'agent_start', requestId: 'next-request' }),
+    );
+    expect(latest.chat.run).toMatchObject({
+      phase: 'running',
+      requestId: 'next-request',
+    });
   });
 
   it('keeps an uncertain POST syncing with its optimistic user when only a previous final is persisted', async () => {

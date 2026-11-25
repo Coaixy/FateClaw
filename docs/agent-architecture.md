@@ -1,6 +1,6 @@
 # Agent architecture
 
-Last checked: 2026-10-20.
+Last checked: 2026-11-25.
 
 This document describes the agent runtime architecture in the current code. In the main flow, the host process calls an account-level agent-runtime through Redis IPC. For each request, agent-runtime creates a Pi SDK Runtime, which handles the model loop, user knowledge reads, and final reply. System chart calculation runs in deterministic packages on the Web/API side.
 
@@ -8,8 +8,12 @@ Core code entry points:
 
 - `apps/api/src/runtime/resident-agent.ts`
 - `apps/api/src/runtime/ipc-worker.ts`
+- `apps/api/src/runtime/ai-chat-admission.ts`
+- `apps/api/src/runtime/ai-chat-dispatch.ts`
+- `apps/api/src/runtime/ai-chat-result-delivery.ts`
 - `apps/api/src/runtime/local-runner.ts`
 - `apps/agent-runtime/src/daemon.ts`
+- `apps/agent-runtime/src/inbox-request.ts`
 - `apps/agent-runtime/src/request-boundary.ts`
 - `apps/agent-runtime/src/pi-runtime/`
 - `apps/agent-runtime/src/skill-content-cache.ts`
@@ -95,15 +99,11 @@ Private user Skills never enter `.pi/skills`, `~/.pi/agent/skills`, or any globa
 The main AI Chat flow lives in `apps/api/src/modules/chat/chat-session-service.ts`:
 
 1. Verify session ownership and acquire a session-level concurrency lock using Redis `session:processing:{sessionId}`.
-2. Persist the user message.
-3. `resolveUserLlmRuntime()` captures the official model pool, common prices and thinking level; legacy user selections are ignored. Model-call routing, failover and shared circuit state are described in [Official model pool](official-model-pool.md).
-4. Build historical context with `buildStructuredInputForSession()`.
-5. Append `activeBoardContext` if the user selected a chart.
-6. Call `dispatchAiChatPrompt()`.
+2. Resolve the runtime model snapshot and assemble request context, including the authorized chart context and Pi session base. Model routing, failover and shared circuit state are described in [Official model pool](official-model-pool.md).
+3. Call `dispatchAiChatPrompt()`. The admission transaction writes the durable request, the user message when supplied, any initial title, and the Benefit reservation when applicable.
+4. Acquire execution capacity, ensure the account runtime is ready, start the outbox listener, and dispatch through Redis.
 
-`dispatchAiChatPrompt()` first ensures that agent-runtime is running for `web:{userId}`, then calls `addAccountListener()` to start the host-side outbox listener, and finally enqueues the request through `submitAiChatInboxRequest()`.
-
-AI Chat normally responds to the frontend asynchronously: after successful enqueueing, HTTP `POST /api/chat-sessions/s/:sessionId/messages` usually returns `accepted: true` and `request_id`. `ipc-ai-chat-outbox-handler.ts` handles `ipc:{runtimeId}:ai-chat:outbox` and persists the final reply. The web client exchanges `POST /api/chat-sessions/s/:sessionId/stream-ticket` for a short-lived, single-use ticket, then connects to the `/api/chat-sessions/s/:sessionId/stream` WebSocket. The server uses Redis pub/sub to push Pi session events, progress, final replies, and errors to the current session.
+HTTP `POST /api/chat-sessions/s/:sessionId/messages` returns `accepted: true` and `request_id` after durable admission. The API may still be waiting for execution capacity at that point. The outbox handler receives `ipc:{runtimeId}:ai-chat:outbox`, calls the result delivery transaction, then publishes the final event. The web client exchanges `POST /api/chat-sessions/s/:sessionId/stream-ticket` for a short-lived, single-use ticket, then connects to the `/api/chat-sessions/s/:sessionId/stream` WebSocket. The browser reconciles against the message history when it misses a real-time result.
 
 Current WeChat turns use `runOwnedChatSessionTurn()` and deliver the returned final messages through the WeChat message handler. Retained legacy account envelopes use `ipc:{runtimeId}:outbox`, handled by `ipc-outbox-handler.ts` during upgrades. The dedicated AI Chat outbox never sends WeChat messages. Runtime policy and WeChat activation are described in [Runtime configuration](runtime-configuration.md).
 

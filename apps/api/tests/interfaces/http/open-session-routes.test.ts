@@ -37,7 +37,7 @@ vi.mock('#runtime/resident-agent', () => ({
   dispatchAiChatPrompt: mocks.dispatchAiChatPrompt,
 }));
 
-vi.mock('#runtime/ipc-payloads', () => ({
+vi.mock('#runtime/session-processing-lock', () => ({
   claimOrRefreshSessionProcessingLock:
     mocks.claimOrRefreshSessionProcessingLock,
   releaseSessionProcessingLock: mocks.releaseSessionProcessingLock,
