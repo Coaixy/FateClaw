@@ -221,7 +221,7 @@ function HistoryContent() {
     if (!hasSessionWithClient) {
       return;
     }
-    void loadClientProfiles().catch(() => {});
+    void loadClientProfiles({ refresh: false }).catch(() => {});
   }, [hasSessionWithClient, loadClientProfiles]);
 
   // 搜索 + 日期筛选 → 分页，三层都只作用于展示层，不改动 Provider 里的原始数组。

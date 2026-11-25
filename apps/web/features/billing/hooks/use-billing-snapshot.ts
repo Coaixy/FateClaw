@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   BILLING_CHANGED_EVENT,
@@ -8,6 +8,18 @@ import {
   type BillingStatus,
 } from '@/features/billing/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import {
+  getAuthTokenSnapshot,
+  isAuthTokenSnapshotCurrent,
+} from '@/lib/auth-scoped-cache';
+
+interface SnapshotState {
+  userId: string | null;
+  token: string | null;
+  status: BillingStatus | null;
+  settled: boolean;
+  refreshing: boolean;
+}
 
 /**
  * 读取当前登录用户的账单快照。
@@ -18,53 +30,80 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
 export function useBillingSnapshot() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const [status, setStatus] = useState<BillingStatus | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
+  const token = getAuthTokenSnapshot();
+  const initialSnapshot = userId ? billingApi.readStatusSnapshot() : undefined;
+  const [snapshot, setSnapshot] = useState<SnapshotState>(() => ({
+    userId,
+    token,
+    status: initialSnapshot ?? null,
+    settled: initialSnapshot !== undefined,
+    refreshing: false,
+  }));
+  const latestRequest = useRef(0);
 
-  const load = useCallback(async () => {
-    if (!userId) {
-      setStatus(null);
-      setLoadedUserId(null);
-      return;
-    }
+  const load = useCallback(
+    async (refresh: boolean) => {
+      if (!userId || !isAuthTokenSnapshotCurrent(token)) return;
 
-    setRefreshing(true);
+      const request = ++latestRequest.current;
+      const cached = billingApi.readStatusSnapshot();
+      setSnapshot((previous) => {
+        const sameScope = previous.userId === userId && previous.token === token;
+        return {
+          userId,
+          token,
+          status: sameScope ? previous.status : cached ?? null,
+          settled: sameScope ? previous.settled : cached !== undefined,
+          refreshing: refresh || cached === undefined,
+        };
+      });
 
-    try {
-      const nextStatus = await billingApi.status();
-      setStatus(nextStatus);
-      setLoadedUserId(userId);
-    } catch {
-      // 账单接口失败时结束初始骨架，保留旧快照或空态，避免界面一直加载。
-      setLoadedUserId(userId);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [userId]);
+      let nextStatus: BillingStatus | undefined;
+      try {
+        nextStatus = await billingApi.status({ refresh });
+      } catch {
+        // 保留同一用户的上一次余额，在请求失败时结束骨架。
+      }
+      if (
+        request !== latestRequest.current ||
+        !isAuthTokenSnapshotCurrent(token)
+      ) {
+        return;
+      }
+      setSnapshot((previous) => ({
+        userId,
+        token,
+        status: nextStatus ?? previous.status,
+        settled: true,
+        refreshing: false,
+      }));
+    },
+    [token, userId],
+  );
+  const refresh = useCallback(() => load(true), [load]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
+    void load(false);
     if (!userId) return;
     const refreshAfterBillingChanged = () => {
-      void load();
+      void refresh();
     };
     window.addEventListener(BILLING_CHANGED_EVENT, refreshAfterBillingChanged);
     return () => {
+      latestRequest.current += 1;
       window.removeEventListener(
         BILLING_CHANGED_EVENT,
         refreshAfterBillingChanged,
       );
     };
-  }, [load, userId]);
+  }, [load, refresh, userId]);
 
+  const ownSnapshot =
+    snapshot.userId === userId && snapshot.token === token ? snapshot : null;
   return {
-    status,
-    loading: Boolean(userId) && loadedUserId !== userId,
-    refreshing,
-    refresh: load,
+    status: userId ? ownSnapshot?.status ?? initialSnapshot ?? null : null,
+    loading: Boolean(userId && !ownSnapshot?.settled && !initialSnapshot),
+    refreshing: Boolean(userId && ownSnapshot?.refreshing),
+    refresh,
   };
 }

@@ -59,6 +59,7 @@ import {
   useChatSessions,
 } from '@/features/chat/hooks/use-chat-sessions';
 import { useAuth } from '@/features/auth/hooks/use-auth';
+import { clearBillingCache } from '@/features/billing/api';
 import { useBillingSnapshot } from '@/features/billing/hooks/use-billing-snapshot';
 import {
   paipanApi,
@@ -686,6 +687,7 @@ function AiChatWorkspaceContent() {
       setReplyStatus(null);
     } else if (previous !== 'idle' && previous !== phase) {
       setReplyStatus(phase);
+      clearBillingCache();
     }
   }, [chatMessages.run.phase]);
 

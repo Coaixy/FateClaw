@@ -30,10 +30,10 @@ export function useClientProfiles(
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
 
-  const loadProfiles = useCallback(async () => {
+  const loadProfiles = useCallback(async ({ refresh = true } = {}) => {
     setLoading(true);
     try {
-      const res = await clientProfilesApi.list();
+      const res = await clientProfilesApi.list({ refresh });
       const list = res.clients ?? [];
       setProfiles(list);
       return list;

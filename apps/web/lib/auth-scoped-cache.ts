@@ -1,7 +1,6 @@
 type CacheClearer = () => void;
 
 const cacheClearers = new Set<CacheClearer>();
-let authCacheEpoch = 0;
 
 function getBrowserStorage(): Storage | null {
   if (typeof window === 'undefined') {
@@ -13,31 +12,6 @@ function getBrowserStorage(): Storage | null {
   } catch {
     return null;
   }
-}
-
-function fingerprintToken(token: string | null): string {
-  if (!token) {
-    return 'anonymous';
-  }
-
-  let hashA = 2166136261;
-  let hashB = 0;
-  for (let index = 0; index < token.length; index += 1) {
-    const charCode = token.charCodeAt(index);
-    hashA ^= charCode;
-    hashA = Math.imul(hashA, 16777619);
-    hashB = Math.imul(hashB, 31) + charCode;
-  }
-
-  return `${token.length}:${(hashA >>> 0).toString(36)}:${(hashB >>> 0).toString(36)}`;
-}
-
-function getAuthCacheScopeKey() {
-  return `${authCacheEpoch}:${fingerprintToken(getAuthTokenSnapshot())}`;
-}
-
-function registerAuthScopedCache(clear: CacheClearer) {
-  cacheClearers.add(clear);
 }
 
 /**
@@ -62,18 +36,16 @@ export function isAuthTokenSnapshotCurrent(snapshot: string | null): boolean {
 }
 
 /**
- * 清理所有按登录态隔离的前端 in-flight 请求缓存。
- * 同时推进 epoch，让已发出的旧 Promise 即使未结束也不会被后续调用复用。
+ * 清理所有按登录态隔离的请求和结果缓存。旧请求完成后也不能回填缓存。
  *
  * @returns 无返回值。
  */
 export function clearAuthScopedCaches() {
-  authCacheEpoch += 1;
   cacheClearers.forEach((clear) => clear());
 }
 
 /**
- * 写入新的 auth token，并立即清理所有依赖登录态的 in-flight 缓存。
+ * 写入新的 auth token，并立即清理所有依赖登录态的缓存。
  * 登录、注册和换 token 场景都应走这里，避免复用旧用户请求。
  *
  * @param token 新的登录 token。
@@ -85,7 +57,7 @@ export function setAuthToken(token: string) {
 }
 
 /**
- * 移除 auth token，并立即清理所有依赖登录态的 in-flight 缓存。
+ * 移除 auth token，并立即清理所有依赖登录态的缓存。
  * 登出或 401 失效时使用，避免旧请求继续污染当前会话。
  *
  * @returns 无返回值。
@@ -96,37 +68,62 @@ export function removeAuthToken() {
 }
 
 /**
- * 创建按 auth token 指纹和 epoch 分区的 in-flight Promise 缓存。
- * 同一登录态下复用请求，token 切换或全局清理后会进入新的分区。
- *
- * @typeParam T 请求 Promise resolve 后的数据类型。
- * @returns 带 get 和 clear 方法的缓存对象；get 会在当前登录态内复用未完成请求。
+ * 复用当前登录态的在途请求。配置 maxAgeMs 后，将登录用户成功返回的结果短暂保存在内存中。
  */
-export function createAuthScopedInFlightCache<T>() {
-  const requests = new Map<string, Promise<T>>();
+export function createAuthScopedInFlightCache<T>({
+  maxAgeMs = 0,
+}: { maxAgeMs?: number } = {}) {
+  let inFlight: { token: string | null; promise: Promise<T> } | undefined;
+  let snapshot: { token: string; value: T; expiresAt: number } | undefined;
 
   const clear = () => {
-    requests.clear();
+    inFlight = undefined;
+    snapshot = undefined;
   };
 
-  registerAuthScopedCache(clear);
+  const peek = () => {
+    if (
+      snapshot &&
+      isAuthTokenSnapshotCurrent(snapshot.token) &&
+      snapshot.expiresAt > Date.now()
+    ) {
+      return snapshot.value;
+    }
+    snapshot = undefined;
+    return undefined;
+  };
+
+  cacheClearers.add(clear);
 
   return {
-    get(createRequest: () => Promise<T>) {
-      const scopeKey = getAuthCacheScopeKey();
-      const existingRequest = requests.get(scopeKey);
-      if (existingRequest) {
-        return existingRequest;
+    get(createRequest: () => Promise<T>, { refresh = false } = {}) {
+      const token = getAuthTokenSnapshot();
+      if (inFlight?.token === token) {
+        return inFlight.promise;
       }
 
-      const request = createRequest().finally(() => {
-        if (requests.get(scopeKey) === request) {
-          requests.delete(scopeKey);
-        }
-      });
-      requests.set(scopeKey, request);
-      return request;
+      const cached = peek();
+      if (!refresh && cached !== undefined) return Promise.resolve(cached);
+
+      const promise = createRequest()
+        .then((value) => {
+          if (
+            maxAgeMs > 0 &&
+            token &&
+            inFlight?.promise === promise &&
+            isAuthTokenSnapshotCurrent(token)
+          ) {
+            snapshot = { token, value, expiresAt: Date.now() + maxAgeMs };
+          }
+          return value;
+        })
+        .finally(() => {
+          if (inFlight?.promise === promise) inFlight = undefined;
+        });
+      inFlight = { token, promise };
+      return promise;
     },
+    peek,
     clear,
   };
 }

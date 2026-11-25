@@ -306,7 +306,7 @@ export function Sidebar({
     if (!chatAvailable || !hasSessionWithClient) {
       return;
     }
-    void loadClientProfiles().catch(() => {});
+    void loadClientProfiles({ refresh: false }).catch(() => {});
   }, [chatAvailable, hasSessionWithClient, loadClientProfiles]);
 
   useEffect(() => {

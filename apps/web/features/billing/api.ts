@@ -38,13 +38,14 @@ export interface BalanceGrant {
   updated_at: string;
 }
 
-const billingStatusRequestCache =
-  createAuthScopedInFlightCache<BillingStatus>();
+const billingStatusRequestCache = createAuthScopedInFlightCache<BillingStatus>({
+  maxAgeMs: 15_000,
+});
 const usageRequestCache = createAuthScopedInFlightCache<UsageStats>();
 export const BILLING_CHANGED_EVENT = 'fateclaw:billing-changed';
 
 /**
- * 清理账单概览和用量的 in-flight 请求缓存。
+ * 清理账单概览和用量的请求缓存，并刷新已挂载的余额。
  *
  * @returns 无返回值。
  */
@@ -57,9 +58,11 @@ export function clearBillingCache() {
 }
 
 export const billingApi = {
-  status: () =>
-    billingStatusRequestCache.get(() =>
-      requestJson<BillingStatus>('/api/billing'),
+  readStatusSnapshot: billingStatusRequestCache.peek,
+  status: ({ refresh = true } = {}) =>
+    billingStatusRequestCache.get(
+      () => requestJson<BillingStatus>('/api/billing'),
+      { refresh },
     ),
   usage: () =>
     usageRequestCache.get(() => requestJson<UsageStats>('/api/billing/usage')),
