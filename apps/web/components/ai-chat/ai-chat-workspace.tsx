@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  lazy,
   Suspense,
   type ClipboardEvent,
   type ReactNode,
@@ -11,8 +12,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
   AlertCircle,
@@ -21,23 +21,22 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleStop,
-  Compass,
-  MessageCircle,
   Sparkles,
-  Users,
 } from 'lucide-react';
 
-import { AppShell } from '@/components/app-shell';
 import {
   AiChatComposer,
   shouldSendOnEnter,
 } from '@/components/ai-chat/ai-chat-composer';
 import { ModelSelector } from '@/components/ai-chat/model-selector';
 import { useModelSelection } from '@/features/model-settings/use-model-selection';
-import { AiChatMessageList } from '@/components/ai-chat/ai-chat-message-list';
-import { OnboardingGuideDialog } from '@/components/ai-chat/onboarding-guide-dialog';
+import {
+  AiChatEmptyState,
+  NewChatStartChoice,
+  type NewChatStartMode,
+} from '@/components/ai-chat/ai-chat-start';
+import { ChatLoadingState } from '@/components/chat/chat-loading-state';
 import { PaipanSkillRail } from '@/components/ai-chat/paipan-skill-rail';
-import { useOnboardingGuideStatus } from '@/components/ai-chat/use-onboarding-guide-status';
 import {
   shouldPromptForPastedBoard,
   type UserPastedBoardInput,
@@ -68,17 +67,21 @@ import {
 } from '@/features/paipan/api';
 import { buildLoginHref } from '@/lib/auth-redirect';
 import { useI18n } from '@/lib/i18n';
-import { buildGuideReturnQuery } from '@/lib/return-to';
 import { useToast } from '@/lib/use-toast';
 
 type PaipanSheetMode = 'pre-chat' | 'current-session';
-type NewChatStartMode = 'choice' | 'paipan' | 'plain';
 type PasteChoiceSelection = {
   readonly start: number;
   readonly end: number;
 };
 type PastedBoardDraftSource = 'composer' | 'paste' | 'manual';
 type ReplyStatus = 'completed' | 'stopped' | 'failed';
+const AiChatMessageList = lazy(() =>
+  import('./ai-chat-message-list').then(({ AiChatMessageList }) => ({
+    default: AiChatMessageList,
+  })),
+);
+
 const PaipanSheet = dynamic(
   () =>
     import('@/components/ai-chat/paipan-sheet').then(
@@ -274,35 +277,20 @@ function pasteChoiceReducer(
   }
 }
 
-export function AiChatWorkspace() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-dvh flex items-center justify-center">
-          <div className="flex items-center gap-1">
-            {[0, 1, 2].map((index) => (
-              <div
-                key={index}
-                className="w-2 h-2 rounded-full bg-primary animate-thinking-dot"
-                style={{ animationDelay: `${index * 0.2}s` }}
-              />
-            ))}
-          </div>
-        </div>
-      }
-    >
-      <AppShell wide noPadding requireAuth={false}>
-        <AiChatWorkspaceContent />
-      </AppShell>
-    </Suspense>
-  );
-}
-
-function AiChatWorkspaceContent() {
+export function AiChatWorkspace({
+  startMode: newChatStartMode,
+  setStartMode: setNewChatStartMode,
+  clientId,
+  onOpenGuide,
+}: {
+  startMode: NewChatStartMode;
+  setStartMode: (mode: NewChatStartMode) => void;
+  clientId: string | null;
+  onOpenGuide?: () => void;
+}) {
   const { t } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const { status: billingStatus, loading: billingLoading } =
     useBillingSnapshot();
@@ -328,10 +316,6 @@ function AiChatWorkspaceContent() {
     },
     [createSession, adoptDraft],
   );
-  // 空会话只控制“选择开始方式 / 先排盘 / 直接提问”三种首屏状态；
-  // 真正的会话仍在确认盘面或发送首条消息时才创建。
-  const [newChatStartMode, setNewChatStartMode] =
-    useState<NewChatStartMode>('choice');
   // 排盘弹层开合配置（模式 / 预选术数 / 锁定 / 预选客户 id）合并为单一 reducer。
   const [paipanSheetConfig, dispatchPaipanSheetConfig] = useReducer(
     paipanSheetConfigReducer,
@@ -387,10 +371,6 @@ function AiChatWorkspaceContent() {
     !selectedSession || chatMessages.loadedSessionId === selectedSession;
   const continuationBlocked =
     selectedSessionMessagesLoaded && chatMessages.continuationBlocked;
-  const onboardingGuide = useOnboardingGuideStatus({
-    enabled: chatAvailable && !authLoading,
-  });
-
   const requestLogin = useCallback(
     (draft?: string) => {
       const pendingText = draft?.trim();
@@ -401,13 +381,6 @@ function AiChatWorkspaceContent() {
     },
     [router],
   );
-
-  useEffect(() => {
-    if (!selectedSession) {
-      // revision 能区分连续点击“新建对话”的情况，即使会话 id 一直为空也要回到首屏。
-      setNewChatStartMode('choice');
-    }
-  }, [selectedSession, selectedSessionRevision]);
 
   useEffect(() => {
     if (!chatAvailable || typeof window === 'undefined') {
@@ -422,7 +395,7 @@ function AiChatWorkspaceContent() {
     window.sessionStorage.removeItem(PENDING_CHAT_INPUT_KEY);
     setInput((current) => current || pendingText);
     setNewChatStartMode('plain');
-  }, [chatAvailable]);
+  }, [chatAvailable, setInput, setNewChatStartMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -731,7 +704,6 @@ function AiChatWorkspaceContent() {
         return;
       }
 
-      setNewChatStartMode('paipan');
       dispatchPaipanSheetConfig({ type: 'openPreChat', skill });
     },
     [authLoading],
@@ -740,15 +712,6 @@ function AiChatWorkspaceContent() {
   const openSkillMarket = useCallback(() => {
     router.push('/discover');
   }, [router]);
-
-  const openSkillMarketFromGuide = useCallback(() => {
-    onboardingGuide.saveStep('skill');
-    router.push(`/discover?${buildGuideReturnQuery('/ai-chat')}`);
-  }, [onboardingGuide, router]);
-
-  const retryOnboardingGuide = useCallback(() => {
-    void onboardingGuide.refresh();
-  }, [onboardingGuide]);
 
   const openCurrentSessionPaipan = useCallback(
     (skill?: string) => {
@@ -769,28 +732,24 @@ function AiChatWorkspaceContent() {
       setNewChatStartMode('choice');
     }
     dispatchPaipanSheetConfig({ type: 'close' });
-  }, [paipanSheetConfig.mode, selectedSession]);
+  }, [paipanSheetConfig.mode, selectedSession, setNewChatStartMode]);
 
   // 客户卡片"发起排盘"会带 ?client= 进入：自动打开排盘并预选该客户（默认八字，可改）。
-  const clientParamHandledRef = useRef(false);
   useEffect(() => {
-    if (clientParamHandledRef.current || authLoading) {
-      return;
-    }
-    const clientId = searchParams.get('client');
-    if (!clientId) {
-      return;
-    }
-    clientParamHandledRef.current = true;
+    if (!clientId || authLoading) return;
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('client') !== clientId) return;
+
     setNewChatStartMode('paipan');
     dispatchPaipanSheetConfig({ type: 'openForClient', clientId });
-    // 清掉 URL 上的 client 参数，避免刷新或重渲染重复触发。
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('client');
-      window.history.replaceState(null, '', `${url.pathname}${url.search}`);
-    }
-  }, [authLoading, searchParams]);
+    url.searchParams.delete('client');
+    window.history.replaceState(
+      null,
+      '',
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [authLoading, clientId, setNewChatStartMode]);
 
   const handleOpenComposerPastedBoard = useCallback(() => {
     if (authLoading) {
@@ -861,9 +820,7 @@ function AiChatWorkspaceContent() {
   const selectedSessionCenteredComposer = (
     <div className="space-y-2.5">
       {composer}
-      {onboardingGuide.shouldShowContinueEntry && (
-        <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
-      )}
+      {onOpenGuide && <OnboardingGuideEntry onOpen={onOpenGuide} />}
     </div>
   );
   const newChatCenteredContent =
@@ -889,9 +846,7 @@ function AiChatWorkspaceContent() {
       <div className="space-y-2.5">
         <NewChatBackButton onBack={() => setNewChatStartMode('choice')} />
         {composer}
-        {onboardingGuide.shouldShowContinueEntry && (
-          <OnboardingGuideEntry onOpen={onboardingGuide.openGuide} />
-        )}
+        {onOpenGuide && <OnboardingGuideEntry onOpen={onOpenGuide} />}
       </div>
     );
   const centeredContent = selectedSession
@@ -911,8 +866,6 @@ function AiChatWorkspaceContent() {
       : newChatStartMode === 'paipan'
         ? t('aiChat.start.paipanStepDescription')
         : t('aiChat.start.plainStepDescription');
-  // 新建对话首屏已有明确的分支说明，不再叠加旧版“可直接问或手动排盘”提示。
-  const emptyStateHint = selectedSession ? undefined : '';
   const emptyStateFrameClassName = !selectedSession
     ? newChatStartMode === 'choice'
       ? 'justify-center pb-12'
@@ -949,25 +902,33 @@ function AiChatWorkspaceContent() {
             chatMessages.sending ? '' : 'scroll-smooth'
           }`}
         >
-          <AiChatMessageList
-            messages={displayMessages}
-            loading={chatMessages.loading}
-            sending={chatMessages.sending}
-            progressLabel={progressLabel}
-            replySlow={chatMessages.replySlow}
-            onRetry={handleRetrySending}
-            selectedSession={selectedSession}
-            switchingSession={switchingSession}
-            loadingOlder={chatMessages.loadingOlder}
-            showCenteredComposer={showCenteredComposer}
-            latestMessageNotice={latestMessageNotice}
-            composer={showCenteredComposer ? centeredContent : null}
-            emptyStateTitle={emptyStateTitle}
-            emptyStateDescription={emptyStateDescription}
-            emptyStateHint={emptyStateHint}
-            emptyStateFrameClassName={emptyStateFrameClassName}
-            emptyStateMaxWidthClassName="max-w-xl"
-          />
+          {showCenteredComposer ? (
+            <AiChatEmptyState
+              title={emptyStateTitle}
+              description={emptyStateDescription}
+              hint={selectedSession ? t('aiChat.empty.selectedHint') : undefined}
+              frameClassName={emptyStateFrameClassName}
+            >
+              {centeredContent}
+            </AiChatEmptyState>
+          ) : (
+            <Suspense fallback={<ChatLoadingState />}>
+              <AiChatMessageList
+                messages={displayMessages}
+                loading={chatMessages.loading}
+                sending={chatMessages.sending}
+                progressLabel={progressLabel}
+                replySlow={chatMessages.replySlow}
+                onRetry={handleRetrySending}
+                selectedSession={selectedSession}
+                switchingSession={switchingSession}
+                loadingOlder={chatMessages.loadingOlder}
+                showCenteredComposer={false}
+                latestMessageNotice={latestMessageNotice}
+                composer={null}
+              />
+            </Suspense>
+          )}
           {!showCenteredComposer && replyStatus && (
             <AiChatFloatingStatus status={replyStatus} />
           )}
@@ -1050,131 +1011,6 @@ function AiChatWorkspaceContent() {
           }
         />
       )}
-
-      <OnboardingGuideDialog
-        open={onboardingGuide.open}
-        step={onboardingGuide.step}
-        modelReady={onboardingGuide.modelReady}
-        modelMembershipRequired={onboardingGuide.modelMembershipRequired}
-        skillReady={onboardingGuide.skillReady}
-        modelLoading={onboardingGuide.modelLoading}
-        skillLoading={onboardingGuide.skillLoading}
-        modelError={onboardingGuide.modelError}
-        skillError={onboardingGuide.skillError}
-        hasAnyInstalledSkill={onboardingGuide.hasAnyInstalledSkill}
-        onClose={onboardingGuide.dismissGuide}
-        onSaveStep={onboardingGuide.saveStep}
-        onRetry={retryOnboardingGuide}
-        onOpenSkillMarket={openSkillMarketFromGuide}
-        onComplete={onboardingGuide.completeGuide}
-      />
-    </div>
-  );
-}
-
-/**
- * 新建对话的首步选择，只决定是否先排盘，不提前创建会话。
- *
- * 卡片下方附技能开发 / 客户档案入口：这两个低频管理页从侧栏移入此处，
- * 让侧栏保持「新建对话 + 最近对话」的单一焦点。
- *
- * @param props.onChoosePaipan 进入术数选择步骤。
- * @param props.onChoosePlain 进入普通问题输入步骤。
- * @returns 两个互斥开始方式的操作区。
- */
-function NewChatStartChoice({
-  onChoosePaipan,
-  onChoosePlain,
-}: {
-  onChoosePaipan: () => void;
-  onChoosePlain: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <div className="grid w-full gap-2.5">
-      <button
-        type="button"
-        onClick={onChoosePaipan}
-        className="btn-tactile group flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-primary/25 bg-primary/6 px-4 py-3 text-left text-ink transition-all hover:border-primary/40 hover:bg-primary/9 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/12 text-primary">
-          <Compass size={19} strokeWidth={1.9} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-semibold">
-            {t('aiChat.start.paipan')}
-          </span>
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
-            {t('aiChat.start.paipanDescription')}
-          </span>
-        </span>
-        <ChevronRight
-          size={16}
-          className="shrink-0 text-primary/60 transition-transform group-hover:translate-x-0.5"
-        />
-      </button>
-
-      <button
-        type="button"
-        onClick={onChoosePlain}
-        className="btn-tactile group flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-4 py-3 text-left text-ink transition-all hover:border-primary/35 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <MessageCircle size={18} strokeWidth={1.9} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-semibold">
-            {t('aiChat.start.plain')}
-          </span>
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
-            {t('aiChat.start.plainDescription')}
-          </span>
-        </span>
-        <ChevronRight
-          size={16}
-          className="shrink-0 text-primary/60 transition-transform group-hover:translate-x-0.5"
-        />
-      </button>
-
-      {/* 次级入口：与主卡片同结构（图标色块+标题+副标题）的双列卡片，
-          高度略矮（64px vs 72px）保留层级差。低频管理页从侧栏移入此处。 */}
-      <div className="mt-1 grid grid-cols-2 gap-2.5">
-        <Link
-          href="/studio"
-          className="btn-tactile group flex min-h-[64px] items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-3.5 py-3 text-left text-ink transition-all hover:border-primary/35 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-          aria-label={t('hub.studio')}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Sparkles size={16} strokeWidth={1.9} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-semibold">
-              {t('hub.studio')}
-            </span>
-            <span className="mt-0.5 block truncate text-[11px] leading-snug text-muted">
-              {t('hub.studioDescription')}
-            </span>
-          </span>
-        </Link>
-        <Link
-          href="/clients"
-          className="btn-tactile group flex min-h-[64px] items-center gap-3 rounded-lg border border-hairline bg-surface-raised px-3.5 py-3 text-left text-ink transition-all hover:border-primary/35 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35"
-          aria-label={t('hub.clients')}
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Users size={16} strokeWidth={1.9} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-semibold">
-              {t('hub.clients')}
-            </span>
-            <span className="mt-0.5 block truncate text-[11px] leading-snug text-muted">
-              {t('hub.clientsDescription')}
-            </span>
-          </span>
-        </Link>
-      </div>
     </div>
   );
 }

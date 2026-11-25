@@ -21,7 +21,7 @@ import {
   Search,
 } from 'lucide-react';
 
-import { BaguaRing } from '../brand/brand-marks';
+import { AiChatEmptyState } from './ai-chat-start';
 import { ArtifactDebug } from '../chat/artifact-debug';
 import { ArtifactRenderer } from '../chat/artifact-renderer';
 import { ChatLoadingState } from '../chat/chat-loading-state';
@@ -174,38 +174,15 @@ export const AiChatMessageList = memo(function AiChatMessageList({
         : t('aiChat.empty.newHint'));
 
     return (
-      <div
-        className={`flex h-full flex-col items-center px-3 ${
-          emptyStateFrameClassName ?? 'justify-center'
-        }`}
+      <AiChatEmptyState
+        title={title}
+        description={description}
+        hint={hint}
+        frameClassName={emptyStateFrameClassName}
+        maxWidthClassName={emptyStateMaxWidthClassName}
       >
-        <div
-          className={`w-full ${emptyStateMaxWidthClassName ?? 'max-w-xl'} flex flex-col items-center gap-3.5`}
-        >
-          {/* 空态图形对齐首页:同款先天八卦环,建立跨页面统一的品牌图形语言。 */}
-          <BaguaRing className="mb-2 h-24 w-24 text-primary opacity-[0.22]" />
-          {(title || description) && (
-            <div className="text-center space-y-1">
-              {title && (
-                <h1 className="font-display text-[22px] sm:text-[26px] lg:text-[28px] font-semibold tracking-tight text-ink">
-                  {title}
-                </h1>
-              )}
-              {description && (
-                <p className="text-[12px] sm:text-[13px] text-muted">
-                  {description}
-                </p>
-              )}
-            </div>
-          )}
-          <div className="w-full">{composer}</div>
-          {hint && (
-            <p className="text-center text-[10px] sm:text-[11px] text-muted/50 select-none">
-              {hint}
-            </p>
-          )}
-        </div>
-      </div>
+        {composer}
+      </AiChatEmptyState>
     );
   }
 

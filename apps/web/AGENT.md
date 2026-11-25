@@ -73,7 +73,7 @@ When investigating behavior that works locally but fails in production, first id
 
 ### Route pages
 
-- `app/page.tsx`: Root entry point, directly rendering the new-conversation state in AI Chat.
+- `app/page.tsx`: Root entry point, statically rendering the navigation and new-conversation choices.
 - `app/login/page.tsx`: Login and registration.
 - `app/dashboard/page.tsx`: Account overview, bindings, Soul, plans, and main entry points.
 - `app/chat/page.tsx`: Chat history.
@@ -103,7 +103,7 @@ Backend API changes usually require corresponding changes here.
 
 ### AI Chat workspace
 
-The current main product entry point is `components/ai-chat/ai-chat-workspace.tsx`:
+The homepage and `/ai-chat` both use `components/ai-chat/ai-chat-entry.tsx`. It loads `ai-chat-workspace.tsx` on interaction, a session or client deep link, or a pending draft after login.
 
 - Regular chat, user-pasted charts, manual chart calculation, and simple mode all run through AI Chat sessions.
 - A successful `chatSessionsApi.send()` usually means only that the backend has queued the request, returning `accepted` and `request_id`. It is not the final reply.

@@ -1,5 +1,5 @@
-import { AiChatWorkspace } from '@/components/ai-chat/ai-chat-workspace';
+import { AiChatEntry } from '@/components/ai-chat/ai-chat-entry';
 
 export default function AiChatPage() {
-  return <AiChatWorkspace />;
+  return <AiChatEntry />;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Megaphone } from 'lucide-react';
 import { useAnnouncements } from '@/features/announcements/use-announcements';
@@ -12,11 +12,25 @@ import {
 import { useI18n } from '@/lib/i18n';
 import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
-import { AnnouncementMarkdown } from './announcement-markdown';
 import { AnnouncementPoll } from './announcement-poll';
 
+const AnnouncementMarkdown = lazy(() =>
+  import('./announcement-markdown').then(
+    ({ AnnouncementMarkdown }) => ({ default: AnnouncementMarkdown }),
+    () => ({ default: AnnouncementPlainText }),
+  ),
+);
+
+function AnnouncementPlainText({ children }: { children: string }) {
+  return (
+    <p className="whitespace-pre-wrap break-words text-sm leading-7 text-body-strong">
+      {children}
+    </p>
+  );
+}
+
 export function AnnouncementDialog({ enabled }: { enabled: boolean }) {
-  const { formatDate } = useI18n();
+  const { formatDate, t } = useI18n();
   const { items, refresh, updatePoll, viewer } = useAnnouncements(enabled);
   const [, setStorageRevision] = useState(0);
   const [available, setAvailable] = useState(false);
@@ -111,7 +125,15 @@ export function AnnouncementDialog({ enabled }: { enabled: boolean }) {
           })}
         </time>
         <div className="mt-5 border-t border-hairline-soft pt-2">
-          <AnnouncementMarkdown>{current.body_markdown}</AnnouncementMarkdown>
+          <Suspense
+            fallback={
+              <p role="status" className="py-3 text-sm text-muted">
+                {t('common.loading')}
+              </p>
+            }
+          >
+            <AnnouncementMarkdown>{current.body_markdown}</AnnouncementMarkdown>
+          </Suspense>
         </div>
         {current.poll && (
           <AnnouncementPoll
