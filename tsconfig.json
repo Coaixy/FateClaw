@@ -5,6 +5,7 @@
     "moduleResolution": "NodeNext",
     "customConditions": ["development"],
     "lib": ["ES2022"],
+    "types": ["node"],
     "outDir": "./dist",
     "rootDir": "./apps/api/src",
     "strict": true,

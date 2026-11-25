@@ -17,19 +17,19 @@
   },
   "dependencies": {
     "@fateclaw/contracts": "workspace:*",
-    "@earendil-works/pi-ai": "1.3.0",
-    "@earendil-works/pi-coding-agent": "1.3.0",
-    "ioredis": "^5.10.1",
-    "pg": "^8.20.0",
-    "tyme4ts": "^1.5.3",
-    "typebox": "^1.3.23"
+    "@earendil-works/pi-ai": "1.6.0",
+    "@earendil-works/pi-coding-agent": "1.6.0",
+    "ioredis": "^6.1.0",
+    "pg": "^8.23.1",
+    "tyme4ts": "^1.5.6",
+    "typebox": "^1.4.7"
   },
   "devDependencies": {
-    "@types/node": "^22.10.7",
-    "@types/pg": "^8.20.0",
-    "typescript": "^5.7.3"
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "typescript": "^6.0.3"
   },
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   }
 }

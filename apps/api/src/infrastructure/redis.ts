@@ -18,6 +18,7 @@ export async function connectRedis(): Promise<void> {
   }
 
   const commands = new Redis(url, {
+    protocol: 2,
     maxRetriesPerRequest: 1,
     commandTimeout: 5_000,
     connectTimeout: 5_000,

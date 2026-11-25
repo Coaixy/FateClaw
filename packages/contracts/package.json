@@ -104,10 +104,10 @@
     "build": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "@types/node": "22.19.15",
-    "typescript": "^5.7.0"
+    "@types/node": "^24.19.2",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@rgrove/parse-xml": "5.0.0"
+    "@rgrove/parse-xml": "5.2.0"
   }
 }

@@ -58,7 +58,7 @@ For example, choose Bazi, enter a birth date and time, and preview the four pill
 
 #### Requirements
 
-- Node.js **24** and the package-manager version pinned in `package.json` (**pnpm 11.5.0**).
+- Node.js **24.15+** (24.x) and the package-manager version pinned in `package.json` (**pnpm 11.5.0**).
 - PostgreSQL and Redis. The included Docker Compose file provides PostgreSQL 18 and Redis 7 for local development.
 - A model provider for AI interpretation. You can preview deterministic charts without a provider or a user account.
 - The Aliyun Dypnsapi SMS integration for new account registration and password recovery. Registration currently requires a mainland China mobile number.
@@ -225,7 +225,7 @@ flowchart LR
 
 #### 环境要求
 
-- Node.js **24**，以及 `package.json` 固定的包管理器版本：**pnpm 11.5.0**。
+- Node.js **24.15+**（24.x），以及 `package.json` 固定的包管理器版本 **pnpm 11.5.0**。
 - PostgreSQL 和 Redis；仓库的 Docker Compose 提供本地开发用的 PostgreSQL 18 与 Redis 7。
 - AI 解读需要模型服务；确定性排盘预览无需配置模型，也无需用户账号。
 - 新账号注册和找回密码需要阿里云号码认证短信服务（Dypnsapi）；当前注册使用中国大陆手机号。

@@ -4,7 +4,7 @@ Run commands from the repository root. Script names and package-manager requirem
 
 ## Prerequisites
 
-- Node.js 24, matching `.nvmrc` and the repository's `>=24 <25` engine declaration.
+- Node.js 24.15 or later in the 24.x series, matching `.nvmrc` and the repository's engine declaration.
 - The package-manager version pinned in `package.json` (currently pnpm 11.5.0).
 - PostgreSQL and Redis, either provided locally or through Docker Compose.
 - A model provider account for AI interpretation. Deterministic chart calculation does not require one.
@@ -73,6 +73,8 @@ The host resolves model settings into a request-level `llmRuntime` snapshot. Do 
 | `pnpm test` | Full Vitest suite |
 | `pnpm run typecheck` | Workspace type checks |
 | `pnpm run lint` | API lint checks |
+| `pnpm --filter fateclaw-web lint` | Next.js and React Hooks lint checks for the user site |
+| `pnpm --filter fateclaw-admin lint` | Next.js and React Hooks lint checks for the admin site |
 | `pnpm run build:all` | Build shared contracts, API, runtime, and both sites |
 
 The lightweight entry initializes the database, Redis, and HTTP server but skips IPC worker and background startup. Use full development mode to validate the complete AI Chat lifecycle.
@@ -83,7 +85,7 @@ Use the pinned pnpm version to update dependencies and commit `pnpm-lock.yaml`
 together with the package manifests and workspace overrides. Check both
 `pnpm audit` and `pnpm audit --prod`; the latter excludes development tools.
 
-The Next.js lint dependency chain currently uses `braces@3.0.3`, which has no
+The `@next/eslint-plugin-next` dependency chain currently uses `braces@3.0.3`, which has no
 published upstream fix for
 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
 The exact-version patch in `patches/braces@3.0.3.patch` limits the recursive
@@ -93,8 +95,11 @@ also exercise ordinary Next.js lint globs. pnpm applies this patch through
 source and runtime archives. Replace it with an upstream release once that
 release passes the same regression tests.
 
-`pnpm audit` still reports this advisory because the patched package retains
-its upstream version. Review that result alongside the patch and its tests.
+Version-based advisory checks may flag the patched package because it retains
+its upstream version. Review those results alongside the patch and its tests.
+
+Use TypeScript 6.0 across the workspace while typescript-eslint requires the
+JavaScript compiler API. Keep `@types/node` on the Node 24 release line.
 
 ## Backend imports
 

@@ -45,18 +45,24 @@
     "pack": "bash scripts/pack.sh"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.5",
-    "@vitest/coverage-v8": "^4.1.12",
-    "concurrently": "^9.2.4",
-    "eslint": "^9.39.5",
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.6",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.1.1",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.15.0",
     "eslint-plugin-no-catch-all": "^1.1.0",
-    "globals": "^15.15.0",
-    "typescript-eslint": "^8.67.0",
-    "vite": "^8.3.4",
-    "vitest": "^4.1.12"
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.74.0",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   },
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24.15 <25"
   },
   "packageManager": "pnpm@11.5.0+sha512.dbfcc4f81cf48597afd4bc391ffdf12c11f1a9fb83a395bfa6b0a2d9cc2fd8ffebafdb1ccbd529632153f793904c2615b7f09fe1a345473fd1c35845172a8eb1"
 }

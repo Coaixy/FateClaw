@@ -5,14 +5,12 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-let require = createRequire(new URL('../apps/web/package.json', import.meta.url));
-for (const name of ['eslint-config-next', '@next/eslint-plugin-next', 'fast-glob', 'micromatch']) {
-  require = createRequire(require.resolve(name));
-}
-const braces = require('braces');
-const globRequire = createRequire(createRequire(new URL('../apps/web/package.json', import.meta.url)).resolve('eslint-config-next'));
-const pluginRequire = createRequire(globRequire.resolve('@next/eslint-plugin-next'));
+const require = createRequire(import.meta.url);
+const pluginRequire = createRequire(require.resolve('@next/eslint-plugin-next'));
 const fastGlob = pluginRequire('fast-glob');
+const globRequire = createRequire(pluginRequire.resolve('fast-glob'));
+const matchRequire = createRequire(globRequire.resolve('micromatch'));
+const braces = matchRequire('braces');
 
 describe('braces dependency security patch', () => {
   it.each(['compile', 'expand', 'stringify'])('bounds %s recursion for string and direct AST inputs', (operation) => {
