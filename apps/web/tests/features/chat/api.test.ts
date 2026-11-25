@@ -5,6 +5,7 @@ import {
   buildChatSessionStreamUrl,
   chatSessionsApi,
 } from '../../../features/chat/api';
+import { clientProfilesApi } from '../../../features/chat/client-profiles-api';
 import {
   getAiChatStreamReconnectDelay,
   getAiChatStreamErrorMessage,
@@ -14,6 +15,7 @@ import {
 } from '../../../features/chat/hooks/use-chat-messages';
 
 import { requestJson } from '@/lib/http/client';
+import { clearAuthScopedCaches } from '@/lib/auth-scoped-cache';
 
 vi.mock('@/lib/http/client', () => ({
   getApiBase: () => '',
@@ -27,6 +29,57 @@ const pastedBoard: UserPastedBoardInput = {
   content: '乾造：甲子 乙丑 丙寅 丁卯',
   question: '看看事业',
 };
+
+describe('conversation and client list snapshots', () => {
+  afterEach(() => {
+    clearAuthScopedCaches();
+    vi.unstubAllGlobals();
+    requestJsonMock.mockReset();
+  });
+
+  it('reuses the active list between routes until a session write completes', async () => {
+    vi.stubGlobal('window', {
+      localStorage: { getItem: () => 'test-user-token' },
+    });
+    const initial = [{ id: 'session', title: 'Before' }];
+    requestJsonMock
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce([{ id: 'session', title: 'After' }]);
+
+    await expect(chatSessionsApi.list()).resolves.toBe(initial);
+    expect(chatSessionsApi.readListSnapshot()).toBe(initial);
+    await expect(chatSessionsApi.list()).resolves.toBe(initial);
+    expect(requestJsonMock).toHaveBeenCalledTimes(1);
+
+    await chatSessionsApi.update('session', 'After');
+    expect(chatSessionsApi.readListSnapshot()).toBeUndefined();
+    await expect(chatSessionsApi.list()).resolves.toEqual([
+      { id: 'session', title: 'After' },
+    ]);
+    expect(requestJsonMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('shares client names between routes and fetches fresh data after edits', async () => {
+    vi.stubGlobal('window', {
+      localStorage: { getItem: () => 'test-user-token' },
+    });
+    const initial = { clients: [{ id: 'client', name: 'Before' }] };
+    const updated = { clients: [{ id: 'client', name: 'After' }] };
+    requestJsonMock
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(updated.clients[0])
+      .mockResolvedValueOnce(updated);
+
+    await clientProfilesApi.list({ refresh: false });
+    await expect(clientProfilesApi.list({ refresh: false })).resolves.toBe(initial);
+    expect(requestJsonMock).toHaveBeenCalledTimes(1);
+
+    await clientProfilesApi.update('client', { name: 'After' });
+    await expect(clientProfilesApi.list({ refresh: false })).resolves.toBe(updated);
+    expect(requestJsonMock).toHaveBeenCalledTimes(3);
+  });
+});
 
 describe('chatSessionsApi.send', () => {
   beforeEach(() => {

@@ -10,12 +10,16 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, SetStateAction } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { chatSessionsApi, ChatSession } from '@/features/chat/api';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 import { SessionShareDialog } from '@/components/ai-chat/session-share-dialog';
+import {
+  getAuthTokenSnapshot,
+  isAuthTokenSnapshotCurrent,
+} from '@/lib/auth-scoped-cache';
 
 interface ChatSessionsContextValue {
   chatAvailable: boolean;
@@ -27,7 +31,9 @@ interface ChatSessionsContextValue {
     onCreated?: (session: ChatSession) => void,
   ) => Promise<ChatSession | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
-  archiveSession: (sessionId: string) => Promise<void>;
+  archiveSession: (sessionId: string) => Promise<boolean>;
+  archiveRevision: number;
+  pendingArchiveIds: ReadonlySet<string>;
   shareSession: (sessionId: string) => void;
   touchSession: (sessionId: string, patch: Partial<ChatSession>) => void;
   loading: boolean;
@@ -36,6 +42,34 @@ interface ChatSessionsContextValue {
 const ChatSessionsContext = createContext<ChatSessionsContextValue | null>(
   null,
 );
+const EMPTY_SESSIONS: ChatSession[] = [];
+
+type ArchiveStatus = 'pending' | 'archived' | 'failed';
+type ArchiveListener = (
+  sessionId: string,
+  ownerId: string,
+  status: ArchiveStatus,
+) => void;
+
+// AppShell can remount during navigation while an archive request is pending.
+const pendingArchives = new Map<string, string>();
+const archiveListeners = new Set<ArchiveListener>();
+
+function readPendingArchives(ownerId: string): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const [sessionId, owner] of pendingArchives) {
+    if (owner === ownerId) ids.add(sessionId);
+  }
+  return ids;
+}
+
+function publishArchiveStatus(
+  sessionId: string,
+  ownerId: string,
+  status: ArchiveStatus,
+) {
+  archiveListeners.forEach((listener) => listener(sessionId, ownerId, status));
+}
 
 function mergeSessionPatch(
   sessions: ChatSession[],
@@ -128,12 +162,6 @@ function buildNewChatTarget() {
   return `/ai-chat?${NEW_CHAT_QUERY_KEY}=${nonce}`;
 }
 
-function hasStoredAuthToken() {
-  return (
-    typeof window !== 'undefined' && Boolean(localStorage.getItem('token'))
-  );
-}
-
 /**
  * 判断是否应该清空当前 AI Chat 会话选择。
  *
@@ -158,8 +186,43 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const token = getAuthTokenSnapshot();
+  const archiveOwnerId = user?.id ?? token ?? '';
 
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [sessionList, setSessionList] = useState(() => ({
+    ownerId: archiveOwnerId,
+    token,
+    sessions: authLoading
+      ? EMPTY_SESSIONS
+      : chatSessionsApi.readListSnapshot() ?? EMPTY_SESSIONS,
+  }));
+  const activeSessions =
+    sessionList.ownerId === archiveOwnerId && sessionList.token === token
+      ? sessionList.sessions
+      : EMPTY_SESSIONS;
+  const setActiveSessions = useCallback(
+    (update: SetStateAction<ChatSession[]>) => {
+      if (!isAuthTokenSnapshotCurrent(token)) return;
+      setSessionList((previous) => {
+        const sameOwner =
+          previous.ownerId === archiveOwnerId && previous.token === token;
+        const current = sameOwner ? previous.sessions : EMPTY_SESSIONS;
+        const sessions = typeof update === 'function' ? update(current) : update;
+        if (sameOwner && sessions === current) return previous;
+        return { ownerId: archiveOwnerId, token, sessions };
+      });
+    },
+    [archiveOwnerId, token],
+  );
+  const [pendingArchiveIds, setPendingArchiveIds] = useState<
+    ReadonlySet<string>
+  >(() => readPendingArchives(archiveOwnerId));
+  const [archiveRevision, setArchiveRevision] = useState(0);
+  // Keep pending rows in their original positions so a failure only reveals its own row.
+  const sessions = useMemo(
+    () => activeSessions.filter((session) => !pendingArchiveIds.has(session.id)),
+    [activeSessions, pendingArchiveIds],
+  );
   const [shareTarget, setShareTarget] = useState<{
     sessionId: string;
     ownerId: string;
@@ -174,13 +237,14 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const selectedSessionRevision = selection.revision;
   const [loading, setLoading] = useState(false);
 
-  const latestSessionsRequestRef = useRef(0);
-  const selectionRevisionRef = useRef(0);
+  const latestSessionsRequestRef = useRef<Set<string> | null>(null);
+  const selectionRef = useRef(selection);
 
   // 切换/同步选中会话：替换 id 并自增 revision，保持「每次选择都触发一次显示切换」语义。
   const applySelectedSession = useCallback((id: string) => {
-    selectionRevisionRef.current += 1;
-    setSelection((previous) => ({ id, revision: previous.revision + 1 }));
+    const next = { id, revision: selectionRef.current.revision + 1 };
+    selectionRef.current = next;
+    setSelection(next);
   }, []);
 
   useEffect(() => {
@@ -209,48 +273,39 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!user && !hasStoredAuthToken()) {
-      setSessions([]);
+    if (!user && !token) return;
+
+    const cached = chatSessionsApi.readListSnapshot();
+    if (cached !== undefined) {
+      setActiveSessions(cached);
+      setLoading(false);
       return;
     }
 
-    const requestId = latestSessionsRequestRef.current + 1;
-    latestSessionsRequestRef.current = requestId;
+    const archivedDuringLoad = new Set<string>();
+    latestSessionsRequestRef.current = archivedDuringLoad;
     setLoading(true);
 
     try {
       const list = await chatSessionsApi.list();
-      if (latestSessionsRequestRef.current !== requestId) {
+      if (
+        latestSessionsRequestRef.current !== archivedDuringLoad ||
+        !isAuthTokenSnapshotCurrent(token)
+      ) {
         return;
       }
-      setSessions(list);
+      setActiveSessions(
+        list.filter((session) => !archivedDuringLoad.has(session.id)),
+      );
     } catch {
-      if (latestSessionsRequestRef.current !== requestId) {
-        return;
-      }
+      // Keep the last loaded list if a refresh fails.
     } finally {
-      if (latestSessionsRequestRef.current === requestId) {
+      if (latestSessionsRequestRef.current === archivedDuringLoad) {
+        latestSessionsRequestRef.current = null;
         setLoading(false);
       }
     }
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    const hasToken = hasStoredAuthToken();
-    if (shouldClearChatSelection({ user, authLoading, hasToken })) {
-      setSessions([]);
-      setShareTarget(null);
-      applySelectedSession('');
-      latestSessionsRequestRef.current = 0;
-      return;
-    }
-
-    if (authLoading) {
-      return;
-    }
-
-    void loadSessions();
-  }, [applySelectedSession, authLoading, loadSessions, user]);
+  }, [authLoading, setActiveSessions, token, user]);
 
   const setSelectedSession = useCallback(
     (id: string) => {
@@ -276,25 +331,77 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     [applySelectedSession, pathname, router],
   );
 
+  useEffect(() => {
+    const syncPendingArchives = () =>
+      setPendingArchiveIds(readPendingArchives(archiveOwnerId));
+
+    const onArchiveStatus: ArchiveListener = (sessionId, ownerId, status) => {
+      if (ownerId !== archiveOwnerId) return;
+      if (status === 'archived') {
+        // A list requested earlier may still contain this session.
+        latestSessionsRequestRef.current?.add(sessionId);
+        setActiveSessions((previous) =>
+          previous.filter((session) => session.id !== sessionId),
+        );
+        setArchiveRevision((revision) => revision + 1);
+        if (selectionRef.current.id === sessionId) {
+          setSelectedSession('');
+        }
+      }
+      syncPendingArchives();
+    };
+
+    archiveListeners.add(onArchiveStatus);
+    syncPendingArchives();
+    return () => {
+      archiveListeners.delete(onArchiveStatus);
+    };
+  }, [archiveOwnerId, setActiveSessions, setSelectedSession]);
+
+  useEffect(() => {
+    const hasToken = Boolean(token);
+    if (shouldClearChatSelection({ user, authLoading, hasToken })) {
+      latestSessionsRequestRef.current = null;
+      setLoading(false);
+      setActiveSessions([]);
+      setShareTarget(null);
+      applySelectedSession('');
+      return;
+    }
+
+    if (!authLoading) void loadSessions();
+    return () => {
+      latestSessionsRequestRef.current = null;
+    };
+  }, [
+    applySelectedSession,
+    authLoading,
+    loadSessions,
+    setActiveSessions,
+    token,
+    user,
+  ]);
+
   const createSession = useCallback(
     async (onCreated?: (session: ChatSession) => void) => {
-      if (authLoading || (!user && !hasStoredAuthToken())) {
+      if (authLoading || (!user && !token)) {
         return null;
       }
 
-      const revisionAtStart = selectionRevisionRef.current;
+      const revisionAtStart = selectionRef.current.revision;
       const session = await chatSessionsApi.create();
-      setSessions((previous) => [
+      if (!isAuthTokenSnapshotCurrent(token)) return null;
+      setActiveSessions((previous) => [
         session,
         ...previous.filter((item) => item.id !== session.id),
       ]);
-      if (selectionRevisionRef.current === revisionAtStart) {
+      if (selectionRef.current.revision === revisionAtStart) {
         onCreated?.(session);
         setSelectedSession(session.id);
       }
       return session;
     },
-    [authLoading, setSelectedSession, user],
+    [authLoading, setActiveSessions, setSelectedSession, token, user],
   );
 
   const renameSession = useCallback(
@@ -305,24 +412,34 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       }
 
       await chatSessionsApi.update(sessionId, normalizedTitle);
-      setSessions((previous) =>
+      setActiveSessions((previous) =>
         updateSessionTitle(previous, sessionId, normalizedTitle),
       );
     },
-    [],
+    [setActiveSessions],
   );
 
   const archiveSession = useCallback(
     async (sessionId: string) => {
-      await chatSessionsApi.archive(sessionId);
-      setSessions((previous) =>
-        previous.filter((session) => session.id !== sessionId),
-      );
-      if (selectedSession === sessionId) {
-        setSelectedSession('');
+      if (pendingArchives.has(sessionId)) return false;
+      pendingArchives.set(sessionId, archiveOwnerId);
+      publishArchiveStatus(sessionId, archiveOwnerId, 'pending');
+
+      let archived = false;
+      try {
+        await chatSessionsApi.archive(sessionId);
+        archived = true;
+        return true;
+      } finally {
+        pendingArchives.delete(sessionId);
+        publishArchiveStatus(
+          sessionId,
+          archiveOwnerId,
+          archived ? 'archived' : 'failed',
+        );
       }
     },
-    [selectedSession, setSelectedSession],
+    [archiveOwnerId],
   );
 
   const shareSession = useCallback(
@@ -336,7 +453,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     async (sessionId: string, signal: AbortSignal) => {
       const result = await chatSessionsApi.share(sessionId, { signal });
       if (!signal.aborted) {
-        setSessions((previous) =>
+        setActiveSessions((previous) =>
           previous.map((session) =>
             session.id === sessionId ? result.session : session,
           ),
@@ -344,7 +461,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       }
       return result;
     },
-    [],
+    [setActiveSessions],
   );
 
   const closeShare = useCallback(() => setShareTarget(null), []);
@@ -352,14 +469,16 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const touchSession = useCallback(
     (sessionId: string, patch: Partial<ChatSession>) => {
       // 对话一旦有新消息，应立即把该会话顶到最前，避免必须刷新后排序才正确。
-      setSessions((previous) => mergeSessionPatch(previous, sessionId, patch));
+      setActiveSessions((previous) =>
+        mergeSessionPatch(previous, sessionId, patch),
+      );
     },
-    [],
+    [setActiveSessions],
   );
 
   const value = useMemo<ChatSessionsContextValue>(
     () => ({
-      chatAvailable: !authLoading && (Boolean(user) || hasStoredAuthToken()),
+      chatAvailable: !authLoading && Boolean(user || token),
       sessions,
       selectedSession,
       selectedSessionRevision,
@@ -367,6 +486,8 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       createSession,
       renameSession,
       archiveSession,
+      archiveRevision,
+      pendingArchiveIds,
       shareSession,
       touchSession,
       loading,
@@ -374,6 +495,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     [
       authLoading,
       user,
+      token,
       sessions,
       selectedSession,
       selectedSessionRevision,
@@ -381,6 +503,8 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       createSession,
       renameSession,
       archiveSession,
+      archiveRevision,
+      pendingArchiveIds,
       shareSession,
       touchSession,
       loading,

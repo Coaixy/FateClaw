@@ -8,6 +8,7 @@ import type {
   SkillParametersSchemaDto,
 } from '@fateclaw/contracts/chat';
 
+import { clearChatSessionsCache } from '@/features/chat/api';
 import { requestJson } from '@/lib/http/client';
 
 export type PaipanCatalogItem = PaipanCatalogItemDto;
@@ -45,5 +46,5 @@ export const paipanApi = {
     requestJson<PaipanCommitResponse>('/api/paipan/commit', {
       method: 'POST',
       body: JSON.stringify(input),
-    }),
+    }).finally(clearChatSessionsCache),
 };

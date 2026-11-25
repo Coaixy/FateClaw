@@ -25,6 +25,7 @@ vi.mock('@/features/chat/api', () => ({
     `ws://synthetic/${sessionId}`,
   chatSessionsApi: {
     create: vi.fn(),
+    readListSnapshot: vi.fn(),
     list: vi.fn(),
     messages: vi.fn(),
     send: vi.fn(),

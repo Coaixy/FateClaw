@@ -9,6 +9,8 @@ import { chatSessionsApi, type ChatSession } from '@/features/chat/api';
 import { ChatSessionsProvider } from '@/features/chat/hooks/use-chat-sessions';
 import { I18nProvider } from '@/lib/i18n';
 
+const { toast, push } = vi.hoisted(() => ({ toast: vi.fn(), push: vi.fn() }));
+
 vi.mock('@/components/app-shell', () => ({
   AppShell: ({ children }: PropsWithChildren) => (
     <ChatSessionsProvider>{children}</ChatSessionsProvider>
@@ -21,6 +23,7 @@ vi.mock('@/components/ai-chat/session-share-dialog', () => ({
 
 vi.mock('@/features/chat/api', () => ({
   chatSessionsApi: {
+    readListSnapshot: vi.fn(),
     list: vi.fn(),
     archived: vi.fn(),
     archive: vi.fn(),
@@ -40,11 +43,11 @@ vi.mock('@/features/chat/hooks/use-client-profiles', () => {
 });
 
 vi.mock('@/lib/use-toast', () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast }),
 }));
 
 vi.mock('next/navigation', () => {
-  const router = { push: vi.fn() };
+  const router = { push };
   return { usePathname: () => '/history', useRouter: () => router };
 });
 
@@ -60,6 +63,16 @@ const unlinked: ChatSession = {
 const archived: ChatSession = {
   ...unlinked,
   deleted_at: '2026-10-29T00:00:00Z',
+};
+const second: ChatSession = {
+  ...unlinked,
+  id: 'second',
+  title: '另一条对话',
+};
+const remaining: ChatSession = {
+  ...unlinked,
+  id: 'remaining',
+  title: '保留的对话',
 };
 
 let root: Root;
@@ -78,11 +91,21 @@ async function click(label: string) {
   await act(async () => button(label).click());
 }
 
-async function mount() {
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+async function mount(key = 'history') {
   await act(async () => {
     root.render(
       <I18nProvider locale="zh-CN">
-        <HistoryPage />
+        <HistoryPage key={key} />
       </I18nProvider>,
     );
   });
@@ -91,6 +114,7 @@ async function mount() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  window.history.replaceState(null, '', '/history');
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -106,6 +130,129 @@ afterEach(async () => {
 });
 
 describe('conversation archive management', () => {
+  it('hides rows during concurrent requests and restores only the failed row in place', async () => {
+    const firstArchive = deferred<{ success: true }>();
+    const secondArchive = deferred<{ success: true }>();
+    vi.mocked(chatSessionsApi.list).mockResolvedValue([
+      unlinked,
+      second,
+      remaining,
+    ]);
+    vi.mocked(chatSessionsApi.archive)
+      .mockReturnValueOnce(firstArchive.promise)
+      .mockReturnValueOnce(secondArchive.promise);
+
+    await mount();
+    const firstButton = button('归档对话');
+    await act(async () => {
+      firstButton.click();
+      firstButton.click();
+    });
+    expect(chatSessionsApi.archive).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain(unlinked.title);
+    expect(container.textContent).toContain(second.title);
+
+    await click('归档对话');
+    expect(chatSessionsApi.archive).toHaveBeenNthCalledWith(2, second.id);
+    expect(container.textContent).not.toContain(second.title);
+    expect(container.textContent).toContain(remaining.title);
+    expect(toast).not.toHaveBeenCalled();
+
+    await act(async () => secondArchive.resolve({ success: true }));
+    await act(async () => firstArchive.reject(new Error('归档暂时失败')));
+    expect(container.textContent).toContain(unlinked.title);
+    expect(container.textContent).not.toContain(second.title);
+    expect(container.textContent!.indexOf(unlinked.title)).toBeLessThan(
+      container.textContent!.indexOf(remaining.title),
+    );
+    expect(toast).toHaveBeenCalledWith('error', '归档暂时失败');
+    expect(
+      toast.mock.calls.filter(([type]) => type === 'success'),
+    ).toHaveLength(1);
+
+    await click('归档对话');
+    expect(chatSessionsApi.archive).toHaveBeenNthCalledWith(3, unlinked.id);
+    expect(container.textContent).not.toContain(unlinked.title);
+  });
+
+  it.each([true, false])(
+    'keeps a row hidden across navigation when the stale list arrives before confirmation: %s',
+    async (listArrivesFirst) => {
+      const archive = deferred<{ success: true }>();
+      const staleList = deferred<ChatSession[]>();
+      vi.mocked(chatSessionsApi.archive).mockReturnValueOnce(archive.promise);
+      await mount();
+      await click('归档对话');
+      vi.mocked(chatSessionsApi.list).mockReturnValueOnce(staleList.promise);
+      await mount('after-navigation');
+
+      async function receiveList() {
+        await act(async () => staleList.resolve([unlinked, remaining]));
+        expect(container.textContent).toContain(remaining.title);
+        expect(container.textContent).not.toContain(unlinked.title);
+      }
+
+      if (listArrivesFirst) await receiveList();
+      await act(async () => archive.resolve({ success: true }));
+      if (!listArrivesFirst) await receiveList();
+      expect(container.textContent).not.toContain(unlinked.title);
+    },
+  );
+
+  it('leaves a newly opened conversation selected when an earlier archive completes', async () => {
+    const archive = deferred<{ success: true }>();
+    vi.mocked(chatSessionsApi.list).mockResolvedValue([unlinked, second]);
+    vi.mocked(chatSessionsApi.archive).mockReturnValueOnce(archive.promise);
+    window.history.replaceState(null, '', `/history?sid=${unlinked.id}`);
+    await mount();
+    await click('归档对话');
+
+    const secondRow = container.querySelector<HTMLElement>('[role="button"]');
+    expect(secondRow?.textContent).toContain(second.title);
+    await act(async () => secondRow?.click());
+    expect(push).toHaveBeenLastCalledWith(`/ai-chat?sid=${second.id}`);
+
+    await act(async () => archive.resolve({ success: true }));
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])(
+    'reconciles an open archive list after confirmation when the server lists the row early: %s',
+    async (serverListsPendingArchive) => {
+      const archive = deferred<{ success: true }>();
+      const refreshedList = deferred<ChatSession[]>();
+      const previouslyArchived = { ...second, deleted_at: archived.deleted_at };
+      vi.mocked(chatSessionsApi.archive).mockReturnValueOnce(archive.promise);
+      vi.mocked(chatSessionsApi.archived)
+        .mockResolvedValueOnce(
+          serverListsPendingArchive
+            ? [previouslyArchived, archived]
+            : [previouslyArchived],
+        )
+        .mockReturnValueOnce(refreshedList.promise);
+      vi.mocked(chatSessionsApi.restore).mockResolvedValueOnce(second);
+      await mount();
+      await click('归档对话');
+      await click('已归档');
+      expect(container.textContent).toContain(second.title);
+      expect(container.textContent).not.toContain(unlinked.title);
+
+      await act(async () => archive.resolve({ success: true }));
+      expect(chatSessionsApi.archived).toHaveBeenCalledTimes(2);
+      await click('恢复');
+      expect(chatSessionsApi.restore).toHaveBeenCalledWith(second.id);
+      await act(async () =>
+        refreshedList.resolve([archived, previouslyArchived]),
+      );
+      expect(container.textContent).toContain(unlinked.title);
+      expect(container.textContent).not.toContain(second.title);
+
+      await click('未归档');
+      expect(container.textContent).toContain(second.title);
+      expect(container.textContent).not.toContain(unlinked.title);
+    },
+  );
+
   it('finds an unlinked conversation after archiving and restores it to the active list without reloading', async () => {
     await mount();
     await click('归档对话');
@@ -122,17 +269,13 @@ describe('conversation archive management', () => {
     expect(container.textContent).toContain(unlinked.title);
     expect(button('恢复').disabled).toBe(false);
 
-    let resolve!: (session: ChatSession) => void;
-    vi.mocked(chatSessionsApi.restore).mockReturnValueOnce(
-      new Promise((done) => {
-        resolve = done;
-      }),
-    );
+    const restore = deferred<ChatSession>();
+    vi.mocked(chatSessionsApi.restore).mockReturnValueOnce(restore.promise);
     await click('恢复');
     expect(button('恢复中…').disabled).toBe(true);
     expect(button('未归档').disabled).toBe(true);
     await act(async () =>
-      resolve({ ...unlinked, updated_at: '2026-10-29T01:00:00Z' }),
+      restore.resolve({ ...unlinked, updated_at: '2026-10-29T01:00:00Z' }),
     );
     expect(container.textContent).not.toContain(unlinked.title);
 

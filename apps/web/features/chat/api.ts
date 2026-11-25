@@ -147,8 +147,9 @@ export function buildChatSessionStreamUrl(sessionId: string, ticket: string) {
   return url.toString();
 }
 
-const chatSessionListRequestCache =
-  createAuthScopedInFlightCache<ChatSession[]>();
+const chatSessionListRequestCache = createAuthScopedInFlightCache<ChatSession[]>({
+  maxAgeMs: 30_000,
+});
 
 function archiveChatSessionRequest(sessionId: string) {
   return requestJson<SuccessResponse>(
@@ -158,7 +159,7 @@ function archiveChatSessionRequest(sessionId: string) {
 }
 
 /**
- * 清理聊天会话列表的 in-flight 请求缓存。
+ * 清理聊天会话列表的请求和结果缓存。
  *
  * @returns 无返回值。
  */
@@ -167,6 +168,7 @@ export function clearChatSessionsCache() {
 }
 
 export const chatSessionsApi = {
+  readListSnapshot: chatSessionListRequestCache.peek,
   list: () =>
     chatSessionListRequestCache.get(() =>
       requestJson<ChatSession[]>('/api/chat-sessions'),
@@ -190,7 +192,7 @@ export const chatSessionsApi = {
     requestJson<SuccessResponse>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}`,
       { method: 'PATCH', body: JSON.stringify({ title }) },
-    ),
+    ).finally(clearChatSessionsCache),
   archive: archiveChatSessionRequest,
   remove: archiveChatSessionRequest,
   restore: (sessionId: string) =>
@@ -282,6 +284,6 @@ export const chatSessionsApi = {
     return requestJson<ChatSessionSendResponseDto>(
       `/api/chat-sessions/s/${encodeURIComponent(sessionId)}/messages`,
       fetchOptions,
-    );
+    ).finally(clearChatSessionsCache);
   },
 };

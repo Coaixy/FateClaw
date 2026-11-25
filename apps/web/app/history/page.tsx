@@ -15,9 +15,11 @@ import {
 } from 'lucide-react';
 
 import { AppShell } from '@/components/app-shell';
+import { useAuth } from '@/features/auth/hooks/use-auth';
 import { useChatSessions } from '@/features/chat/hooks/use-chat-sessions';
 import { useClientProfiles } from '@/features/chat/hooks/use-client-profiles';
 import { chatSessionsApi, type ChatSession } from '@/features/chat/api';
+import { getAuthTokenSnapshot } from '@/lib/auth-scoped-cache';
 import { useI18n } from '@/lib/i18n';
 import { useToast } from '@/lib/use-toast';
 
@@ -107,6 +109,14 @@ function formatSessionTime(
  * Session consumers stay inside HistoryContent because AppShell owns the provider.
  */
 export default function HistoryPage() {
+  const { loading: authLoading } = useAuth();
+  useEffect(() => {
+    // The list endpoint checks the same token on the server. AppShell still gates rendering.
+    if (authLoading && getAuthTokenSnapshot()) {
+      void chatSessionsApi.list().catch(() => {});
+    }
+  }, [authLoading]);
+
   return (
     <AppShell>
       <HistoryContent />
@@ -123,6 +133,8 @@ function HistoryContent() {
     setSelectedSession,
     renameSession,
     archiveSession,
+    archiveRevision,
+    pendingArchiveIds,
     shareSession,
     touchSession,
     loading: sessionsLoading,
@@ -173,17 +185,35 @@ function HistoryContent() {
   );
   const [restoringSessionId, setRestoringSessionId] = useState('');
   const restoringSessionRef = useRef('');
-  const visibleSessions =
-    view === 'archived' ? archiveState.sessions : sessions;
+  const restoredDuringLoadRef = useRef<Set<string> | null>(null);
+  const visibleSessions = useMemo(
+    () =>
+      view === 'archived'
+        ? archiveState.sessions.filter((session) => !pendingArchiveIds.has(session.id))
+        : sessions,
+    [archiveState.sessions, pendingArchiveIds, sessions, view],
+  );
 
   useEffect(() => {
     if (view !== 'archived') return;
     const controller = new AbortController();
-    setArchiveState({ sessions: [], loading: true, error: '' });
+    const restoredDuringLoad = new Set<string>();
+    restoredDuringLoadRef.current = restoredDuringLoad;
+    setArchiveState((previous) => ({
+      ...previous,
+      loading: previous.sessions.length === 0,
+      error: '',
+    }));
     void chatSessionsApi.archived({ signal: controller.signal }).then(
       (list) => {
         if (!controller.signal.aborted) {
-          setArchiveState({ sessions: list, loading: false, error: '' });
+          setArchiveState({
+            sessions: list.filter(
+              (session) => !restoredDuringLoad.has(session.id),
+            ),
+            loading: false,
+            error: '',
+          });
         }
       },
       (error: unknown) => {
@@ -199,8 +229,11 @@ function HistoryContent() {
         }
       },
     );
-    return () => controller.abort();
-  }, [archiveRetry, t, view]);
+    return () => {
+      controller.abort();
+      restoredDuringLoadRef.current = null;
+    };
+  }, [archiveRetry, archiveRevision, t, view]);
 
   // 与侧栏一致：静默拉取客户档案，把会话上的 client_id join 成客户名展示；失败不打扰用户。
   const { profiles: clientProfiles, loadProfiles: loadClientProfiles } =
@@ -309,8 +342,9 @@ function HistoryContent() {
 
   const handleArchive = async (sessionId: string) => {
     try {
-      await archiveSession(sessionId);
-      toast('success', t('sidebar.archivedToast'));
+      if (await archiveSession(sessionId)) {
+        toast('success', t('sidebar.archivedToast'));
+      }
     } catch (error) {
       toast(
         'error',
@@ -325,6 +359,7 @@ function HistoryContent() {
     setRestoringSessionId(sessionId);
     try {
       const restored = await chatSessionsApi.restore(sessionId);
+      restoredDuringLoadRef.current?.add(sessionId);
       touchSession(restored.id, restored);
       setArchiveState((previous) => ({
         ...previous,

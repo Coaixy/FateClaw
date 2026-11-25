@@ -786,9 +786,11 @@ export function Sidebar({
                           onClick={(e) => {
                             e.stopPropagation();
                             void archiveSession(session.id)
-                              .then(() =>
-                                toast('success', t('sidebar.archivedToast')),
-                              )
+                              .then((archived) => {
+                                if (archived) {
+                                  toast('success', t('sidebar.archivedToast'));
+                                }
+                              })
                               .catch((error) => {
                                 toast(
                                   'error',
