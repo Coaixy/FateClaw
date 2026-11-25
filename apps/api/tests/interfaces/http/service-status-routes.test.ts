@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({
   list: vi.fn(),
   supply: vi.fn(),
-  success: vi.fn(),
   usage: vi.fn(),
   limit: vi.fn(),
 }));
@@ -12,7 +11,6 @@ vi.mock('#interfaces/http/rate-limit', () => ({
 }));
 vi.mock('#infrastructure/repositories/benefit-repository', () => ({
   getBenefitSupply: f.supply,
-  getRecentBenefitSuccess: f.success,
 }));
 vi.mock('#infrastructure/repositories/service-status-repository', () => ({
   listServiceStatusChecks: f.list,
@@ -31,7 +29,6 @@ describe('public service status', () => {
     vi.setSystemTime(new Date('2026-10-16T00:00:00Z'));
     f.list.mockResolvedValue([]);
     f.supply.mockResolvedValue('disabled');
-    f.success.mockResolvedValue(null);
     f.usage.mockResolvedValue({
       total_tokens: 1234567,
       today_tokens: 4567,
@@ -73,6 +70,7 @@ describe('public service status', () => {
       expect(response.statusCode).toBe(200);
       expect(response.headers['cache-control']).toContain('public');
       expect(response.json()).toMatchObject({
+        probe_kind: 'http_head',
         status: 'operational',
         checked_at: expect.any(String),
         latency_ms: 120,
@@ -92,7 +90,15 @@ describe('public service status', () => {
           daily: [{ date: '2026-10-16', tokens: 4567 }],
         },
       });
-      expect(response.json().services).toHaveLength(2);
+      expect(response.json().services).toMatchObject([
+        { pool_key: 'official', status: 'operational', latency_ms: 120 },
+        {
+          pool_key: 'benefit',
+          status: 'operational',
+          latency_ms: 120,
+          supply: 'disabled',
+        },
+      ]);
       expect(JSON.stringify(response.json())).not.toContain(
         'synthetic-private-value',
       );
@@ -100,7 +106,6 @@ describe('public service status', () => {
     }
     expect(f.list).toHaveBeenCalledTimes(2);
     expect(f.supply).toHaveBeenCalledOnce();
-    expect(f.success).toHaveBeenCalledOnce();
     expect(f.usage).toHaveBeenCalledOnce();
     const head = await app.inject({
       method: 'HEAD',
@@ -188,7 +193,6 @@ describe('public service status', () => {
       await app.inject('/api/service-status');
       f.list.mockClear();
       f.supply.mockClear();
-      f.success.mockClear();
       f.usage.mockClear();
       f.limit.mockResolvedValue({
         allowed: false,
@@ -209,7 +213,6 @@ describe('public service status', () => {
       );
       expect(f.list).not.toHaveBeenCalled();
       expect(f.supply).not.toHaveBeenCalled();
-      expect(f.success).not.toHaveBeenCalled();
       expect(f.usage).not.toHaveBeenCalled();
     },
   );

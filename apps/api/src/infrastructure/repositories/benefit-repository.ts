@@ -115,17 +115,6 @@ export async function getBenefitSupply(): Promise<BenefitSupplyState> {
   return row.ready ? 'available' : 'busy';
 }
 
-export async function getRecentBenefitSuccess(): Promise<string | null> {
-  const { rows } = await getDbPool().query<{
-    completed_at: Date;
-  }>(`SELECT attempt.completed_at FROM benefit_model_attempts attempt
-    JOIN official_model_pool_nodes node ON node.model_config_id=attempt.node_id AND node.pool_id='benefit'
-    JOIN official_model_pool_settings pool ON pool.id=node.pool_id AND pool.enabled
-    WHERE attempt.outcome='success' AND NOT attempt.is_probe AND attempt.created_at>=pool.updated_at
-      AND attempt.completed_at>now()-interval '12 hours' ORDER BY attempt.completed_at DESC LIMIT 1`);
-  return rows[0]?.completed_at.toISOString() ?? null;
-}
-
 /** Called only inside the durable request admission transaction. */
 export async function reserveBenefitTurn(
   db: DbQueryable,

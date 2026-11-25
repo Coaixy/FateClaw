@@ -24,6 +24,8 @@ The `0084_official_model_pool_primary` migration designates the existing canonic
 
 The `0085_ai_service_status` migration creates a shared check schedule and aggregate availability observations. The schedule reserves six-hour probe intervals across processes and restarts. Observation rows contain only state, timestamp and latency; no provider configuration or credential values are copied.
 
+The `0102_service_network_status` migration identifies previous observations as inference checks and starts two independent schedules for HTTP HEAD probes. The status page's network history begins with the first new observations.
+
 The snapshot and all covered migration IDs are committed in one transaction. A failure rolls back the schema and those ledger entries together, allowing a later startup to retry. The empty ledger table may remain after a failed bootstrap.
 
 Databases with recorded migration history always use [versions/](../apps/api/src/infrastructure/migrations/versions/). Each missing migration runs in its own transaction and records its original ID and description. The legacy `0001_core_schema_baseline` already represents historical migrations 0001–0067. Older ledgers may additionally contain historical 0002–0069 IDs; those records remain intact.

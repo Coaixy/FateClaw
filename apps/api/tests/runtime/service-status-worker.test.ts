@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({
   claim: vi.fn(),
   complete: vi.fn(),
-  runtime: vi.fn(),
+  listNodes: vi.fn(),
   probe: vi.fn(),
-  benefitProbe: vi.fn(),
   warn: vi.fn(),
 }));
 vi.mock('#infrastructure/repositories/service-status-repository', () => ({
@@ -12,25 +11,21 @@ vi.mock('#infrastructure/repositories/service-status-repository', () => ({
   completeServiceStatusCheck: f.complete,
 }));
 vi.mock('#modules/system/system-config', () => ({
-  resolveOfficialLlmRuntime: f.runtime,
+  listServiceStatusNodes: f.listNodes,
 }));
-vi.mock('#modules/system/model-availability-probe', () => ({
-  probeModelAvailability: f.probe,
-  probeBenefitModelAvailability: f.benefitProbe,
+vi.mock('#modules/system/model-availability-probe', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('#modules/system/model-availability-probe')
+  >()),
+  probeModelNetwork: f.probe,
 }));
 vi.mock('#infrastructure/logger', () => ({
   logger: { warn: f.warn },
 }));
-import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
-const nodes: RuntimeModelPoolNode[] = ['a', 'b', 'c'].map((id) => ({
-  modelConfigId: id,
-  revision: 1,
-  weight: 1,
-  piApi: 'openai-completions',
-  model: 'synthetic',
-  providerKey: id,
-  authMode: 'openai_api_key',
-  apiKey: 'synthetic-key',
+const origins = ['a', 'b', 'c'].map((id) => `https://${id}.invalid`);
+const nodes = origins.map((origin) => ({
+  pi_api: 'openai-completions' as const,
+  base_url: `${origin}/v1`,
 }));
 let worker: typeof import('#runtime/service-status-worker');
 beforeEach(async () => {
@@ -40,7 +35,7 @@ beforeEach(async () => {
   f.claim.mockImplementation(async (poolKey) =>
     poolKey === 'benefit' ? null : 'lease',
   );
-  f.runtime.mockResolvedValue({ poolNodes: nodes });
+  f.listNodes.mockResolvedValue(nodes);
   f.complete.mockResolvedValue(undefined);
 });
 afterEach(async () => {
@@ -48,32 +43,31 @@ afterEach(async () => {
 });
 
 describe('shared service status worker', () => {
-  it('stops as soon as one node is available and publishes no node identity', async () => {
+  it('checks each origin at most once and stops at the first response', async () => {
     f.probe.mockResolvedValueOnce(null).mockResolvedValueOnce(37);
     expect(
-      await worker.checkServiceAvailability(
-        nodes,
+      await worker.checkServiceNetwork(
+        [origins[0], ...origins],
         new AbortController().signal,
       ),
     ).toEqual({ status: 'operational', latency_ms: 37 });
-    expect(f.probe).toHaveBeenCalledTimes(2);
+    expect(f.probe.mock.calls.map(([origin]) => origin)).toEqual(
+      origins.slice(0, 2),
+    );
   });
   it('reports unavailable only after all candidates fail', async () => {
     f.probe.mockResolvedValue(null);
     expect(
-      await worker.checkServiceAvailability(
-        nodes,
-        new AbortController().signal,
-      ),
+      await worker.checkServiceNetwork(origins, new AbortController().signal),
     ).toEqual({ status: 'unavailable', latency_ms: null });
     expect(f.probe).toHaveBeenCalledTimes(3);
   });
-  it('performs no inference when the pool is unconfigured or the check is cancelled', async () => {
+  it('reports unknown without probing an unconfigured pool or a cancelled check', async () => {
     expect(
-      await worker.checkServiceAvailability([], new AbortController().signal),
-    ).toEqual({ status: 'unavailable', latency_ms: null });
+      await worker.checkServiceNetwork([], new AbortController().signal),
+    ).toEqual({ status: 'unknown', latency_ms: null });
     expect(
-      await worker.checkServiceAvailability(nodes, AbortSignal.abort()),
+      await worker.checkServiceNetwork(origins, AbortSignal.abort()),
     ).toEqual({ status: 'unknown', latency_ms: null });
     expect(f.probe).not.toHaveBeenCalled();
   });
@@ -87,16 +81,31 @@ describe('shared service status worker', () => {
     expect(f.claim).toHaveBeenCalledTimes(2);
     expect(f.claim).toHaveBeenCalledWith('benefit');
     expect(f.probe).toHaveBeenCalledOnce();
-    expect(f.complete).toHaveBeenCalledWith('lease', {
-      status: 'operational',
-      latency_ms: 23,
-      checked_at: expect.any(String),
-    });
+    expect(f.complete).toHaveBeenCalledWith(
+      'lease',
+      { status: 'operational', latency_ms: 23, checked_at: expect.any(String) },
+      'official',
+    );
   });
-  it('does not load credentials or probe when the shared interval is not due', async () => {
+  it('checks the free pool with the same network probe', async () => {
+    f.claim.mockResolvedValueOnce(null).mockResolvedValueOnce('free-lease');
+    f.probe.mockResolvedValueOnce(0);
+    await worker.runServiceStatusCheckOnce();
+    expect(f.listNodes).toHaveBeenCalledExactlyOnceWith('benefit');
+    expect(f.probe).toHaveBeenCalledExactlyOnceWith(
+      origins[0],
+      expect.any(AbortSignal),
+    );
+    expect(f.complete).toHaveBeenCalledWith(
+      'free-lease',
+      { status: 'operational', latency_ms: 0, checked_at: expect.any(String) },
+      'benefit',
+    );
+  });
+  it('does not load nodes or probe when the shared interval is not due', async () => {
     f.claim.mockResolvedValue(null);
     await worker.runServiceStatusCheckOnce();
-    expect(f.runtime).not.toHaveBeenCalled();
+    expect(f.listNodes).not.toHaveBeenCalled();
     expect(f.probe).not.toHaveBeenCalled();
     expect(f.complete).not.toHaveBeenCalled();
   });
@@ -111,11 +120,12 @@ describe('shared service status worker', () => {
     const stopping = worker.stopServiceStatusWorker();
     release('lease');
     await Promise.all([running, stopping]);
-    expect(f.runtime).not.toHaveBeenCalled();
+    expect(f.listNodes).not.toHaveBeenCalled();
     expect(f.probe).not.toHaveBeenCalled();
     expect(f.complete).toHaveBeenCalledWith(
       'lease',
       expect.objectContaining({ status: 'unknown' }),
+      'official',
     );
   });
 });

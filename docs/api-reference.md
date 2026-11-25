@@ -542,8 +542,8 @@ The `skillContextEntry` in a `preview` response contains:
 
 ## Public service status
 
-`GET /api/service-status` is public and reads saved AI availability observations.
-It never triggers an inference. The response contains `status` (`operational`,
+`GET /api/service-status` is public and reads saved upstream network observations.
+The response identifies the measurement as `probe_kind: "http_head"` and contains `status` (`operational`,
 `unavailable` or `unknown`), `checked_at`, `latency_ms`, `check_interval_seconds`
 (21600), `stale_after_seconds` (43200), and up to 28 history samples with only
 `checked_at`, `status` and `latency_ms`. Node identities, counts, connection details
@@ -552,8 +552,9 @@ and provider errors are not returned. Responses permit public caching for 60 sec
 snapshot `updated_at` and seven ascending `daily` points (`date`, `tokens`),
 including days with no usage. These are aggregate counts without account details.
 
-The full API startup performs a shared lightweight check every six hours, stopping
-at the first available node. Results older than twelve hours become unknown. See
+The full API startup runs shared network checks every six hours, stopping at
+the first upstream HTTP response for each pool. Results older than twelve hours
+become unknown. See
 [Public service status](service-status.md) for probe budgets and metric boundaries.
 
 ## Issues

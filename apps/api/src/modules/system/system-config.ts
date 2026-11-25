@@ -114,6 +114,14 @@ function configuredNodes(settings: PlatformModelSettings) {
   );
 }
 
+export async function listServiceStatusNodes(poolKey: ModelPoolKey) {
+  const settings = await getPlatformModelSettings(poolKey);
+  return configuredNodes(settings).map(({ model: { pi_api, base_url } }) => ({
+    pi_api,
+    base_url,
+  }));
+}
+
 function nodeContextWindow(model: OfficialModelConfig): number {
   return resolveContextWindow({
     model: model.model_name,

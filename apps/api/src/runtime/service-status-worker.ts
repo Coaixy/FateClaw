@@ -1,29 +1,28 @@
 import type { ServiceStatusSampleDto } from '@fateclaw/contracts/service-status';
-import type { RuntimeModelPoolNode } from '@fateclaw/contracts/model-settings';
 import {
   claimServiceStatusCheck,
   completeServiceStatusCheck,
 } from '#infrastructure/repositories/service-status-repository';
-import { resolveOfficialLlmRuntime } from '#modules/system/system-config';
+import { listServiceStatusNodes } from '#modules/system/system-config';
 import {
-  probeModelAvailability,
-  probeBenefitModelAvailability,
+  modelNetworkProbeOrigin,
+  probeModelNetwork,
 } from '#modules/system/model-availability-probe';
 import { logger } from '#infrastructure/logger';
 
-export async function checkServiceAvailability(
-  nodes: RuntimeModelPoolNode[],
+export async function checkServiceNetwork(
+  origins: string[],
   signal: AbortSignal,
-  probe = probeModelAvailability,
+  probe = probeModelNetwork,
 ): Promise<Pick<ServiceStatusSampleDto, 'status' | 'latency_ms'>> {
-  for (const node of nodes) {
+  for (const origin of new Set(origins)) {
     if (signal.aborted) return { status: 'unknown', latency_ms: null };
-    const latency = await probe(node, signal);
+    const latency = await probe(origin, signal);
     if (signal.aborted) return { status: 'unknown', latency_ms: null };
     if (latency !== null) return { status: 'operational', latency_ms: latency };
   }
   return {
-    status: signal.aborted ? 'unknown' : 'unavailable',
+    status: signal.aborted || !origins.length ? 'unknown' : 'unavailable',
     latency_ms: null,
   };
 }
@@ -38,10 +37,7 @@ export async function runServiceStatusCheckOnce(): Promise<void> {
   active = (async () => {
     for (const poolKey of ['official', 'benefit'] as const) {
       if (stopping) break;
-      const token =
-        poolKey === 'official'
-          ? await claimServiceStatusCheck()
-          : await claimServiceStatusCheck(poolKey);
+      const token = await claimServiceStatusCheck(poolKey);
       if (!token) continue;
       controller = new AbortController();
       const budget = AbortSignal.timeout(180_000);
@@ -52,30 +48,11 @@ export async function runServiceStatusCheckOnce(): Promise<void> {
       };
       try {
         if (!stopping) {
-          const runtime =
-            poolKey === 'official'
-              ? await resolveOfficialLlmRuntime()
-              : await resolveOfficialLlmRuntime(poolKey);
-          let skipped = false;
-          sample = await checkServiceAvailability(
-            runtime?.poolNodes ?? [],
-            signal,
-            poolKey === 'benefit'
-              ? async (node, probeSignal) => {
-                  const result = await probeBenefitModelAvailability(
-                    node,
-                    probeSignal,
-                  );
-                  if (!result.attempted) skipped = true;
-                  return result.latency;
-                }
-              : probeModelAvailability,
-          );
-          if (
-            poolKey === 'benefit' &&
-            (!runtime || (skipped && sample.status !== 'operational'))
-          )
-            sample = { status: 'unknown', latency_ms: null };
+          const nodes = await listServiceStatusNodes(poolKey);
+          const origins = nodes
+            .map(modelNetworkProbeOrigin)
+            .filter((origin) => origin !== null);
+          sample = await checkServiceNetwork(origins, signal);
         }
       } catch {
         logger.warn(
@@ -86,9 +63,7 @@ export async function runServiceStatusCheckOnce(): Promise<void> {
         ...sample,
         checked_at: new Date().toISOString(),
       };
-      if (poolKey === 'official')
-        await completeServiceStatusCheck(token, result);
-      else await completeServiceStatusCheck(token, result, poolKey);
+      await completeServiceStatusCheck(token, result, poolKey);
     }
   })();
   try {

@@ -19,12 +19,11 @@ import { BrandSeal } from './brand/brand-marks';
 import { LanguageSwitcher } from './language-switcher';
 import { TokenGrowthPanel } from './service-status/token-growth-panel';
 
-const STATUS_STYLES: Record<ServiceAvailabilityDto, string> = {
-  operational: 'bg-success',
-  unavailable: 'bg-error',
-  unknown: 'bg-hairline',
-};
-
+const STATUS_STYLES = {
+  operational: { bar: 'bg-success', text: 'text-success' },
+  unavailable: { bar: 'bg-error', text: 'text-error' },
+  unknown: { bar: 'bg-hairline', text: 'text-muted' },
+} satisfies Record<ServiceAvailabilityDto, { bar: string; text: string }>;
 export function ServiceStatusPage() {
   const { t } = useI18n();
   const [data, setData] = useState<ServiceStatusOverviewDto | null>(null);
@@ -78,21 +77,12 @@ export function ServiceStatusPage() {
     };
   }, [refreshKey]);
 
-  const status =
-    data && now !== null ? visibleServiceStatus(data, now) : 'unknown';
+  const networkData = data?.probe_kind === 'http_head' ? data : undefined;
   const benefit = data?.services?.find(
     (service) => service.pool_key === 'benefit',
   );
   const supply =
     benefit && now !== null ? visibleBenefitSupply(benefit, now) : 'unknown';
-  const benefitTone =
-    supply === 'available'
-      ? 'text-success'
-      : supply === 'unavailable'
-        ? 'text-error'
-        : supply === 'exhausted' || supply === 'busy'
-          ? 'text-warning'
-          : 'text-muted';
 
   return (
     <div className="min-h-dvh bg-canvas text-ink">
@@ -157,26 +147,15 @@ export function ServiceStatusPage() {
         >
           <ServiceCheckHistory
             label={t('modelChoice.paid')}
-            state={t(`serviceStatus.${status}Short`)}
-            tone={
-              status === 'operational'
-                ? 'text-success'
-                : status === 'unavailable'
-                  ? 'text-error'
-                  : 'text-muted'
-            }
-            service={data}
+            service={networkData}
             now={now}
           />
           <ServiceCheckHistory
             label={t('modelChoice.benefit')}
-            state={
-              supply === 'unavailable'
-                ? t('serviceStatus.unavailableShort')
-                : t(`modelChoice.${supply}`)
+            service={networkData ? benefit : undefined}
+            supplyNote={
+              supply !== 'unknown' ? t(`modelChoice.${supply}`) : undefined
             }
-            tone={benefitTone}
-            service={benefit}
             now={now}
           />
         </section>
@@ -197,18 +176,27 @@ export function ServiceStatusPage() {
 
 function ServiceCheckHistory({
   label,
-  state,
-  tone,
   service,
+  supplyNote,
   now,
 }: {
   label: string;
-  state: string;
-  tone: string;
-  service?: ServiceStatusDetailsDto | null;
+  service?: ServiceStatusDetailsDto;
+  supplyNote?: string;
   now: number | null;
 }) {
-  const { t, formatDate } = useI18n();
+  const { t, formatDate, formatNumber } = useI18n();
+  const status =
+    service && now !== null ? visibleServiceStatus(service, now) : 'unknown';
+  const formatResult = (
+    result: ServiceAvailabilityDto,
+    latency: number | null,
+  ) => {
+    const state = t(`serviceStatus.${result}Short`);
+    return result === 'operational' && latency !== null
+      ? `${state} · ${formatNumber(latency)} ms`
+      : state;
+  };
   const samples =
     now === null
       ? Array<ServiceStatusDetailsDto['history'][number] | null>(28).fill(null)
@@ -218,17 +206,17 @@ function ServiceCheckHistory({
       className="rounded-2xl border border-hairline bg-surface-raised p-4 sm:p-5"
       aria-label={label}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 className="text-sm font-semibold">{label}</h2>
         <span
-          className={`inline-flex items-center gap-2 text-xs ${tone}`}
+          className={`inline-flex items-center gap-2 text-xs ${STATUS_STYLES[status].text}`}
           aria-live="polite"
         >
           <span
             className="size-1.5 shrink-0 rounded-full bg-current"
             aria-hidden="true"
           />
-          {state}
+          {formatResult(status, service?.latency_ms ?? null)}
         </span>
       </div>
       <div
@@ -237,7 +225,7 @@ function ServiceCheckHistory({
       >
         {samples.map((sample, index) => {
           const title = sample
-            ? `${formatDate(sample.checked_at, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${t(`serviceStatus.${sample.status}Short`)}`
+            ? `${formatDate(sample.checked_at, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${formatResult(sample.status, sample.latency_ms)}`
             : t('serviceStatus.noSample');
           return (
             <div
@@ -245,7 +233,7 @@ function ServiceCheckHistory({
               role="img"
               aria-label={title}
               title={title}
-              className={`h-7 rounded-sm ${sample ? STATUS_STYLES[sample.status] : 'bg-hairline/55'}`}
+              className={`h-7 rounded-sm ${sample ? STATUS_STYLES[sample.status].bar : 'bg-hairline/55'}`}
             />
           );
         })}
@@ -254,6 +242,7 @@ function ServiceCheckHistory({
         <span>{t('serviceStatus.sevenDaysAgo')}</span>
         <span>{t('serviceStatus.now')}</span>
       </div>
+      {supplyNote && <p className="mt-2 text-xs text-muted">{supplyNote}</p>}
     </section>
   );
 }

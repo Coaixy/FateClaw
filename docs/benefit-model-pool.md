@@ -110,8 +110,8 @@ deadline. Provider context, rate and quota limits still apply.
 
 PostgreSQL owns personal allowance, request execution and node health state.
 Atomic attempt claims verify an active request and lease node recovery before
-contacting a provider. Calls and monitoring share the same cooldown state across
-resident processes. Redis retains its existing transport and global scheduling
+contacting a provider. Real calls share the same cooldown state across resident
+processes. Redis retains its existing transport and global scheduling
 roles. Tool execution uses the ordinary agent path without a free-only grant.
 Tools and agent sessions are never replayed as failover. Switching after content
 publication remains prohibited.
@@ -127,8 +127,8 @@ failures require three consecutive provider failures before a 30-second
 exponential backoff capped at five minutes. A failed half-open recovery attempt
 immediately reopens the circuit. Local first-content/idle deadlines and transport
 errors may trigger failover but release the node without changing shared health.
-After cooldown, one leased request or scheduled probe tests recovery; success clears
-the cooldown and failure starts another cooldown. Unrelated administration saves
+After cooldown, one leased request tests recovery. Success clears the cooldown
+and failure starts another cooldown. Unrelated administration saves
 preserve cooldowns. All nodes cooling due to quota report exhausted supply;
 other cooldowns or an active recovery lease report busy supply.
 
@@ -155,18 +155,15 @@ Free requests bypass paid wallet admission; wallet debt does not block them.
 
 Account deletion removes personal preferences, daily allowances and free requests.
 Provider attempts detach from those requests and retain their recorded usage,
-including idempotent settlement of usage reported after deletion. Deleting an
-account does not discard monitoring attempts or reset node cooldowns.
+including idempotent settlement of usage reported after deletion. Node cooldowns
+are shared across accounts.
 
 ## Public status
 
 The public status endpoint returns separate paid/free sections without exposing
 node/provider identities or personal allowance. Existing top-level fields still
-describe paid service. Free health observations and supply are distinct:
-disabled, busy and quota-exhausted supply do not become a paid outage. Recent real
-free successes can confirm health; sampled histories remain independent.
-
-Synthetic checks retain shared six-hour schedules, tiny prompts and finite timeouts.
-Free checks use the same node health claim and settlement as real calls.
-Refreshing a page never runs inference. Cooling nodes skip checks. Stale health
-and stale cached supply become unknown.
+describe the paid pool. Free supply reports disabled, busy or quota-exhausted
+state independently of network reachability. Scheduled HTTP HEAD checks measure
+the route from the backend to each pool's upstream origins, including origins
+in cooldown. These checks use no free allowance or provider attempts. Stale
+network observations and stale cached supply become unknown.

@@ -23,6 +23,8 @@ export interface ServiceStatusServiceDto extends ServiceStatusDetailsDto {
 }
 
 export interface ServiceStatusOverviewDto extends ServiceStatusDetailsDto {
+  /** Older deployments omit this field and return inference observations. */
+  probe_kind?: 'http_head';
   services?: ServiceStatusServiceDto[];
   token_usage?: ServiceTokenUsageDto;
 }

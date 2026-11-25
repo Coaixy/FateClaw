@@ -10,7 +10,7 @@ import type {
 } from '@fateclaw/contracts/service-status';
 
 describe('service status history', () => {
-  it('separates fresh quota exhaustion from service failure and expires stale supply evidence', () => {
+  it('shows fresh supply independently of network status and expires stale supply evidence', () => {
     const now = Date.parse('2026-10-16T06:00:00Z');
     const service: ServiceStatusServiceDto = {
       pool_key: 'benefit',
@@ -30,7 +30,7 @@ describe('service status history', () => {
         { ...service, supply: 'available', status: 'unavailable' },
         now,
       ),
-    ).toBe('unavailable');
+    ).toBe('available');
     expect(visibleBenefitSupply(service, now + 600001)).toBe('unknown');
   });
   it('keeps unmeasured six-hour intervals unknown instead of inventing availability', () => {

@@ -44,10 +44,9 @@ describe.skipIf(!connectionString)(
     });
     beforeEach(async () => {
       await state.pool!.query(
-        'TRUNCATE ai_service_status_checks,ai_service_status_schedule',
-      );
-      await state.pool!.query(
-        "INSERT INTO ai_service_status_schedule (id) VALUES ('ai')",
+        `TRUNCATE ai_service_status_checks;
+         UPDATE ai_service_status_schedule
+           SET next_check_at=DEFAULT, lease_token=NULL, lease_until=NULL`,
       );
     });
     afterAll(async () => {
@@ -68,7 +67,8 @@ describe.skipIf(!connectionString)(
       });
       expect(await claimServiceStatusCheck()).toBeNull();
       const schedule = await state.pool!.query(
-        'SELECT EXTRACT(EPOCH FROM next_check_at-now()) AS seconds,lease_token FROM ai_service_status_schedule',
+        `SELECT EXTRACT(EPOCH FROM next_check_at-now()) AS seconds,lease_token
+         FROM ai_service_status_schedule WHERE id='network-official'`,
       );
       expect(Number(schedule.rows[0].seconds)).toBeGreaterThan(21598);
       expect(Number(schedule.rows[0].seconds)).toBeLessThanOrEqual(21600);
@@ -81,10 +81,39 @@ describe.skipIf(!connectionString)(
         },
       ]);
     });
+    it('starts new schedules for both pools and excludes legacy inference failures', async () => {
+      await state.pool!.query(`
+        INSERT INTO ai_service_status_checks (pool_key,checked_at,status)
+        VALUES ('official',now()-interval '1 minute','unavailable'),
+          ('benefit',now()-interval '1 minute','unavailable');
+        UPDATE ai_service_status_schedule
+          SET next_check_at=now()+interval '6 hours', lease_token='legacy',
+              lease_until=now()+interval '5 minutes'
+          WHERE id IN ('ai','benefit')
+      `);
+      const sample = {
+        checked_at: new Date().toISOString(),
+        status: 'operational' as const,
+        latency_ms: 45,
+      };
+      for (const pool of ['official', 'benefit'] as const) {
+        expect(await listServiceStatusChecks(pool)).toEqual([]);
+        const token = await claimServiceStatusCheck(pool);
+        expect(token).not.toBeNull();
+        await completeServiceStatusCheck(token!, sample, pool);
+        expect(await listServiceStatusChecks(pool)).toEqual([sample]);
+      }
+      const { rows } = await state.pool!.query(
+        "SELECT pool_key FROM ai_service_status_checks WHERE probe_kind='inference' ORDER BY pool_key",
+      );
+      expect(rows).toEqual([{ pool_key: 'benefit' }, { pool_key: 'official' }]);
+    });
     it('fences late and duplicate results so they cannot replace a newer check', async () => {
       const old = (await claimServiceStatusCheck())!;
       await state.pool!.query(
-        "UPDATE ai_service_status_schedule SET next_check_at=now()-interval '1 second',lease_until=now()-interval '1 second'",
+        `UPDATE ai_service_status_schedule SET
+           next_check_at=now()-interval '1 second',lease_until=now()-interval '1 second'
+         WHERE id='network-official'`,
       );
       const next = (await claimServiceStatusCheck())!;
       await completeServiceStatusCheck(old, {
@@ -104,8 +133,8 @@ describe.skipIf(!connectionString)(
     });
     it('bounds public history and removes records older than seven days', async () => {
       await state.pool!
-        .query(`INSERT INTO ai_service_status_checks (checked_at,status,latency_ms)
-      SELECT now()-make_interval(hours=>n*6),'operational',20 FROM generate_series(1,40) n`);
+        .query(`INSERT INTO ai_service_status_checks (checked_at,status,latency_ms,probe_kind)
+      SELECT now()-make_interval(hours=>n*6),'operational',20,'http_head' FROM generate_series(1,40) n`);
       expect(await listServiceStatusChecks()).toHaveLength(28);
       const token = (await claimServiceStatusCheck())!;
       await completeServiceStatusCheck(token, {

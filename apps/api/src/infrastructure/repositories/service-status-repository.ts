@@ -7,6 +7,10 @@ import { getDbPool } from '#infrastructure/db-pool';
 
 export const SERVICE_CHECK_INTERVAL_SECONDS = 6 * 60 * 60;
 export const SERVICE_STATUS_STALE_SECONDS = 12 * 60 * 60;
+const NETWORK_SCHEDULE_ID = {
+  official: 'network-official',
+  benefit: 'network-benefit',
+} as const;
 
 export async function getServiceTokenUsage(): Promise<ServiceTokenUsageDto> {
   const { rows } = await getDbPool().query<{
@@ -51,11 +55,7 @@ export async function claimServiceStatusCheck(
        lease_until=now()+interval '5 minutes', next_check_at=now()+make_interval(secs=>$2)
      WHERE id=$3 AND next_check_at<=now() AND (lease_until IS NULL OR lease_until<=now())
      RETURNING id`,
-    [
-      token,
-      SERVICE_CHECK_INTERVAL_SECONDS,
-      poolKey === 'benefit' ? 'benefit' : 'ai',
-    ],
+    [token, SERVICE_CHECK_INTERVAL_SECONDS, NETWORK_SCHEDULE_ID[poolKey]],
   );
   return result.rowCount ? token : null;
 }
@@ -70,8 +70,12 @@ export async function completeServiceStatusCheck(
        UPDATE ai_service_status_schedule SET lease_token=NULL, lease_until=NULL
        WHERE id=$5 AND lease_token=$1 AND lease_until>now() RETURNING id
      ), saved AS (
-       INSERT INTO ai_service_status_checks (checked_at,status,latency_ms,pool_key)
-       SELECT $2::timestamptz,$3,$4,$6 FROM owned ON CONFLICT (pool_key,checked_at) DO NOTHING RETURNING checked_at
+       INSERT INTO ai_service_status_checks (checked_at,status,latency_ms,pool_key,probe_kind)
+       SELECT $2::timestamptz,$3,$4,$6,'http_head' FROM owned
+       ON CONFLICT (pool_key,checked_at) DO UPDATE SET
+         status=EXCLUDED.status, latency_ms=EXCLUDED.latency_ms, probe_kind=EXCLUDED.probe_kind
+       WHERE ai_service_status_checks.probe_kind='inference'
+       RETURNING checked_at
      )
      DELETE FROM ai_service_status_checks WHERE checked_at<now()-interval '7 days'
        AND EXISTS (SELECT 1 FROM saved)`,
@@ -80,7 +84,7 @@ export async function completeServiceStatusCheck(
       sample.checked_at,
       sample.status,
       sample.latency_ms,
-      poolKey === 'benefit' ? 'benefit' : 'ai',
+      NETWORK_SCHEDULE_ID[poolKey],
       poolKey,
     ],
   );
@@ -94,7 +98,8 @@ export async function listServiceStatusChecks(
     status: ServiceStatusSampleDto['status'];
     latency_ms: number | null;
   }>(
-    'SELECT checked_at,status,latency_ms FROM ai_service_status_checks WHERE pool_key=$1 ORDER BY checked_at DESC LIMIT 28',
+    `SELECT checked_at,status,latency_ms FROM ai_service_status_checks
+     WHERE pool_key=$1 AND probe_kind='http_head' ORDER BY checked_at DESC LIMIT 28`,
     [poolKey],
   );
   return rows.map((row) => ({

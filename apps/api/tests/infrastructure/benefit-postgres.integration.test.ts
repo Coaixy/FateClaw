@@ -25,7 +25,8 @@ vi.mock('../../../agent-runtime/src/agent-db.js', () => ({
 }));
 import { createPiProviderRuntime } from '../../../agent-runtime/src/pi-runtime/provider.js';
 import { installModelPool } from '../../../agent-runtime/src/pi-runtime/model-pool.js';
-import { probeBenefitModelAvailability } from '#modules/system/model-availability-probe';
+import { runServiceStatusCheckOnce } from '#runtime/service-status-worker';
+import { listServiceStatusChecks } from '#infrastructure/repositories/service-status-repository';
 import {
   recordBenefitToolCall,
   markBenefitAnswerVisible,
@@ -560,14 +561,6 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
         expect(health.cooldown_reason).toBe(reason);
         expect(health.seconds).toBeGreaterThan(seconds - 10);
         expect(health.seconds).toBeLessThanOrEqual(seconds);
-        // Monitoring uses the same node lease and must not spend another call during cooldown.
-        expect(
-          await probeBenefitModelAvailability(
-            runtime.poolNodes![0],
-            new AbortController().signal,
-          ),
-        ).toEqual({ latency: null, attempted: false });
-        expect(calls).toHaveLength(3);
       } finally {
         server.closeAllConnections();
         await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -575,44 +568,51 @@ describe.skipIf(!connectionString)('benefit pool durable boundaries', () => {
     },
   );
 
-  it('applies provider feedback from scheduled monitoring to the node cooldown', async () => {
-    let calls = 0;
-    const server = createServer((_request, response) => {
-      calls += 1;
-      response.writeHead(429, {
-        'content-type': 'application/json',
-        'retry-after': '240',
-      });
-      response.end(
-        JSON.stringify({ error: { message: 'rate limit exceeded' } }),
-      );
+  it('measures network reachability during quota exhaustion without touching free attempts or cooldown', async () => {
+    const requests: string[] = [];
+    const server = createServer((request, response) => {
+      requests.push(request.method!);
+      response.writeHead(429, { 'retry-after': '240' });
+      response.end();
     });
     await new Promise<void>((resolve) =>
       server.listen(0, '127.0.0.1', resolve),
     );
     try {
-      const node = {
-        ...nodes[0],
-        baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
-      };
-      const signal = new AbortController().signal;
-      expect(await probeBenefitModelAvailability(node, signal)).toEqual({
-        latency: null,
-        attempted: true,
-      });
-      expect(await probeBenefitModelAvailability(node, signal)).toEqual({
-        latency: null,
-        attempted: false,
-      });
-      expect(calls).toBe(1);
-      const health = (
-        await state.pool!.query(
-          'SELECT cooldown_reason,EXTRACT(EPOCH FROM cooldown_until-now())::float8 AS seconds FROM official_model_pool_nodes WHERE model_config_id=$1',
-          [node.modelConfigId],
-        )
-      ).rows[0];
-      expect(health.cooldown_reason).toBe('rate_limit');
-      expect(health.seconds).toBeGreaterThan(235);
+      const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      await state.pool!.query(
+        'UPDATE official_model_configs SET base_url=$1 WHERE id=ANY($2)',
+        [`${origin}/v1`, nodes.map((node) => node.modelConfigId)],
+      );
+      await state.pool!.query(`
+        UPDATE official_model_pool_nodes SET cooldown_reason='quota',
+          cooldown_until=now()+interval '1 hour' WHERE pool_id='benefit'
+      `);
+      const cooldowns = async () =>
+        (
+          await state.pool!
+            .query(`SELECT model_config_id,cooldown_reason,cooldown_until,failure_count
+          FROM official_model_pool_nodes WHERE pool_id='benefit' ORDER BY model_config_id`)
+        ).rows;
+      const before = await cooldowns();
+      expect(await getBenefitSupply()).toBe('exhausted');
+
+      await runServiceStatusCheckOnce();
+
+      expect(requests).toEqual(['HEAD']);
+      expect(await listServiceStatusChecks('benefit')).toEqual([
+        {
+          status: 'operational',
+          latency_ms: expect.any(Number),
+          checked_at: expect.any(String),
+        },
+      ]);
+      expect(await getBenefitSupply()).toBe('exhausted');
+      expect(await cooldowns()).toEqual(before);
+      const attempts = await state.pool!.query(
+        'SELECT 1 FROM benefit_model_attempts',
+      );
+      expect(attempts.rowCount).toBe(0);
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

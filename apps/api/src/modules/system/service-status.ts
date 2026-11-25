@@ -1,4 +1,5 @@
 import type {
+  ServiceStatusDetailsDto,
   ServiceStatusOverviewDto,
   ServiceStatusSampleDto,
 } from '@fateclaw/contracts/service-status';
@@ -8,15 +9,12 @@ import {
   SERVICE_CHECK_INTERVAL_SECONDS,
   SERVICE_STATUS_STALE_SECONDS,
 } from '#infrastructure/repositories/service-status-repository';
-import {
-  getBenefitSupply,
-  getRecentBenefitSuccess,
-} from '#infrastructure/repositories/benefit-repository';
+import { getBenefitSupply } from '#infrastructure/repositories/benefit-repository';
 
 export function publicServiceStatus(
   history: ServiceStatusSampleDto[],
   now = Date.now(),
-): ServiceStatusOverviewDto {
+): ServiceStatusDetailsDto {
   const latest = history[0];
   const fresh =
     latest &&
@@ -38,27 +36,17 @@ export function publicServiceStatus(
 }
 
 export async function getPublicServiceStatus(): Promise<ServiceStatusOverviewDto> {
-  const [paidHistory, benefitHistory, supply, success, tokenUsage] =
-    await Promise.all([
-      listServiceStatusChecks(),
-      listServiceStatusChecks('benefit'),
-      getBenefitSupply(),
-      getRecentBenefitSuccess(),
-      getServiceTokenUsage(),
-    ]);
+  const [paidHistory, benefitHistory, supply, tokenUsage] = await Promise.all([
+    listServiceStatusChecks(),
+    listServiceStatusChecks('benefit'),
+    getBenefitSupply(),
+    getServiceTokenUsage(),
+  ]);
   const official = publicServiceStatus(paidHistory);
   const benefit = publicServiceStatus(benefitHistory);
-  if (
-    success &&
-    (!benefit.checked_at ||
-      Date.parse(success) > Date.parse(benefit.checked_at))
-  ) {
-    benefit.status = 'operational';
-    benefit.checked_at = success;
-    benefit.latency_ms = null;
-  }
   return {
     ...official,
+    probe_kind: 'http_head',
     token_usage: tokenUsage,
     services: [
       { ...official, pool_key: 'official', display_name: '付费模型服务' },

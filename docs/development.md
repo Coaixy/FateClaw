@@ -123,4 +123,4 @@ These instructions were checked against repository scripts and startup source. A
 
 For production packaging and deployment, use the [deployment guide](deployment-split.md).
 
-The public `/status` page reads shared AI availability observations. Full API startup runs lightweight probes every six hours; API-only mode only serves existing results. See [Public service status](service-status.md) for the probe budget and stale-state behavior.
+The public `/status` page reads shared upstream network observations. Full API startup runs HTTP HEAD probes every six hours. API-only mode serves existing results. See [Public service status](service-status.md) for the probe budget and stale-state behavior.
