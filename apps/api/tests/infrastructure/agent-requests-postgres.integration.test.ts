@@ -24,6 +24,7 @@ import {
 } from '#infrastructure/repositories/agent-requests-repository';
 import type { AiChatSubmission } from '#runtime/ipc-worker';
 import type { LlmRuntimeSnapshot } from '#runtime/ipc-payloads';
+import { InvalidAiChatPayloadError } from '#shared/ipc-errors';
 
 // Run only against an explicitly supplied disposable database, never DATABASE_URL.
 const connectionString = process.env.FATECLAW_TEST_DURABLE_DATABASE_URL;
@@ -379,7 +380,7 @@ describe.skipIf(!connectionString)(
           called = true;
           return 'bad';
         }),
-      ).rejects.toThrow('account mismatch');
+      ).rejects.toThrow(InvalidAiChatPayloadError);
       expect(called).toBe(false);
       expect(
         (await getDbPool().query('SELECT * FROM agent_result_deliveries'))
@@ -421,9 +422,9 @@ describe.skipIf(!connectionString)(
     it('serializes a synthetic notice with actual delivery and preserves the final actual message', async () => {
       await admitAgentRequest(admission());
       await getDbPool().query("UPDATE agent_requests SET state='interrupted'");
-      let enter!: () => void;
+      let enter!: (pid: number) => void;
       let release!: () => void;
-      const entered = new Promise<void>((resolve) => {
+      const entered = new Promise<number>((resolve) => {
         enter = resolve;
       });
       const gate = new Promise<void>((resolve) => {
@@ -434,12 +435,15 @@ describe.skipIf(!connectionString)(
         'web:user-1',
         async (client) => {
           await client.query("UPDATE messages SET content='synthetic notice'");
-          enter();
+          const { rows } = await client.query<{ pid: number }>(
+            'SELECT pg_backend_pid() AS pid',
+          );
+          enter(rows[0].pid);
           await gate;
           return 'synthetic-message';
         },
       );
-      await entered;
+      const syntheticBackendPid = await entered;
       let actualCallbackStarted = false;
       const actual = withAgentResultDelivery(
         'request-1',
@@ -453,10 +457,12 @@ describe.skipIf(!connectionString)(
       try {
         let waiting = false;
         for (let attempt = 0; attempt < 100; attempt += 1) {
-          const { rowCount } = await getDbPool()
-            .query(`SELECT 1 FROM pg_stat_activity
-            WHERE datname=current_database() AND wait_event_type='Lock'
-              AND query LIKE 'SELECT account_id FROM agent_requests%'`);
+          const { rowCount } = await getDbPool().query(
+            `SELECT 1 FROM pg_stat_activity
+             WHERE datname=current_database() AND wait_event_type='Lock'
+                AND $1 = ANY(pg_blocking_pids(pid))`,
+            [syntheticBackendPid],
+          );
           if (rowCount) {
             waiting = true;
             break;
